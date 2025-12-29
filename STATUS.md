@@ -9,12 +9,11 @@ Planning Core v1 — NOT STARTED (Monitoring v1 is stable and verified in the cu
 - Monitoring v1 endpoints under `/api/v1/planning/monitoring` (`/bootstrap`, `/status`, `/snapshot`, `/history`, `/timeseries`) return HTTP 200 with valid JSON when schema is up to date.
 - Alembic migrations up to and including `0008_add_monitoring_alert_rules.py` are applied successfully at container startup.
 - PostgreSQL database container (`db`) is running and healthy under Docker Compose.
-- Background Monitoring Scheduler (APScheduler) starts with FastAPI, runs every 15 minutes and persists snapshots into `monitoring_snapshots`.
+- Background Monitoring Scheduler (APScheduler) is controlled by `MONITORING_SCHEDULER_ENABLED`, uses a PostgreSQL advisory lock to stay single-instance across backend containers, runs every 15 minutes and persists snapshots into `monitoring_snapshots`.
 - Monitoring history and timeseries are populated from `monitoring_snapshots` and reflect the scheduler-produced records.
 
 ## What’s broken / missing
 
-- Multi-instance scheduler coordination is not defined: multiple backend instances would each run their own scheduler and duplicate snapshot creation.
 - Planning Core v1 domain models and APIs are not implemented yet (stage explicitly marked as NOT STARTED).
 - Monitoring snapshot records do not carry an explicit version field for schema/metric evolution; versioning strategy is not defined.
 
