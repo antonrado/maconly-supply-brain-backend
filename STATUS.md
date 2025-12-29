@@ -27,11 +27,19 @@ Planning Core v1 — NOT STARTED (Monitoring v1 is stable and verified in the cu
 
 - Git state:
   - origin: `https://github.com/antonrado/maconly-supply-brain-backend.git`
-  - branch: `main`
-  - HEAD: `2d120b8`
+  - branch: `main` (multi-instance lock verification performed against this branch; feature branch used locally for changes)
+  - HEAD: `b9e847c` (Make monitoring scheduler single-instance via pg advisory lock)
 - Commands:
+  - `docker compose -f .\docker-compose.yml up -d --build`
   - `docker compose -f .\docker-compose.yml ps`
-  - `curl.exe -i http://localhost:8000/api/v1/planning/monitoring/bootstrap`
+  - `docker compose -f .\docker-compose.yml logs --tail=200 backend`
+  - `docker compose -f .\docker-compose.yml logs --tail=200 backend2`
+  - `docker compose -f .\docker-compose.yml exec db psql -U maconly maconly_db -c "select count(*) as snapshots_count, max(created_at) as last_snapshot from monitoring_snapshots;"`
   - `curl.exe -i http://localhost:8000/api/v1/planning/monitoring/status`
-  - `curl.exe -i http://localhost:8000/api/v1/planning/monitoring/history`
+  - `curl.exe -i http://localhost:8001/api/v1/planning/monitoring/status`
+- Result summary:
+  - Both `backend` and `backend2` services are running against the same PostgreSQL database.
+  - Logs show `backend` acquiring the advisory lock and starting the scheduler, while `backend2` logs `MonitoringScheduler disabled (PostgreSQL advisory lock not acquired)`.
+  - Snapshot count in `monitoring_snapshots` continues to grow as expected for a single scheduler, not doubling with two backend instances.
+  - Both monitoring status endpoints (`/api/v1/planning/monitoring/status`) on ports 8000 and 8001 return HTTP 200 with valid JSON.
 - Date: 2025-12-29 (UTC+07)
