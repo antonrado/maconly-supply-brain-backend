@@ -18,6 +18,7 @@ from app.api.v1.endpoints import (
     wb_replenishment,
     wb_shipment,
     purchase_order,
+    planning_core,
 )
 
 api_router = APIRouter()
@@ -34,6 +35,7 @@ api_router.include_router(planning_settings.router, prefix="/planning-settings",
 api_router.include_router(planning.router, prefix="/planning", tags=["planning"])
 api_router.include_router(deficit.router, prefix="/planning", tags=["planning"])
 api_router.include_router(order_proposal.router, prefix="/planning", tags=["planning-order-proposal"])
+api_router.include_router(planning_core.router, prefix="/planning", tags=["planning-core"])
 api_router.include_router(wb.router, prefix="/wb", tags=["wb"])
 api_router.include_router(wb_manager.router, prefix="/wb/manager", tags=["wb-manager"])
 api_router.include_router(wb_replenishment.router, prefix="/wb/manager", tags=["wb-replenishment"])

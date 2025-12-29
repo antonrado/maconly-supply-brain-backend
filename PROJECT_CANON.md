@@ -97,14 +97,38 @@
   - Эндпоинты `/status`, `/bootstrap`, `/snapshot`, `/history`, `/timeseries` отдают HTTP 200 и валидный JSON при актуальном состоянии схемы.
   - Планировщик успешно создаёт периодические записи в `monitoring_snapshots` (подтверждено через `SELECT count(*) FROM monitoring_snapshots;`).
 
+### 4.2 Planning Core v1 — Skeleton
+
+- **Purpose**
+  - Подготовить минимальный каркас для будущего ядра планирования (Planning Core v1), не влияя на существующую функциональность мониторинга.
+
+- **What is implemented now**
+  - Модуль `app/core/planning/domain.py` с минимальными датаклассами:
+    - `PlanningSettings`
+    - `DemandInput`
+    - `SupplyInput`
+    - `OrderProposal`
+    - `PlanningHealth`
+  - Модуль `app/core/planning/service.py` с классом `PlanningService` и методами, которые пока что всегда поднимают `NotImplementedError`:
+    - `compute_order_proposal(...)`
+    - `get_planning_health(...)`
+  - HTTP-эндпоинты (скелет) в `app/api/v1/endpoints/planning_core.py` и роутинг в `app/api/v1/router.py`:
+    - `GET  /api/v1/planning/core/health`
+    - `POST /api/v1/planning/core/proposal`
+
+- **Explicitly NOT implemented yet**
+  - **Нет** бизнес-логики планирования, **нет** вычислений заказов и спроса.
+  - **Нет** новых таблиц БД и **нет** Alembic-миграций для Planning Core.
+  - Эндпоинты Planning Core v1 **намеренно** возвращают HTTP 501 Not Implemented c телом `{ "detail": "Not Implemented" }`.
+
 ---
 
 ## 5. Active Stage
 
 - **Stage name**: Planning Core v1
 - **Goal**: сформировать и зафиксировать в backend-е первую версию ядра планирования (модели, сервисы, API), на которое будут опираться остальные модули.
-- **Status**: NOT STARTED  
-  На момент создания этого документа требования и объём работ по Planning Core v1 не зафиксированы в коде и не описаны подробно в данном документе.
+- **Status**: SKELETON ONLY  
+  На текущем этапе создан только скелет (структура модулей и HTTP-эндпоинтов). Бизнес-логика планирования и взаимодействие с БД ещё не реализованы.
 
 ---
 
@@ -144,3 +168,4 @@
 | 2025-12-29 | repo initialized, origin set to GitHub, initial baseline pushed (commit 2d120b8, branch main). | Зафиксировать привязку репозитория к GitHub и базовый коммит. |
 | 2025-12-29 | Added PG advisory lock to prevent multi-instance scheduler duplication.                    | Сделать запуск планировщика single-instance при нескольких backend-инстансах. |
 | 2025-12-29 | Verified multi-instance scheduler advisory lock with two backend services under Docker Compose. | Подтвердить, что при двух backend-инстансах только один получает lock и выполняет планировщик. |
+| 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, 501 endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
