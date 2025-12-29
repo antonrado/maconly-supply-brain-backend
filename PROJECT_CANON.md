@@ -87,6 +87,9 @@
     - Создаёт DB-сессию через `SessionLocal`.
     - Вызывает `build_and_persist_monitoring_snapshot(db)` из `app/services/monitoring_history.py`.
     - Логирует старт/успех/исключения; при ошибке не останавливает приложение.
+  - Поведение multi-instance:
+    - Advisory lock реализован через PostgreSQL (`pg_try_advisory_lock` / `pg_advisory_unlock`) на выделенном соединении.
+    - E2E-проверка проведена с двумя backend-сервисами (`backend` и `backend2`) в `docker-compose.yml`, работающими против одной БД: только один из них получает lock и запускает планировщик, второй логирует, что lock не получен и не создаёт снапшоты.
 
 - **Текущий статус: STABLE**
   - Alembic-миграции применены вплоть до `0008_add_monitoring_alert_rules.py`.
@@ -140,3 +143,4 @@
 | 2025-12-29 | Создан данный документ PROJECT_CANON.md.                                                   | Зафиксировать единый источник правды по проекту.        |
 | 2025-12-29 | repo initialized, origin set to GitHub, initial baseline pushed (commit 2d120b8, branch main). | Зафиксировать привязку репозитория к GitHub и базовый коммит. |
 | 2025-12-29 | Added PG advisory lock to prevent multi-instance scheduler duplication.                    | Сделать запуск планировщика single-instance при нескольких backend-инстансах. |
+| 2025-12-29 | Verified multi-instance scheduler advisory lock with two backend services under Docker Compose. | Подтвердить, что при двух backend-инстансах только один получает lock и выполняет планировщик. |

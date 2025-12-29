@@ -34,5 +34,20 @@ services:
       db:
         condition: service_healthy
 
+  backend2:
+    build: .
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    working_dir: /code
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://maconly:maconly@db:5432/maconly_db
+      - PYTHONPATH=/code
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
