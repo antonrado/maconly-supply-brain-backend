@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -95,6 +95,16 @@ class PlanningProposalInputs(BaseModel):
 
     sales_window_days: Optional[int] = None
     horizon_days: Optional[int] = None
+
+
+class PlanningProposalRequest(BaseModel):
+    """Request schema for Planning Core v1 proposal endpoint.
+
+    Validates input parameters with range constraints (7..365 days).
+    """
+
+    sales_window_days: Optional[int] = Field(None, ge=7, le=365)
+    horizon_days: Optional[int] = Field(None, ge=7, le=365)
 
 
 class PlanningProposalSummary(BaseModel):

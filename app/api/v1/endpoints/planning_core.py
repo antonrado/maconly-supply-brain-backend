@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.core.planning.domain import PlanningProposalRequest
 from app.core.planning.service import PlanningService
 
 
@@ -20,7 +21,7 @@ async def get_planning_core_health() -> dict:
 
 
 @router.post("/core/proposal")
-async def create_planning_core_proposal() -> dict:
+async def create_planning_core_proposal(request: PlanningProposalRequest) -> dict:
     """Skeleton endpoint for computing an order proposal.
 
     For now this endpoint is intentionally not implemented and always returns
@@ -28,7 +29,7 @@ async def create_planning_core_proposal() -> dict:
     """
 
     service = PlanningService()
-    proposal = service.build_proposal_stub()
+    proposal = service.build_proposal(request.sales_window_days, request.horizon_days)
 
     return {
         "status": "ok",

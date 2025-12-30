@@ -53,7 +53,7 @@ class PlanningService:
 
         return PlanningHealth(status="ok", issues=[])
 
-    def build_proposal_stub(self) -> PlanningProposal:
+    def build_proposal(self, sales_window_days=None, horizon_days=None) -> PlanningProposal:
         """Build a structured PlanningProposal stub for API responses."""
 
         now = datetime.now(timezone.utc)
@@ -61,8 +61,8 @@ class PlanningService:
             version="v1",
             generated_at=now,
             inputs=PlanningProposalInputs(
-                sales_window_days=None,
-                horizon_days=None,
+                sales_window_days=sales_window_days,
+                horizon_days=horizon_days,
             ),
             summary=PlanningProposalSummary(
                 total_skus=0,

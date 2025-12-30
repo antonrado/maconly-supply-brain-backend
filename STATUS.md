@@ -26,21 +26,19 @@ Planning Core v1 — CONTRACT FIXED (stub) (Monitoring v1 is stable and verified
 
 ## Last verification
 
+- Date: 2025-12-31
 - Git state:
   - origin: `https://github.com/antonrado/maconly-supply-brain-backend.git`
-  - branch: `main` (multi-instance lock verification performed against this branch; feature branch used locally for changes)
-  - HEAD: `b9e847c` (Make monitoring scheduler single-instance via pg advisory lock)
+  - branch: `main`
+  - HEAD: `5d81d4e` (Define Planning Core v1 contract with structured stub)
 - Commands:
   - `docker compose -f .\docker-compose.yml up -d --build`
-  - `docker compose -f .\docker-compose.yml ps`
-  - `docker compose -f .\docker-compose.yml logs --tail=200 backend`
-  - `docker compose -f .\docker-compose.yml logs --tail=200 backend2`
-  - `docker compose -f .\docker-compose.yml exec db psql -U maconly maconly_db -c "select count(*) as snapshots_count, max(created_at) as last_snapshot from monitoring_snapshots;"`
-  - `curl.exe -i http://localhost:8000/api/v1/planning/monitoring/status`
-  - `curl.exe -i http://localhost:8001/api/v1/planning/monitoring/status`
+  - `curl.exe -i http://localhost:8000/api/v1/planning/core/health`
+  - PowerShell-safe method 1: `$body = '{"sales_window_days":30,"horizon_days":90}'; curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-raw $body`
+  - PowerShell-safe method 2: `echo '{"sales_window_days":30,"horizon_days":90}' > req.json; curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@req.json"`
+  - `git log -1 --oneline`
 - Result summary:
-  - Both `backend` and `backend2` services are running against the same PostgreSQL database.
-  - Logs show `backend` acquiring the advisory lock and starting the scheduler, while `backend2` logs `MonitoringScheduler disabled (PostgreSQL advisory lock not acquired)`.
-  - Snapshot count in `monitoring_snapshots` continues to grow as expected for a single scheduler, not doubling with two backend instances.
-  - Both monitoring status endpoints (`/api/v1/planning/monitoring/status`) on ports 8000 and 8001 return HTTP 200 with valid JSON.
-- Date: 2025-12-29 (UTC+07)
+  - Planning Core v1 endpoints return HTTP 200 with structured JSON.
+  - POST /planning/core/proposal accepts input parameters, validates ranges (7..365), and reflects them in response.
+  - Both endpoints working as expected with schema-first contract.
+  - PowerShell-safe curl methods avoid JSON quoting pitfalls.
