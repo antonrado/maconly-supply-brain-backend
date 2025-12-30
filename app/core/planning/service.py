@@ -7,10 +7,15 @@ shape of the future Planning Core service so that API layers can depend on a
 stable interface while the implementation is developed incrementally.
 """
 
+from datetime import datetime, timezone
+
 from app.core.planning.domain import (
     DemandInput,
     OrderProposal,
     PlanningHealth,
+    PlanningProposal,
+    PlanningProposalInputs,
+    PlanningProposalSummary,
     PlanningSettings,
     SupplyInput,
 )
@@ -47,3 +52,21 @@ class PlanningService:
         """
 
         return PlanningHealth(status="ok", issues=[])
+
+    def build_proposal_stub(self) -> PlanningProposal:
+        """Build a structured PlanningProposal stub for API responses."""
+
+        now = datetime.now(timezone.utc)
+        return PlanningProposal(
+            version="v1",
+            generated_at=now,
+            inputs=PlanningProposalInputs(
+                sales_window_days=None,
+                horizon_days=None,
+            ),
+            summary=PlanningProposalSummary(
+                total_skus=0,
+                total_units=0,
+            ),
+            lines=[],
+        )

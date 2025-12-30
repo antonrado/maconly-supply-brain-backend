@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
+
+from pydantic import BaseModel
 
 
 @dataclass
@@ -82,3 +84,35 @@ class PlanningHealth:
 
     issues: List[str]
     """List of human-readable issues detected in planning inputs/configuration."""
+
+
+class PlanningProposalInputs(BaseModel):
+    """Input parameters used when building a planning proposal stub.
+
+    All fields are optional at this stage; real calculation logic will be
+    introduced later.
+    """
+
+    sales_window_days: Optional[int] = None
+    horizon_days: Optional[int] = None
+
+
+class PlanningProposalSummary(BaseModel):
+    """Aggregate summary for a planning proposal stub."""
+
+    total_skus: int
+    total_units: int
+
+
+class PlanningProposal(BaseModel):
+    """Schema-first representation of a planning proposal response.
+
+    This model is used to define the stable Planning Core v1 API contract for
+    stub responses and does not contain any business logic.
+    """
+
+    version: str
+    generated_at: datetime
+    inputs: PlanningProposalInputs
+    summary: PlanningProposalSummary
+    lines: List[dict]

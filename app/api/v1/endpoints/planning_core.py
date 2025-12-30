@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.core.planning.service import PlanningService
+
 
 router = APIRouter()
 
@@ -25,4 +27,10 @@ async def create_planning_core_proposal() -> dict:
     HTTP 200 with a static stub payload; no planning logic is executed.
     """
 
-    return {"status": "ok", "proposal": None}
+    service = PlanningService()
+    proposal = service.build_proposal_stub()
+
+    return {
+        "status": "ok",
+        "proposal": proposal.dict(),
+    }

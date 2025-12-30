@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Planning Core v1 — SKELETON / STUB (Monitoring v1 is stable and verified in the current backend stack; Planning Core exposes stub endpoints without business logic).
+Planning Core v1 — CONTRACT FIXED (stub) (Monitoring v1 is stable and verified in the current backend stack; Planning Core exposes schema-first stub endpoints without business logic).
 
 ## What works now
 
@@ -15,7 +15,7 @@ Planning Core v1 — SKELETON / STUB (Monitoring v1 is stable and verified in th
 
 ## What’s broken / missing
 
-- Planning Core v1 business logic (demand/supply calculations, order proposals) and DB integration are not implemented yet; only domain skeleton and HTTP stub endpoints exist.
+- Planning Core v1 business logic (demand/supply calculations, order proposals) and DB integration are not implemented yet; only domain skeleton and HTTP stub endpoints with structured JSON exist.
 - Monitoring snapshot records do not carry an explicit version field for schema/metric evolution; versioning strategy is not defined.
 
 ## Next 3 tasks

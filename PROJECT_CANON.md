@@ -112,14 +112,25 @@
   - Модуль `app/core/planning/service.py` с классом `PlanningService` и методами, которые возвращают stub-данные:
     - `compute_order_proposal(...)`
     - `get_planning_health(...)`
+    - `build_proposal_stub()` — собирает структурированный объект `PlanningProposal` без бизнес-логики.
   - HTTP-эндпоинты (скелет) в `app/api/v1/endpoints/planning_core.py` и роутинг в `app/api/v1/router.py`:
     - `GET  /api/v1/planning/core/health` — возвращает HTTP 200 и JSON-ответ `{ "status": "ok" }`.
-    - `POST /api/v1/planning/core/proposal` — возвращает HTTP 200 и JSON-ответ `{ "status": "ok", "proposal": null }`.
+    - `POST /api/v1/planning/core/proposal` — возвращает HTTP 200 и структурированный JSON-ответ на основе схемы `PlanningProposal` (contract-first stub).
 
 - **Explicitly NOT implemented yet**
   - **Нет** бизнес-логики планирования, **нет** вычислений заказов и спроса.
   - **Нет** новых таблиц БД и **нет** Alembic-миграций для Planning Core.
   - Эндпоинты Planning Core v1 **намеренно** возвращают stub-ответы.
+
+---
+
+### 4.3 Planning Core v1 — Contract
+
+- **Characteristics**
+  - **Schema-first**: контракт описан через Pydantic-модели `PlanningProposal`, `PlanningProposalInputs`, `PlanningProposalSummary` в `app/core/planning/domain.py`.
+  - **Stub-only**: эндпоинт `/api/v1/planning/core/proposal` возвращает структурированный stub-ответ без каких-либо расчётов.
+  - **No business logic**: ни HTTP-слой, ни `PlanningService.build_proposal_stub()` не содержат алгоритмов планирования; только заполнение предсказуемых полей (`version`, `generated_at`, нулевые агрегаты, пустые `lines`).
+  - **Stable API guarantee**: форма ответа Planning Core v1 (поля `version`, `generated_at`, `inputs`, `summary`, `lines`) считается стабильным контрактом для фронтенда и последующих модулей.
 
 ---
 
