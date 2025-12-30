@@ -109,17 +109,17 @@
     - `SupplyInput`
     - `OrderProposal`
     - `PlanningHealth`
-  - Модуль `app/core/planning/service.py` с классом `PlanningService` и методами, которые пока что всегда поднимают `NotImplementedError`:
+  - Модуль `app/core/planning/service.py` с классом `PlanningService` и методами, которые возвращают stub-данные:
     - `compute_order_proposal(...)`
     - `get_planning_health(...)`
   - HTTP-эндпоинты (скелет) в `app/api/v1/endpoints/planning_core.py` и роутинг в `app/api/v1/router.py`:
-    - `GET  /api/v1/planning/core/health`
-    - `POST /api/v1/planning/core/proposal`
+    - `GET  /api/v1/planning/core/health` — возвращает HTTP 200 и JSON-ответ `{ "status": "ok" }`.
+    - `POST /api/v1/planning/core/proposal` — возвращает HTTP 200 и JSON-ответ `{ "status": "ok", "proposal": null }`.
 
 - **Explicitly NOT implemented yet**
   - **Нет** бизнес-логики планирования, **нет** вычислений заказов и спроса.
   - **Нет** новых таблиц БД и **нет** Alembic-миграций для Planning Core.
-  - Эндпоинты Planning Core v1 **намеренно** возвращают HTTP 501 Not Implemented c телом `{ "detail": "Not Implemented" }`.
+  - Эндпоинты Planning Core v1 **намеренно** возвращают stub-ответы.
 
 ---
 
@@ -168,4 +168,5 @@
 | 2025-12-29 | repo initialized, origin set to GitHub, initial baseline pushed (commit 2d120b8, branch main). | Зафиксировать привязку репозитория к GitHub и базовый коммит. |
 | 2025-12-29 | Added PG advisory lock to prevent multi-instance scheduler duplication.                    | Сделать запуск планировщика single-instance при нескольких backend-инстансах. |
 | 2025-12-29 | Verified multi-instance scheduler advisory lock with two backend services under Docker Compose. | Подтвердить, что при двух backend-инстансах только один получает lock и выполняет планировщик. |
-| 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, 501 endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
+| 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, stub endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
+| 2025-12-31 | Updated Planning Core v1 endpoints to return HTTP 200 stub responses for health and proposal. | Обновить Planning Core v1 для возвращения stub-ответов. |

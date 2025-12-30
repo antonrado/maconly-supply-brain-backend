@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Planning Core v1 — NOT STARTED (Monitoring v1 is stable and verified in the current backend stack).
+Planning Core v1 — SKELETON / STUB (Monitoring v1 is stable and verified in the current backend stack; Planning Core exposes stub endpoints without business logic).
 
 ## What works now
 
@@ -11,15 +11,16 @@ Planning Core v1 — NOT STARTED (Monitoring v1 is stable and verified in the cu
 - PostgreSQL database container (`db`) is running and healthy under Docker Compose.
 - Background Monitoring Scheduler (APScheduler) is controlled by `MONITORING_SCHEDULER_ENABLED`, uses a PostgreSQL advisory lock to stay single-instance across backend containers, runs every 15 minutes and persists snapshots into `monitoring_snapshots`.
 - Monitoring history and timeseries are populated from `monitoring_snapshots` and reflect the scheduler-produced records.
+- Planning Core v1 exposes stub endpoints without business logic.
 
 ## What’s broken / missing
 
-- Planning Core v1 domain models and APIs are not implemented yet (stage explicitly marked as NOT STARTED).
+- Planning Core v1 business logic (demand/supply calculations, order proposals) and DB integration are not implemented yet; only domain skeleton and HTTP stub endpoints exist.
 - Monitoring snapshot records do not carry an explicit version field for schema/metric evolution; versioning strategy is not defined.
 
 ## Next 3 tasks
 
-- Define and implement Planning Core v1 domain models, services and API surface (currently NOT STARTED).
+- Define and implement real Planning Core v1 business logic (demand, supply, order proposal calculations) and connect it to the existing HTTP API surface.
 - Decide on and implement a multi-instance scheduler strategy (single leader, external orchestrator or DB-level coordination).
 - Design and introduce a versioning approach for monitoring snapshots if metric schema changes.
 

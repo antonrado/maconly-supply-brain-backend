@@ -34,7 +34,11 @@ class PlanningService:
         This is a placeholder and must not be called in production code yet.
         """
 
-        raise NotImplementedError("PlanningService.compute_order_proposal is not implemented")
+        return OrderProposal(
+            article_id=demand.article_id,
+            proposed_order_qty=0,
+            comment="stub",
+        )
 
     def get_planning_health(self) -> PlanningHealth:
         """Return an aggregated view of planning health.
@@ -42,4 +46,4 @@ class PlanningService:
         This is a placeholder and must not be called in production code yet.
         """
 
-        raise NotImplementedError("PlanningService.get_planning_health is not implemented")
+        return PlanningHealth(status="ok", issues=[])
