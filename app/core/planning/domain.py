@@ -107,6 +107,14 @@ class PlanningProposalRequest(BaseModel):
     horizon_days: Optional[int] = Field(None, ge=7, le=365)
 
 
+class PlanningProposalLine(BaseModel):
+    """Individual line item in a planning proposal."""
+
+    sku: str
+    recommended_units: int
+    reason: str
+
+
 class PlanningProposalSummary(BaseModel):
     """Aggregate summary for a planning proposal stub."""
 
@@ -125,4 +133,4 @@ class PlanningProposal(BaseModel):
     generated_at: datetime
     inputs: PlanningProposalInputs
     summary: PlanningProposalSummary
-    lines: List[dict]
+    lines: List[PlanningProposalLine]

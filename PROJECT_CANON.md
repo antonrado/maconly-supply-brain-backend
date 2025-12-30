@@ -127,9 +127,16 @@
 ### 4.3 Planning Core v1 — Contract
 
 - **Characteristics**
-  - **Schema-first**: контракт описан через Pydantic-модели `PlanningProposal`, `PlanningProposalRequest`, `PlanningProposalInputs`, `PlanningProposalSummary` в `app/core/planning/domain.py`.
-  - **Stub-only**: эндпоинт `/api/v1/planning/core/proposal` возвращает структурированный stub-ответ без каких-либо расчётов.
-  - **No business logic**: ни HTTP-слой, ни `PlanningService.build_proposal()` не содержат алгоритмов планирования; только заполнение предсказуемых полей (`version`, `generated_at`, отражение входных параметров, нулевые агрегаты, пустые `lines`).
+  - **Schema-first**: контракт описан через Pydantic-модели `PlanningProposal`, `PlanningProposalRequest`, `PlanningProposalInputs`, `PlanningProposalSummary`, `PlanningProposalLine` в `app/core/planning/domain.py`.
+  - **Minimal logic**: эндпоинт `/api/v1/planning/core/proposal` возвращает структурированный ответ с базовой логикой (не пустышка).
+  - **What's calculated**: 
+    - Количество SKU (`total_skus`) и общее количество единиц (`total_units`) считаются на основе строк предложения.
+    - Время генерации (`generated_at`) отражает текущее UTC.
+    - Входные параметры (`sales_window_days`, `horizon_days`) отражаются в ответе без изменений.
+  - **What's still stub**: 
+    - SKU (`SKU-001`, `SKU-002`) и рекомендуемые количества (`100`, `50`) являются фиктивными данными.
+    - Причина (`reason="stub_logic"`) указывает на временную реализацию.
+    - Отсутствуют реальные расчёты спроса, запасов и оптимизации.
   - **Stable API guarantee**: форма ответа Planning Core v1 (поля `version`, `generated_at`, `inputs`, `summary`, `lines`) считается стабильным контрактом для фронтенда и последующих модулей.
   - **Input validation**: эндпоинт принимает `sales_window_days` и `horizon_days` (опционально), валидирует диапазон 7..365 дней через Pydantic `Field(ge=7, le=365)`, возвращает HTTP 422 при нарушении.
   - **Request schema**: `PlanningProposalRequest` с опциональными `sales_window_days` и `horizon_days` (int | null).

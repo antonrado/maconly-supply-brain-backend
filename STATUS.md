@@ -30,15 +30,30 @@ Planning Core v1 — CONTRACT FIXED (stub) (Monitoring v1 is stable and verified
 - Git state:
   - origin: `https://github.com/antonrado/maconly-supply-brain-backend.git`
   - branch: `main`
-  - HEAD: `5d81d4e` (Define Planning Core v1 contract with structured stub)
+  - HEAD: `c0bbb93` (Document PowerShell-safe curl for Planning Core proposal)
 - Commands:
   - `docker compose -f .\docker-compose.yml up -d --build`
-  - `curl.exe -i http://localhost:8000/api/v1/planning/core/health`
-  - PowerShell-safe method 1: `$body = '{"sales_window_days":30,"horizon_days":90}'; curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-raw $body`
-  - PowerShell-safe method 2: `echo '{"sales_window_days":30,"horizon_days":90}' > req.json; curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@req.json"`
+  - `curl.exe -s http://localhost:8000/api/v1/planning/core/health`
+  - `curl.exe -s -X POST "http://localhost:8000/api/v1/planning/core/proposal" -H "Content-Type: application/json" --data-binary "@test_request.json"`
   - `git log -1 --oneline`
 - Result summary:
   - Planning Core v1 endpoints return HTTP 200 with structured JSON.
   - POST /planning/core/proposal accepts input parameters, validates ranges (7..365), and reflects them in response.
-  - Both endpoints working as expected with schema-first contract.
+  - Response now includes non-empty lines with SKU recommendations (stub_logic).
+  - Expected response fragment:
+    ```json
+    {
+      "status": "ok",
+      "proposal": {
+        "version": "v1",
+        "generated_at": "2025-12-30T18:48:44.086055Z",
+        "inputs": {"sales_window_days": 30, "horizon_days": 90},
+        "summary": {"total_skus": 2, "total_units": 150},
+        "lines": [
+          {"sku": "SKU-001", "recommended_units": 100, "reason": "stub_logic"},
+          {"sku": "SKU-002", "recommended_units": 50, "reason": "stub_logic"}
+        ]
+      }
+    }
+    ```
   - PowerShell-safe curl methods avoid JSON quoting pitfalls.
