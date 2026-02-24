@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from math import floor
 
 from fastapi import HTTPException, status
@@ -23,15 +23,19 @@ from app.models.models import (
     ProductionOrderSizeWeightSetting,
     SkuUnit,
     StockBalance,
+    WbSalesDaily,
     WbStock,
 )
 from app.schemas.planning_production_order import (
+    BundleDemandInput,
+    BundleStockInput,
     ElasticConstraintApplied,
     FabricConstraintApplied,
     PlanningOverridesInput,
     ProductionOrderAlternative,
     ProductionOrderConstraintsApplied,
     ProductionOrderExplanationBlock,
+    ProductionOrderProposalFromWbRequest,
     ProductionOrderProposalRequest,
     ProductionOrderProposalResponse,
     ProductionOrderRecommendation,
@@ -350,6 +354,154 @@ def _load_wb_bundle_stock(
         stock_by_bundle_type[mapping.bundle_type_id] += qty_by_wb_sku.get(mapping.wb_sku, 0)
 
     return dict(stock_by_bundle_type)
+
+
+def _resolve_bundle_type_ids_for_article(
+    db: Session,
+    article_id: int,
+    requested_bundle_type_ids: list[int],
+) -> list[int]:
+    if requested_bundle_type_ids:
+        return sorted(set(requested_bundle_type_ids))
+
+    rows = (
+        db.query(BundleRecipe.bundle_type_id)
+        .filter(BundleRecipe.article_id == article_id)
+        .distinct()
+        .all()
+    )
+    return sorted({int(row.bundle_type_id) for row in rows})
+
+
+def _load_wb_bundle_daily_sales(
+    db: Session,
+    article_id: int,
+    bundle_type_ids: list[int],
+    observation_window_days: int,
+    as_of_date: date | None,
+) -> tuple[dict[int, float], date | None]:
+    if not bundle_type_ids:
+        return {}, as_of_date
+
+    mappings = (
+        db.query(ArticleWbMapping)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(bundle_type_ids),
+        )
+        .all()
+    )
+
+    wb_skus = {mapping.wb_sku for mapping in mappings if mapping.wb_sku}
+    effective_as_of_date = as_of_date
+
+    if effective_as_of_date is None and wb_skus:
+        max_sales_date = (
+            db.query(func.max(WbSalesDaily.date))
+            .filter(WbSalesDaily.wb_sku.in_(wb_skus))
+            .scalar()
+        )
+        if max_sales_date is not None:
+            effective_as_of_date = max_sales_date
+
+    if effective_as_of_date is None:
+        return {bundle_type_id: 0.0 for bundle_type_id in bundle_type_ids}, None
+
+    start_cutoff = effective_as_of_date - timedelta(days=observation_window_days - 1)
+
+    sales_rows = (
+        db.query(
+            ArticleWbMapping.bundle_type_id,
+            func.coalesce(func.sum(WbSalesDaily.sales_qty), 0).label("total_sales_qty"),
+        )
+        .join(WbSalesDaily, WbSalesDaily.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(bundle_type_ids),
+            WbSalesDaily.date >= start_cutoff,
+            WbSalesDaily.date <= effective_as_of_date,
+        )
+        .group_by(ArticleWbMapping.bundle_type_id)
+        .all()
+    )
+
+    daily_sales_by_bundle: dict[int, float] = {
+        bundle_type_id: 0.0 for bundle_type_id in bundle_type_ids
+    }
+    for row in sales_rows:
+        bundle_type_id = int(row.bundle_type_id)
+        total_sales_qty = int(row.total_sales_qty or 0)
+        daily_sales_by_bundle[bundle_type_id] = (
+            float(total_sales_qty) / float(observation_window_days)
+            if observation_window_days > 0
+            else 0.0
+        )
+
+    return daily_sales_by_bundle, effective_as_of_date
+
+
+def build_production_order_proposal_from_wb(
+    db: Session,
+    request: ProductionOrderProposalFromWbRequest,
+) -> ProductionOrderProposalResponse:
+    bundle_type_ids = _resolve_bundle_type_ids_for_article(
+        db=db,
+        article_id=request.article_id,
+        requested_bundle_type_ids=request.bundle_type_ids,
+    )
+    if not bundle_type_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No bundle types found for the article",
+        )
+
+    daily_sales_by_bundle, effective_as_of_date = _load_wb_bundle_daily_sales(
+        db=db,
+        article_id=request.article_id,
+        bundle_type_ids=bundle_type_ids,
+        observation_window_days=request.observation_window_days,
+        as_of_date=request.as_of_date,
+    )
+    wb_stock_by_bundle = _load_wb_bundle_stock(
+        db=db,
+        article_id=request.article_id,
+        bundle_type_ids=bundle_type_ids,
+    )
+
+    proposal_request = ProductionOrderProposalRequest(
+        article_id=request.article_id,
+        planning_horizon_days=request.planning_horizon_days,
+        bundle_daily_sales=[
+            BundleDemandInput(
+                bundle_type_id=bundle_type_id,
+                daily_sales=float(daily_sales_by_bundle.get(bundle_type_id, 0.0)),
+            )
+            for bundle_type_id in bundle_type_ids
+        ],
+        bundle_stock=[
+            BundleStockInput(
+                bundle_type_id=bundle_type_id,
+                wb_qty=int(wb_stock_by_bundle.get(bundle_type_id, 0)),
+                local_qty=0,
+            )
+            for bundle_type_id in bundle_type_ids
+        ],
+        in_flight_supply=request.in_flight_supply,
+        size_weights=request.size_weights,
+        overrides=request.overrides,
+    )
+
+    response = build_production_order_proposal(db=db, request=proposal_request)
+    as_of_text = effective_as_of_date.isoformat() if effective_as_of_date is not None else "none"
+    response.explanation.steps.insert(
+        0,
+        (
+            "WB ingestion adapter: "
+            f"observation_window_days={request.observation_window_days}, "
+            f"as_of_date={as_of_text}, bundle_type_ids={bundle_type_ids}."
+        ),
+    )
+    return response
 
 
 def _in_flight_stage_factor(stage: str | None) -> float:

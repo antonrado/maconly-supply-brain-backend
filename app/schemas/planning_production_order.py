@@ -84,6 +84,37 @@ class ProductionOrderProposalRequest(BaseModel):
         return value
 
 
+class ProductionOrderProposalFromWbRequest(BaseModel):
+    article_id: int = Field(..., ge=1)
+    planning_horizon_days: int = Field(90, ge=1, le=365)
+    observation_window_days: int = Field(30, ge=1, le=365)
+    as_of_date: date | None = None
+    bundle_type_ids: list[int] = Field(default_factory=list)
+    in_flight_supply: list[InFlightSupplyInput] = Field(default_factory=list)
+    size_weights: dict[int, float] = Field(default_factory=dict)
+    overrides: PlanningOverridesInput | None = None
+
+    @validator("bundle_type_ids")
+    def validate_bundle_type_ids(cls, value: list[int]) -> list[int]:
+        seen: set[int] = set()
+        for bundle_type_id in value:
+            if bundle_type_id < 1:
+                raise ValueError("bundle_type_ids must contain positive values")
+            if bundle_type_id in seen:
+                raise ValueError("bundle_type_ids contains duplicates")
+            seen.add(bundle_type_id)
+        return value
+
+    @validator("size_weights")
+    def validate_size_weights(cls, value: dict[int, float]) -> dict[int, float]:
+        for size_id, weight in value.items():
+            if size_id < 1:
+                raise ValueError("size_weights keys must be positive size IDs")
+            if weight <= 0:
+                raise ValueError("size_weights values must be positive")
+        return value
+
+
 class ProductionOrderRecommendationLine(BaseModel):
     article_id: int
     color_id: int

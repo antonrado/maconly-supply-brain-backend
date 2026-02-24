@@ -7,6 +7,7 @@ from app.core.db import get_db
 from app.core.planning.domain import PlanningProposalRequest
 from app.core.planning.service import PlanningService
 from app.schemas.planning_production_order import (
+    ProductionOrderProposalFromWbRequest,
     ProductionOrderProposalRequest,
     ProductionOrderProposalResponse,
 )
@@ -18,7 +19,10 @@ from app.services.planning_production_order_admin import (
     get_production_order_admin_settings,
     upsert_production_order_admin_settings,
 )
-from app.services.planning_production_order import build_production_order_proposal
+from app.services.planning_production_order import (
+    build_production_order_proposal,
+    build_production_order_proposal_from_wb,
+)
 
 
 router = APIRouter()
@@ -61,6 +65,17 @@ async def create_production_order_proposal(
     db: Session = Depends(get_db),
 ) -> ProductionOrderProposalResponse:
     return build_production_order_proposal(db=db, request=request)
+
+
+@router.post(
+    "/core/production-order/proposal/from-wb",
+    response_model=ProductionOrderProposalResponse,
+)
+async def create_production_order_proposal_from_wb(
+    request: ProductionOrderProposalFromWbRequest,
+    db: Session = Depends(get_db),
+) -> ProductionOrderProposalResponse:
+    return build_production_order_proposal_from_wb(db=db, request=request)
 
 
 @router.get(

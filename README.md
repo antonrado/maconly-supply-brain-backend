@@ -131,6 +131,7 @@ Main endpoints:
 - `GET /demand` — WB-based demand metrics per article.
 - `GET /order-proposal` — article/SKU-level purchase proposal based on WB demand and planning settings.
 - `POST /core/production-order/proposal` — Planning Core production-order recommendation for a single article with model-B deficit conversion, minima handling, alternatives and explanation.
+- `POST /core/production-order/proposal/from-wb` — Planning Core adapter endpoint that builds production-order inputs from WB-ingested sales/stock (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
 - `GET /core/production-order/settings/{article_id}` — read admin-configured defaults for production-order calculations (size weights, elastic bindings, in-flight supply defaults).
 - `PUT /core/production-order/settings/{article_id}` — replace admin-configured production-order defaults for the article.
 - `GET /bundle-availability` — number of bundles that can be assembled from NSC single-stock for a given article, bundle type and warehouse.
