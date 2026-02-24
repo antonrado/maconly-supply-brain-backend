@@ -24,6 +24,31 @@
 - `/api/v1/planning/core/health` and `/api/v1/planning/core/proposal` remain available as contract-first endpoints.
 - Request validation and response shape are stable; implementation may evolve behind the same contract.
 
+## Production Order v1 architecture canon
+- Production Order is a **layered, capital-aware, bundle-aware decision engine**, not a simple reorder calculator.
+- Optimization goals are balanced jointly: turnover, capital efficiency, stockout risk, bundle composition efficiency, assorti sustainability.
+- Layer sequence is strict:
+  1. Layer 1 - deterministic stock-health metrics by SKU.
+  2. Layer 2 - deterministic allocation comparison (`main` vs `assorti`) using time-window profit/GMROI proxy.
+  3. Layer 3 - purchase recommendation derived from Layer 1+2 outputs.
+  4. Layer 4 - deterministic scenarios (Conservative/Balanced/Aggressive).
+  5. Layer 5 - intervention flags only (no dynamic pricing model).
+
+## Production Order v1 Stable Alpha boundaries
+- Deterministic and explainable outputs are mandatory.
+- Test coverage is mandatory for each layer increment.
+- Explicitly out of scope for v1 alpha:
+  - ML / black-box optimization.
+  - Global optimization solvers.
+  - Elasticity model expansion.
+  - Multi-warehouse optimization logic.
+
+## Production Order delivery process
+- Feature-branch development only.
+- Verify before merge.
+- Design before implementation.
+- Layer-by-layer rollout with no scope creep.
+
 ## Verification philosophy
 - Every substantial task should include command-level verification (PowerShell-safe).
 - STATUS.md stores minimal raw outputs and exact commands for reproducibility.

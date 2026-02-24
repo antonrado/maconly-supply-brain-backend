@@ -124,6 +124,8 @@
     - конвертирует дефицит по модели B,
     - применяет минималки ткани/резинки,
     - использует admin-defaults для `size_weights` и `in_flight_supply`, если они не переданы в запросе,
+    - включает Layer 1 deterministic stock-health метрики в `explanation.meta.layer_1_stock_health`,
+    - включает Layer 2 deterministic allocation comparison в `explanation.meta.layer_2_allocation`,
     - возвращает альтернативы и explanation-блок.
   - Модуль `app/services/planning_production_order_admin.py` реализует контракт admin-настроек Production Order:
     - size weights по статье,
@@ -173,7 +175,13 @@
 - **Stage name**: Planning Core v1
 - **Goal**: сформировать и зафиксировать в backend-е первую версию ядра планирования (модели, сервисы, API), на которое будут опираться остальные модули.
 - **Status**: CONTRACT STABLE, LOGIC MINIMAL  
-  Контракт API зафиксирован; минимальная интеграция с БД присутствует в `build_proposal(...)`. Полноценная decision-логика остаётся задачей следующих этапов.
+  Контракт API зафиксирован; слой production-order развивается по layer-by-layer модели как детерминированный capital-aware engine.
+
+- **Production Order v1 Stable Alpha focus (текущий фокус)**
+  - Layer 1: deterministic stock-health метрики по SKU.
+  - Layer 2: deterministic allocation comparison (`main` / `assorti` / `hold`) на horizon до ETA.
+  - Layer 3+ реализуются поэтапно после стабилизации Layer 1/2.
+  - Вне scope v1 alpha: ML, глобальная оптимизация, расширение elasticity-модели, multi-warehouse оптимизация.
 
 ---
 
