@@ -736,7 +736,7 @@ def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(c
     }
 
 
-def test_production_order_proposal_exposes_layer1_and_layer2_meta(client, db_session):
+def test_production_order_proposal_exposes_layer1_layer2_layer3_meta(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
     payload = _build_payload(
@@ -756,6 +756,7 @@ def test_production_order_proposal_exposes_layer1_and_layer2_meta(client, db_ses
 
     layer1 = meta["layer_1_stock_health"]
     layer2 = meta["layer_2_allocation"]
+    layer3 = meta["layer_3_purchase_shaping"]
 
     assert layer1["summary"]["sku_count"] == 4
     assert len(layer1["metrics"]) == 4
@@ -786,6 +787,13 @@ def test_production_order_proposal_exposes_layer1_and_layer2_meta(client, db_ses
     assert len(layer2["decisions"]) == 4
     assert layer2["summary"] == {"main": 4, "assorti": 0, "hold": 0}
 
+    assert layer3["method"] == "allocation_decision_factors"
+    assert layer3["factors"] == {"main": 1.0, "assorti": 0.75, "hold": 0.35}
+    assert layer3["main_lines"] == 4
+    assert layer3["assorti_lines"] == 0
+    assert layer3["hold_lines"] == 0
+    assert layer3["qty_before"] >= layer3["qty_after"] >= 0
+
     layer1_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
         "",
@@ -794,8 +802,100 @@ def test_production_order_proposal_exposes_layer1_and_layer2_meta(client, db_ses
         (step for step in body["explanation"]["steps"] if "Layer 2 allocation" in step),
         "",
     )
+    layer3_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 3 purchase shaping" in step),
+        "",
+    )
     assert "sku_count=4" in layer1_step
     assert "main=4" in layer2_step
+    assert "main:4|assorti:0|hold:0" in layer3_step
+
+    if body["recommendation"] is not None and body["recommendation"]["lines"]:
+        assert all(
+            "|layer2:main" in line["source_reason"]
+            for line in body["recommendation"]["lines"]
+        )
+
+
+def test_production_order_proposal_layer3_shaping_reduces_qty_for_assorti_decision(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    assorti_bundle_type = BundleType(code="ASSORTI-PO-BT", name="Assorti PO-BT")
+    db_session.add(assorti_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload_main = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload_main["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload_main["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    payload_assorti = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=assorti_bundle_type.id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload_assorti["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload_assorti["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response_main = client.post("/api/v1/planning/core/production-order/proposal", json=payload_main)
+    response_assorti = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload_assorti,
+    )
+
+    assert response_main.status_code == 200, response_main.text
+    assert response_assorti.status_code == 200, response_assorti.text
+
+    body_main = response_main.json()
+    body_assorti = response_assorti.json()
+
+    assert body_main["recommendation"] is not None
+    assert body_assorti["recommendation"] is not None
+    assert body_main["recommendation"]["total_units"] > body_assorti["recommendation"]["total_units"]
+
+    layer2_main = body_main["explanation"]["meta"]["layer_2_allocation"]["summary"]
+    layer2_assorti = body_assorti["explanation"]["meta"]["layer_2_allocation"]["summary"]
+    assert layer2_main["main"] > 0
+    assert layer2_main["assorti"] == 0
+    assert layer2_assorti["assorti"] > 0
+    assert layer2_assorti["main"] == 0
+
+    layer3_main = body_main["explanation"]["meta"]["layer_3_purchase_shaping"]
+    layer3_assorti = body_assorti["explanation"]["meta"]["layer_3_purchase_shaping"]
+    assert layer3_main["main_lines"] > 0
+    assert layer3_main["assorti_lines"] == 0
+    assert layer3_assorti["assorti_lines"] > 0
+    assert layer3_assorti["main_lines"] == 0
+    assert layer3_main["qty_after"] > layer3_assorti["qty_after"]
+
+    assert body_assorti["recommendation"]["lines"]
+    assert all(
+        "|layer2:assorti" in line["source_reason"]
+        for line in body_assorti["recommendation"]["lines"]
+    )
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):

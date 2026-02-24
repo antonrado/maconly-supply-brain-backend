@@ -34,8 +34,9 @@
 - GMROI proxy and explicit decision (`main` / `assorti` / `hold`) per SKU.
 - No hard-coded "critical SKU" classifier as primary allocator.
 
-### 2.3 Layer 3 - Purchase recommendation (next)
-- Compute recommendation quantities after allocation decisions.
+### 2.3 Layer 3 - Purchase recommendation (in progress)
+- Allocation-driven purchase shaping is wired: Layer 2 decisions influence recommendation quantities via deterministic factors.
+- Complete deterministic purchase recommendation math on top of Layer 1/2 outputs.
 - Preserve deterministic math and full explainability.
 
 ### 2.4 Layer 4 - Scenario output (planned)

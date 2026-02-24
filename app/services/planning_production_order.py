@@ -49,6 +49,11 @@ FROM_WB_STOCK_STALE_AFTER_DAYS = 2
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
 LAYER2_UNIT_CAPITAL_PROXY = 1.0
+LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
+    "main": 1.0,
+    "assorti": 0.75,
+    "hold": 0.35,
+}
 
 
 @dataclass
@@ -499,6 +504,70 @@ def _build_layer2_allocation_decisions(
         )
 
     return decisions, summary
+
+
+def _apply_layer3_purchase_shaping(
+    *,
+    line_qty: dict[tuple[int, int], int],
+    layer2_allocation_decisions: list[dict[str, int | float | str]],
+) -> tuple[dict[tuple[int, int], str], dict[str, int]]:
+    decision_by_line: dict[tuple[int, int], str] = {}
+
+    for decision in layer2_allocation_decisions:
+        color_id_raw = decision.get("color_id")
+        size_id_raw = decision.get("size_id")
+        try:
+            line_key = (int(color_id_raw), int(size_id_raw))
+        except (TypeError, ValueError):
+            continue
+
+        decision_text = str(decision.get("allocation_decision", "main")).strip().lower()
+        if decision_text not in LAYER3_PURCHASE_FACTOR_BY_DECISION:
+            decision_text = "main"
+        decision_by_line[line_key] = decision_text
+
+    qty_before = sum(max(int(qty), 0) for qty in line_qty.values())
+    adjusted_lines = 0
+    decision_line_counts = {
+        "main": 0,
+        "assorti": 0,
+        "hold": 0,
+    }
+
+    for line_key in sorted(line_qty.keys()):
+        current_qty = max(int(line_qty.get(line_key, 0)), 0)
+        if current_qty <= 0:
+            continue
+
+        decision_text = decision_by_line.get(line_key, "main")
+        if decision_text not in LAYER3_PURCHASE_FACTOR_BY_DECISION:
+            decision_text = "main"
+
+        decision_line_counts[decision_text] += 1
+        factor = LAYER3_PURCHASE_FACTOR_BY_DECISION[decision_text]
+        shaped_qty = floor(float(current_qty) * factor)
+        if decision_text == "main" and current_qty > 0 and shaped_qty <= 0:
+            shaped_qty = 1
+        shaped_qty = max(int(shaped_qty), 0)
+
+        if shaped_qty != current_qty:
+            adjusted_lines += 1
+
+        line_qty[line_key] = shaped_qty
+
+    qty_after = sum(max(int(qty), 0) for qty in line_qty.values())
+
+    return (
+        decision_by_line,
+        {
+            "qty_before": qty_before,
+            "qty_after": qty_after,
+            "adjusted_lines": adjusted_lines,
+            "main_lines": decision_line_counts["main"],
+            "assorti_lines": decision_line_counts["assorti"],
+            "hold_lines": decision_line_counts["hold"],
+        },
+    )
 
 
 def _resolve_elastic_binding_scope(
@@ -1610,6 +1679,11 @@ def build_production_order_proposal(
         current_qty = stock_by_color_size.get(key, 0)
         line_qty[key] = max(required_qty - current_qty, 0)
 
+    layer3_decision_by_line, layer3_purchase_shaping = _apply_layer3_purchase_shaping(
+        line_qty=line_qty,
+        layer2_allocation_decisions=layer2_allocation_decisions,
+    )
+
     color_totals: dict[int, int] = defaultdict(int)
     for (color_id, _size_id), qty in line_qty.items():
         color_totals[color_id] += qty
@@ -1778,13 +1852,17 @@ def build_production_order_proposal(
     for (color_id, size_id), qty in sorted(line_qty.items(), key=lambda item: (item[0][0], item[0][1])):
         if qty <= 0:
             continue
+        layer2_decision = layer3_decision_by_line.get((color_id, size_id), "main")
         candidate_lines.append(
             ProductionOrderRecommendationLine(
                 article_id=request.article_id,
                 color_id=color_id,
                 size_id=size_id,
                 recommended_qty=qty,
-                source_reason="deficit_plus_min_batch_alignment",
+                source_reason=(
+                    "deficit_plus_min_batch_alignment"
+                    f"|layer2:{layer2_decision}"
+                ),
             )
         )
 
@@ -1876,6 +1954,16 @@ def build_production_order_proposal(
                 f"hold={layer2_allocation_summary['hold']}."
             ),
             (
+                "Layer 3 purchase shaping: method=allocation_decision_factors, "
+                f"qty_before={layer3_purchase_shaping['qty_before']}, "
+                f"qty_after={layer3_purchase_shaping['qty_after']}, "
+                f"adjusted_lines={layer3_purchase_shaping['adjusted_lines']}, "
+                "decision_lines="
+                f"main:{layer3_purchase_shaping['main_lines']}|"
+                f"assorti:{layer3_purchase_shaping['assorti_lines']}|"
+                f"hold:{layer3_purchase_shaping['hold_lines']}."
+            ),
+            (
                 f"Elastic scope: mode={elastic_scope_mode}, "
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
                 f"scoped_settings={len(scoped_elastic_rows)}, "
@@ -1925,6 +2013,11 @@ def build_production_order_proposal(
                 "method": "time_window_gmroi_proxy",
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
+            },
+            "layer_3_purchase_shaping": {
+                "method": "allocation_decision_factors",
+                "factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
+                **layer3_purchase_shaping,
             },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,
