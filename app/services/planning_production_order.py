@@ -286,39 +286,46 @@ def _add_units_for_color(
         line_qty[key] = line_qty.get(key, 0) + qty
 
 
-def _resolve_applicable_elastic_type_ids(
+def _resolve_elastic_binding_scope(
     bindings: list[ProductionOrderElasticBinding],
     line_qty: dict[tuple[int, int], int],
     sku_by_color_size: dict[tuple[int, int], SkuUnit],
-) -> set[int]:
+) -> tuple[set[int], set[tuple[int, int]]]:
     active_line_keys = {
         key
         for key, qty in line_qty.items()
         if qty > 0
     }
     if not active_line_keys:
-        return set()
+        return set(), set()
 
     active_color_ids = {color_id for color_id, _size_id in active_line_keys}
-    active_sku_ids = {
-        sku.id
+    active_line_keys_by_sku_id = {
+        sku.id: key
         for key, sku in sku_by_color_size.items()
         if key in active_line_keys
     }
 
     applicable: set[int] = set()
+    scoped_line_keys: set[tuple[int, int]] = set()
     for binding in bindings:
         if not binding.is_active:
             continue
 
-        if binding.sku_unit_id is not None and binding.sku_unit_id in active_sku_ids:
-            applicable.add(binding.elastic_type_id)
-            continue
+        if binding.sku_unit_id is not None:
+            line_key = active_line_keys_by_sku_id.get(binding.sku_unit_id)
+            if line_key is not None:
+                applicable.add(binding.elastic_type_id)
+                scoped_line_keys.add(line_key)
+                continue
 
         if binding.color_id is not None and binding.color_id in active_color_ids:
             applicable.add(binding.elastic_type_id)
+            for line_key in active_line_keys:
+                if line_key[0] == binding.color_id:
+                    scoped_line_keys.add(line_key)
 
-    return applicable
+    return applicable, scoped_line_keys
 
 
 def _load_admin_size_weights(
@@ -1117,7 +1124,7 @@ def build_production_order_proposal(
         .all()
     )
 
-    applicable_elastic_type_ids = _resolve_applicable_elastic_type_ids(
+    applicable_elastic_type_ids, elastic_scope_line_keys = _resolve_elastic_binding_scope(
         bindings=elastic_bindings,
         line_qty=line_qty,
         sku_by_color_size=sku_by_color_size,
@@ -1163,7 +1170,10 @@ def build_production_order_proposal(
         )
 
         if line_qty:
-            keys = sorted(line_qty.keys())
+            if elastic_bindings and elastic_scope_line_keys:
+                keys = sorted(elastic_scope_line_keys)
+            else:
+                keys = sorted(line_qty.keys())
             base_add = delta // len(keys)
             rem = delta % len(keys)
             for index, key in enumerate(keys):
@@ -1241,7 +1251,8 @@ def build_production_order_proposal(
             (
                 f"Elastic scope: mode={elastic_scope_mode}, "
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
-                f"scoped_settings={len(scoped_elastic_rows)}."
+                f"scoped_settings={len(scoped_elastic_rows)}, "
+                f"scoped_lines={len(elastic_scope_line_keys)}."
             ),
             (
                 f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "
