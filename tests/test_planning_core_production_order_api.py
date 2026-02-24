@@ -324,6 +324,63 @@ def test_production_order_proposal_in_flight_eta_stage_sensitivity(client, db_se
     assert "effective_qty=200" not in in_flight_step
 
 
+def test_production_order_proposal_economic_buffer_policy(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload_without_buffer = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload_without_buffer["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload_without_buffer["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload_without_buffer["overrides"]["allow_order_with_buffer"] = False
+
+    payload_with_buffer = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload_with_buffer["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload_with_buffer["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload_with_buffer["overrides"]["allow_order_with_buffer"] = True
+
+    response_without = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload_without_buffer,
+    )
+    response_with = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload_with_buffer,
+    )
+
+    assert response_without.status_code == 200, response_without.text
+    assert response_with.status_code == 200, response_with.text
+
+    body_without = response_without.json()
+    body_with = response_with.json()
+
+    assert body_without["recommendation"] is not None
+    assert body_with["recommendation"] is not None
+    assert body_with["recommendation"]["total_units"] > body_without["recommendation"]["total_units"]
+
+    buffer_step_without = next(
+        (step for step in body_without["explanation"]["steps"] if "Economic buffer policy" in step),
+        "",
+    )
+    buffer_step_with = next(
+        (step for step in body_with["explanation"]["steps"] if "Economic buffer policy" in step),
+        "",
+    )
+
+    assert "enabled=False" in buffer_step_without
+    assert "economic_buffer_days=0" in buffer_step_without
+    assert "enabled=True" in buffer_step_with
+    assert "economic_buffer_days=0" not in buffer_step_with
+
+
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal",

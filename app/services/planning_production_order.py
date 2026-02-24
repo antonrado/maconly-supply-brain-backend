@@ -342,6 +342,33 @@ def _estimate_effective_in_flight_qty(
     return max(int(effective), 0)
 
 
+def _compute_economic_buffer_days(
+    *,
+    risk_level: str,
+    allow_order_with_buffer: bool,
+    total_daily_sales: float,
+    lead_time_days_total: int,
+    days_of_cover_estimate: float,
+) -> int:
+    if not allow_order_with_buffer or total_daily_sales <= 0:
+        return 0
+
+    if risk_level not in {"critical", "warning"}:
+        return 0
+
+    cover_gap_days = max(float(lead_time_days_total) - max(days_of_cover_estimate, 0.0), 0.0)
+    if cover_gap_days <= 0:
+        return 0
+
+    buffer_days = _ceil_to_int(cover_gap_days * 0.35)
+    if risk_level == "critical":
+        buffer_days += 2
+    else:
+        buffer_days += 1
+
+    return max(min(buffer_days, 14), 0)
+
+
 def _load_admin_in_flight_defaults(
     db: Session,
     article_id: int,
@@ -603,8 +630,19 @@ def build_production_order_proposal(
         else:
             risk_level = "ok"
 
+    economic_buffer_days = _compute_economic_buffer_days(
+        risk_level=risk_level,
+        allow_order_with_buffer=settings.allow_order_with_buffer,
+        total_daily_sales=total_daily_sales,
+        lead_time_days_total=settings.lead_time_days_total,
+        days_of_cover_estimate=days_of_cover_estimate,
+    )
+    target_bundle_horizon_days = (
+        settings.target_coverage_days + settings.lead_time_days_total + economic_buffer_days
+    )
+
     required_bundle_units = _ceil_to_int(
-        total_daily_sales * (settings.target_coverage_days + settings.lead_time_days_total)
+        total_daily_sales * target_bundle_horizon_days
     )
     bundle_deficit_total = max(required_bundle_units - available_bundles_for_cover, 0)
 
@@ -818,6 +856,10 @@ def build_production_order_proposal(
             (
                 f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
                 f"bundle_deficit_total={bundle_deficit_total}, распределение через size_weights."
+            ),
+            (
+                f"Economic buffer policy: enabled={settings.allow_order_with_buffer}, "
+                f"economic_buffer_days={economic_buffer_days}, target_horizon_days={target_bundle_horizon_days}."
             ),
             (
                 f"Источник параметров: size_weights={size_weights_source}, "

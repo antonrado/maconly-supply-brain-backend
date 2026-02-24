@@ -22,6 +22,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `POST /api/v1/planning/core/production-order/proposal`
   - Handles article settings, model-B deficit conversion, minima (fabric/elastic), alternatives, and explanation blocks.
   - In-flight supply now uses ETA/stage-sensitive effective contribution (not binary include/exclude), and explanation reports raw/effective in-flight qty.
+  - Economic buffer policy is now applied for warning/critical risk zones when `allow_order_with_buffer=true`; explanation includes buffer days and adjusted target horizon.
 - Planning Core production-order admin settings endpoints added:
   - `GET /api/v1/planning/core/production-order/settings/{article_id}`
   - `PUT /api/v1/planning/core/production-order/settings/{article_id}`
