@@ -1,0 +1,711 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from math import floor
+
+from fastapi import HTTPException, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models.models import (
+    Article,
+    ArticlePlanningSettings,
+    BundleRecipe,
+    Color,
+    ColorPlanningSettings,
+    ElasticPlanningSettings,
+    GlobalPlanningSettings,
+    PlanningSettings,
+    SkuUnit,
+    StockBalance,
+)
+from app.schemas.planning_production_order import (
+    ElasticConstraintApplied,
+    FabricConstraintApplied,
+    PlanningOverridesInput,
+    ProductionOrderAlternative,
+    ProductionOrderConstraintsApplied,
+    ProductionOrderExplanationBlock,
+    ProductionOrderProposalRequest,
+    ProductionOrderProposalResponse,
+    ProductionOrderRecommendation,
+    ProductionOrderRecommendationLine,
+)
+
+
+@dataclass
+class _EffectiveSettings:
+    include_in_planning: bool
+    priority: int
+    target_coverage_days: int
+    service_level_percent: int
+    alert_threshold_days: int
+    lead_time_days_total: int
+    fabric_min_batch_default: int
+    elastic_min_batch_default: int
+    allow_order_with_buffer: bool
+
+
+def _ceil_to_int(value: float) -> int:
+    as_int = int(value)
+    if value > as_int:
+        return as_int + 1
+    return as_int
+
+
+def _normalize_weights(size_ids: list[int], raw_weights: dict[int, float]) -> dict[int, float]:
+    if not size_ids:
+        return {}
+
+    weights: dict[int, float] = {}
+    for size_id in size_ids:
+        weight = raw_weights.get(size_id)
+        if weight is not None and weight > 0:
+            weights[size_id] = float(weight)
+
+    if not weights:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    total = sum(weights.values())
+    if total <= 0:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    normalized = {size_id: weight / total for size_id, weight in weights.items()}
+
+    # Ensure all requested sizes exist in output map.
+    for size_id in size_ids:
+        normalized.setdefault(size_id, 0.0)
+
+    norm_total = sum(normalized.values())
+    if norm_total <= 0:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    return {size_id: normalized[size_id] / norm_total for size_id in size_ids}
+
+
+def _allocate_units(total_units: int, weights: dict[int, float]) -> dict[int, int]:
+    if total_units <= 0 or not weights:
+        return {key: 0 for key in weights}
+
+    keys = sorted(weights.keys())
+    raw_values: dict[int, float] = {
+        key: float(total_units) * max(weights.get(key, 0.0), 0.0) for key in keys
+    }
+
+    allocated: dict[int, int] = {key: int(raw_values[key]) for key in keys}
+    assigned = sum(allocated.values())
+    remainder = max(total_units - assigned, 0)
+
+    if remainder > 0:
+        remainders = sorted(
+            keys,
+            key=lambda key: (raw_values[key] - allocated[key], -key),
+            reverse=True,
+        )
+        for index in range(remainder):
+            allocated[remainders[index % len(remainders)]] += 1
+
+    return allocated
+
+
+def _choose_action(
+    risk_level: str,
+    candidate_units: int,
+    allow_order_with_buffer: bool,
+) -> str:
+    if candidate_units <= 0:
+        return "wait"
+
+    if risk_level in {"critical", "warning"}:
+        if allow_order_with_buffer:
+            return "order_with_buffer"
+        return "order_minimum_only"
+
+    if risk_level in {"overstock", "ok", "no_data"}:
+        return "wait"
+
+    return "order_minimum_only"
+
+
+def _build_alternatives(action: str) -> list[ProductionOrderAlternative]:
+    alternatives = {
+        "wait": ProductionOrderAlternative(
+            action="wait",
+            pros=["Минимальная заморозка средств"],
+            cons=["Риск недозаказа при резком росте спроса"],
+        ),
+        "order_with_buffer": ProductionOrderAlternative(
+            action="order_with_buffer",
+            pros=["Снижает риск OOS до следующего цикла"],
+            cons=["Увеличивает объем замороженного капитала"],
+        ),
+        "order_minimum_only": ProductionOrderAlternative(
+            action="order_minimum_only",
+            pros=["Соблюдает фабричные минималки без избыточного буфера"],
+            cons=["Может не покрыть всплеск спроса"],
+        ),
+    }
+
+    # Return at least two alternatives, excluding the recommended action from the first slot.
+    ordered_actions = ["wait", "order_with_buffer", "order_minimum_only"]
+    result: list[ProductionOrderAlternative] = []
+    for alt_action in ordered_actions:
+        if alt_action == action:
+            continue
+        result.append(alternatives[alt_action])
+
+    if len(result) < 2:
+        for alt_action in ordered_actions:
+            if alt_action != action and all(item.action != alt_action for item in result):
+                result.append(alternatives[alt_action])
+            if len(result) >= 2:
+                break
+
+    return result
+
+
+def _build_effective_settings(
+    article_settings: ArticlePlanningSettings | None,
+    planning_settings: PlanningSettings | None,
+    global_settings: GlobalPlanningSettings | None,
+    overrides: PlanningOverridesInput | None,
+) -> _EffectiveSettings:
+    target_coverage_days = 60
+    service_level_percent = 90
+    alert_threshold_days = 90
+    fabric_min_batch_default = 7000
+    elastic_min_batch_default = 3000
+
+    if global_settings is not None:
+        target_coverage_days = global_settings.default_target_coverage_days
+        service_level_percent = global_settings.default_service_level_percent
+        fabric_min_batch_default = global_settings.default_fabric_min_batch_qty
+        elastic_min_batch_default = global_settings.default_elastic_min_batch_qty
+
+    if article_settings is not None:
+        if article_settings.target_coverage_days is not None:
+            target_coverage_days = article_settings.target_coverage_days
+        if article_settings.service_level_percent is not None:
+            service_level_percent = article_settings.service_level_percent
+
+    if planning_settings is not None:
+        alert_threshold_days = planning_settings.alert_threshold_days
+
+    if overrides is not None:
+        if overrides.target_coverage_days is not None:
+            target_coverage_days = overrides.target_coverage_days
+        if overrides.service_level_percent is not None:
+            service_level_percent = overrides.service_level_percent
+        if overrides.alert_threshold_days is not None:
+            alert_threshold_days = overrides.alert_threshold_days
+        if overrides.fabric_min_batch_qty_default is not None:
+            fabric_min_batch_default = overrides.fabric_min_batch_qty_default
+        if overrides.elastic_min_batch_qty_default is not None:
+            elastic_min_batch_default = overrides.elastic_min_batch_qty_default
+
+    lead_time_production = 30
+    lead_time_china_to_nsk = 30
+    lead_time_packaging = 3
+    lead_time_nsk_to_wb = 7
+
+    if overrides is not None and overrides.lead_time_days is not None:
+        if overrides.lead_time_days.production is not None:
+            lead_time_production = overrides.lead_time_days.production
+        if overrides.lead_time_days.china_to_nsk is not None:
+            lead_time_china_to_nsk = overrides.lead_time_days.china_to_nsk
+        if overrides.lead_time_days.packaging is not None:
+            lead_time_packaging = overrides.lead_time_days.packaging
+        if overrides.lead_time_days.nsk_to_wb is not None:
+            lead_time_nsk_to_wb = overrides.lead_time_days.nsk_to_wb
+
+    lead_time_days_total = (
+        lead_time_production
+        + lead_time_china_to_nsk
+        + lead_time_packaging
+        + lead_time_nsk_to_wb
+    )
+
+    include_in_planning = True
+    priority = 0
+    if article_settings is not None:
+        include_in_planning = article_settings.include_in_planning
+        priority = article_settings.priority
+
+    allow_order_with_buffer = True
+    if overrides is not None:
+        allow_order_with_buffer = overrides.allow_order_with_buffer
+
+    return _EffectiveSettings(
+        include_in_planning=include_in_planning,
+        priority=priority,
+        target_coverage_days=target_coverage_days,
+        service_level_percent=service_level_percent,
+        alert_threshold_days=alert_threshold_days,
+        lead_time_days_total=lead_time_days_total,
+        fabric_min_batch_default=fabric_min_batch_default,
+        elastic_min_batch_default=elastic_min_batch_default,
+        allow_order_with_buffer=allow_order_with_buffer,
+    )
+
+
+def _add_units_for_color(
+    line_qty: dict[tuple[int, int], int],
+    color_id: int,
+    additional_qty: int,
+    color_to_sizes: dict[int, list[int]],
+    global_size_weights: dict[int, float],
+) -> None:
+    if additional_qty <= 0:
+        return
+
+    sizes = color_to_sizes.get(color_id, [])
+    if not sizes:
+        return
+
+    local_weights = _normalize_weights(sizes, global_size_weights)
+    allocated = _allocate_units(additional_qty, local_weights)
+
+    for size_id, qty in allocated.items():
+        if qty <= 0:
+            continue
+        key = (color_id, size_id)
+        line_qty[key] = line_qty.get(key, 0) + qty
+
+
+def build_production_order_proposal(
+    db: Session,
+    request: ProductionOrderProposalRequest,
+) -> ProductionOrderProposalResponse:
+    now = datetime.now(timezone.utc)
+
+    article = db.query(Article).filter(Article.id == request.article_id).first()
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == request.article_id)
+        .first()
+    )
+    planning_settings = (
+        db.query(PlanningSettings)
+        .filter(PlanningSettings.article_id == request.article_id)
+        .first()
+    )
+    global_settings = (
+        db.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).first()
+    )
+
+    settings = _build_effective_settings(
+        article_settings=article_settings,
+        planning_settings=planning_settings,
+        global_settings=global_settings,
+        overrides=request.overrides,
+    )
+
+    if not settings.include_in_planning:
+        return ProductionOrderProposalResponse(
+            status="skipped",
+            article_id=request.article_id,
+            generated_at=now,
+            risk_level="no_data",
+            days_of_cover_estimate=0.0,
+            lead_time_days_total=settings.lead_time_days_total,
+            recommendation=None,
+            constraints_applied=ProductionOrderConstraintsApplied(),
+            alternatives=[],
+            explanation=ProductionOrderExplanationBlock(
+                summary="Артикул исключен из планирования настройкой include_in_planning=false.",
+                steps=[
+                    "Получены настройки статьи и проверен флаг include_in_planning.",
+                    "Расчет пропущен по явному правилу исключения.",
+                ],
+            ),
+        )
+
+    bundle_type_ids = sorted({item.bundle_type_id for item in request.bundle_daily_sales})
+
+    recipes = (
+        db.query(BundleRecipe)
+        .filter(
+            BundleRecipe.article_id == request.article_id,
+            BundleRecipe.bundle_type_id.in_(bundle_type_ids),
+        )
+        .all()
+    )
+
+    if not recipes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No bundle recipe defined for the provided article and bundle types",
+        )
+
+    recipe_colors_by_bundle: dict[int, set[int]] = defaultdict(set)
+    for recipe in recipes:
+        recipe_colors_by_bundle[recipe.bundle_type_id].add(recipe.color_id)
+
+    missing_bundle_types = [
+        bundle_type_id
+        for bundle_type_id in bundle_type_ids
+        if not recipe_colors_by_bundle.get(bundle_type_id)
+    ]
+    if missing_bundle_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No bundle recipe defined for bundle_type_id(s): {missing_bundle_types}",
+        )
+
+    all_recipe_color_ids = sorted({color_id for colors in recipe_colors_by_bundle.values() for color_id in colors})
+
+    sku_units = (
+        db.query(SkuUnit)
+        .filter(
+            SkuUnit.article_id == request.article_id,
+            SkuUnit.color_id.in_(all_recipe_color_ids),
+        )
+        .all()
+    )
+
+    if not sku_units:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SKU units found for article and recipe colors",
+        )
+
+    sku_by_color_size: dict[tuple[int, int], SkuUnit] = {}
+    color_to_sizes: dict[int, list[int]] = defaultdict(list)
+    size_ids_set: set[int] = set()
+    for sku in sku_units:
+        sku_by_color_size[(sku.color_id, sku.size_id)] = sku
+        color_to_sizes[sku.color_id].append(sku.size_id)
+        size_ids_set.add(sku.size_id)
+
+    size_ids = sorted(size_ids_set)
+    for color_id in color_to_sizes:
+        color_to_sizes[color_id] = sorted(set(color_to_sizes[color_id]))
+
+    size_weights = _normalize_weights(size_ids, request.size_weights)
+
+    stock_agg_rows = (
+        db.query(
+            StockBalance.sku_unit_id,
+            func.sum(StockBalance.quantity).label("total_qty"),
+        )
+        .filter(StockBalance.sku_unit_id.in_([sku.id for sku in sku_units]))
+        .group_by(StockBalance.sku_unit_id)
+        .all()
+    )
+    stock_by_sku_id = {
+        int(row.sku_unit_id): max(int(row.total_qty or 0), 0) for row in stock_agg_rows
+    }
+
+    stock_by_color_size: dict[tuple[int, int], int] = {}
+    for sku in sku_units:
+        stock_by_color_size[(sku.color_id, sku.size_id)] = stock_by_sku_id.get(sku.id, 0)
+
+    # Add in-flight supply that is expected to arrive before lead time horizon.
+    for in_flight in request.in_flight_supply:
+        if in_flight.article_id != request.article_id:
+            continue
+        if in_flight.eta_days > settings.lead_time_days_total:
+            continue
+
+        key = (in_flight.color_id, in_flight.size_id)
+        if key not in sku_by_color_size:
+            continue
+
+        stock_by_color_size[key] = stock_by_color_size.get(key, 0) + in_flight.qty
+
+    demand_by_bundle = {item.bundle_type_id: item.daily_sales for item in request.bundle_daily_sales}
+    total_daily_sales = float(sum(demand_by_bundle.values()))
+
+    stock_by_bundle = {item.bundle_type_id: item.wb_qty + item.local_qty for item in request.bundle_stock}
+    ready_bundle_stock_total = sum(stock_by_bundle.get(bundle_type_id, 0) for bundle_type_id in bundle_type_ids)
+
+    shares_by_bundle: dict[int, float] = {}
+    if total_daily_sales > 0:
+        for bundle_type_id in bundle_type_ids:
+            shares_by_bundle[bundle_type_id] = demand_by_bundle.get(bundle_type_id, 0.0) / total_daily_sales
+    else:
+        equal_share = 1.0 / len(bundle_type_ids)
+        for bundle_type_id in bundle_type_ids:
+            shares_by_bundle[bundle_type_id] = equal_share
+
+    # Estimate raw bundle availability with a simple competition-aware heuristic:
+    # exclusive potential per bundle type, then weighted by demand share.
+    exclusive_raw_by_bundle: dict[int, int] = {}
+    for bundle_type_id in bundle_type_ids:
+        recipe_colors = recipe_colors_by_bundle[bundle_type_id]
+
+        total_possible = 0
+        for size_id in size_ids:
+            if any((color_id, size_id) not in sku_by_color_size for color_id in recipe_colors):
+                continue
+
+            quantities = [stock_by_color_size.get((color_id, size_id), 0) for color_id in recipe_colors]
+            total_possible += min(quantities) if quantities else 0
+
+        exclusive_raw_by_bundle[bundle_type_id] = total_possible
+
+    weighted_raw_bundle_stock = 0
+    for bundle_type_id in bundle_type_ids:
+        raw_exclusive = exclusive_raw_by_bundle.get(bundle_type_id, 0)
+        share = shares_by_bundle.get(bundle_type_id, 0.0)
+        weighted_raw_bundle_stock += floor(raw_exclusive * share)
+
+    available_bundles_for_cover = ready_bundle_stock_total + weighted_raw_bundle_stock
+
+    if total_daily_sales <= 0:
+        days_of_cover_estimate = 9999.0
+        risk_level = "no_data"
+    else:
+        days_of_cover_estimate = available_bundles_for_cover / total_daily_sales
+        if days_of_cover_estimate < settings.lead_time_days_total:
+            risk_level = "critical"
+        elif days_of_cover_estimate < settings.alert_threshold_days:
+            risk_level = "warning"
+        elif days_of_cover_estimate > settings.target_coverage_days * 2:
+            risk_level = "overstock"
+        else:
+            risk_level = "ok"
+
+    required_bundle_units = _ceil_to_int(
+        total_daily_sales * (settings.target_coverage_days + settings.lead_time_days_total)
+    )
+    bundle_deficit_total = max(required_bundle_units - available_bundles_for_cover, 0)
+
+    color_probability: dict[int, float] = {color_id: 0.0 for color_id in all_recipe_color_ids}
+    for color_id in all_recipe_color_ids:
+        for bundle_type_id in bundle_type_ids:
+            if color_id in recipe_colors_by_bundle[bundle_type_id]:
+                color_probability[color_id] += shares_by_bundle.get(bundle_type_id, 0.0)
+
+    if sum(color_probability.values()) <= 0:
+        uniform = 1.0 / len(all_recipe_color_ids)
+        color_probability = {color_id: uniform for color_id in all_recipe_color_ids}
+
+    line_required: dict[tuple[int, int], int] = {}
+    for color_id in all_recipe_color_ids:
+        color_target_units = _ceil_to_int(bundle_deficit_total * color_probability.get(color_id, 0.0))
+        sizes_for_color = color_to_sizes.get(color_id, [])
+        if not sizes_for_color:
+            continue
+
+        local_weights = _normalize_weights(
+            sizes_for_color,
+            {size_id: size_weights.get(size_id, 0.0) for size_id in sizes_for_color},
+        )
+        allocated = _allocate_units(color_target_units, local_weights)
+
+        for size_id, qty in allocated.items():
+            line_required[(color_id, size_id)] = qty
+
+    line_qty: dict[tuple[int, int], int] = {}
+    for key, required_qty in line_required.items():
+        current_qty = stock_by_color_size.get(key, 0)
+        line_qty[key] = max(required_qty - current_qty, 0)
+
+    color_totals: dict[int, int] = defaultdict(int)
+    for (color_id, _size_id), qty in line_qty.items():
+        color_totals[color_id] += qty
+
+    colors = db.query(Color).filter(Color.id.in_(all_recipe_color_ids)).all()
+    pantone_by_color: dict[int, str] = {}
+    for color in colors:
+        pantone_by_color[color.id] = color.pantone_code or f"COLOR-{color.id}"
+
+    color_settings_rows = (
+        db.query(ColorPlanningSettings)
+        .filter(
+            ColorPlanningSettings.article_id == request.article_id,
+            ColorPlanningSettings.color_id.in_(all_recipe_color_ids),
+        )
+        .all()
+    )
+    color_min_override = {
+        row.color_id: row.fabric_min_batch_qty
+        for row in color_settings_rows
+        if row.fabric_min_batch_qty is not None and row.fabric_min_batch_qty > 0
+    }
+
+    constraints_applied = ProductionOrderConstraintsApplied()
+
+    colors_by_pantone: dict[str, list[int]] = defaultdict(list)
+    for color_id in all_recipe_color_ids:
+        colors_by_pantone[pantone_by_color.get(color_id, f"COLOR-{color_id}")].append(color_id)
+
+    for pantone_code, pantone_color_ids in sorted(colors_by_pantone.items(), key=lambda item: item[0]):
+        required_qty = sum(color_totals.get(color_id, 0) for color_id in pantone_color_ids)
+        if required_qty <= 0:
+            continue
+
+        min_candidates = [settings.fabric_min_batch_default]
+        for color_id in pantone_color_ids:
+            override_value = color_min_override.get(color_id)
+            if override_value is not None:
+                min_candidates.append(override_value)
+
+        applied_min = max(min_candidates)
+        if required_qty >= applied_min:
+            continue
+
+        delta = applied_min - required_qty
+        constraints_applied.fabric_min_batches.append(
+            FabricConstraintApplied(
+                pantone_code=pantone_code,
+                required=required_qty,
+                applied_min=applied_min,
+            )
+        )
+
+        if len(pantone_color_ids) == 1:
+            _add_units_for_color(
+                line_qty=line_qty,
+                color_id=pantone_color_ids[0],
+                additional_qty=delta,
+                color_to_sizes=color_to_sizes,
+                global_size_weights=size_weights,
+            )
+        else:
+            total_color_weight = sum(max(color_totals.get(color_id, 0), 1) for color_id in pantone_color_ids)
+            color_weights = {
+                color_id: max(color_totals.get(color_id, 0), 1) / total_color_weight
+                for color_id in pantone_color_ids
+            }
+            color_alloc = _allocate_units(delta, color_weights)
+            for color_id, qty in color_alloc.items():
+                _add_units_for_color(
+                    line_qty=line_qty,
+                    color_id=color_id,
+                    additional_qty=qty,
+                    color_to_sizes=color_to_sizes,
+                    global_size_weights=size_weights,
+                )
+
+        # Recalculate color totals after updates.
+        color_totals = defaultdict(int)
+        for (color_id, _size_id), qty in line_qty.items():
+            color_totals[color_id] += qty
+
+    elastic_rows = (
+        db.query(ElasticPlanningSettings)
+        .filter(ElasticPlanningSettings.article_id == request.article_id)
+        .all()
+    )
+
+    current_total_units = sum(line_qty.values())
+
+    elastic_target = settings.elastic_min_batch_default
+    elastic_type_id: int | None = None
+
+    for row in elastic_rows:
+        candidate = row.elastic_min_batch_qty
+        if candidate is None or candidate <= 0:
+            candidate = settings.elastic_min_batch_default
+
+        if candidate > elastic_target:
+            elastic_target = candidate
+            elastic_type_id = row.elastic_type_id
+
+    if current_total_units > 0 and elastic_target > 0 and current_total_units < elastic_target:
+        delta = elastic_target - current_total_units
+        constraints_applied.elastic_min_batches.append(
+            ElasticConstraintApplied(
+                article_id=request.article_id,
+                elastic_type_id=elastic_type_id,
+                required=current_total_units,
+                applied_min=elastic_target,
+            )
+        )
+
+        if line_qty:
+            keys = sorted(line_qty.keys())
+            base_add = delta // len(keys)
+            rem = delta % len(keys)
+            for index, key in enumerate(keys):
+                line_qty[key] += base_add + (1 if index < rem else 0)
+
+    candidate_lines: list[ProductionOrderRecommendationLine] = []
+    for (color_id, size_id), qty in sorted(line_qty.items(), key=lambda item: (item[0][0], item[0][1])):
+        if qty <= 0:
+            continue
+        candidate_lines.append(
+            ProductionOrderRecommendationLine(
+                article_id=request.article_id,
+                color_id=color_id,
+                size_id=size_id,
+                recommended_qty=qty,
+                source_reason="deficit_plus_min_batch_alignment",
+            )
+        )
+
+    candidate_total_units = sum(line.recommended_qty for line in candidate_lines)
+    action = _choose_action(
+        risk_level=risk_level,
+        candidate_units=candidate_total_units,
+        allow_order_with_buffer=settings.allow_order_with_buffer,
+    )
+
+    if action == "wait":
+        recommendation = ProductionOrderRecommendation(
+            action="wait",
+            priority=settings.priority,
+            target_arrival_date=(now + timedelta(days=settings.lead_time_days_total)).date(),
+            total_units=0,
+            lines=[],
+        )
+    else:
+        recommendation = ProductionOrderRecommendation(
+            action=action,
+            priority=settings.priority,
+            target_arrival_date=(now + timedelta(days=settings.lead_time_days_total)).date(),
+            total_units=candidate_total_units,
+            lines=candidate_lines,
+        )
+
+    alternatives = _build_alternatives(action)
+
+    expected_horizon_sales = total_daily_sales * request.planning_horizon_days
+    explanation = ProductionOrderExplanationBlock(
+        summary=(
+            f"Риск {risk_level}: оценка покрытия {days_of_cover_estimate:.1f} дней при lead time "
+            f"{settings.lead_time_days_total} дней."
+        ),
+        steps=[
+            (
+                f"Спрос по наборам: total_daily_sales={total_daily_sales:.3f}, "
+                f"planning_horizon_days={request.planning_horizon_days}, "
+                f"expected_horizon_sales={expected_horizon_sales:.1f}."
+            ),
+            (
+                f"Учтены ready stock наборов (WB+локальный)={ready_bundle_stock_total} и "
+                f"оценка сырьевого потенциала={weighted_raw_bundle_stock}."
+            ),
+            (
+                f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
+                f"bundle_deficit_total={bundle_deficit_total}, распределение через size_weights."
+            ),
+            (
+                f"Применены ограничения: fabric_constraints={len(constraints_applied.fabric_min_batches)}, "
+                f"elastic_constraints={len(constraints_applied.elastic_min_batches)}."
+            ),
+        ],
+    )
+
+    return ProductionOrderProposalResponse(
+        status="ok",
+        article_id=request.article_id,
+        generated_at=now,
+        risk_level=risk_level,
+        days_of_cover_estimate=float(days_of_cover_estimate),
+        lead_time_days_total=settings.lead_time_days_total,
+        recommendation=recommendation,
+        constraints_applied=constraints_applied,
+        alternatives=alternatives,
+        explanation=explanation,
+    )

@@ -5,6 +5,20 @@
 cd "C:\Users\USER\CascadeProjects\maconly-supply-brain-backend"
 ```
 
+## Quick helper script (PowerShell)
+
+Use helper commands from `scripts/dev.ps1`:
+
+```powershell
+.\scripts\dev.ps1 up
+.\scripts\dev.ps1 ps
+.\scripts\dev.ps1 logs
+.\scripts\dev.ps1 health
+.\scripts\dev.ps1 proposal
+.\scripts\dev.ps1 test
+.\scripts\dev.ps1 context
+```
+
 ## Git sanity checks
 ```powershell
 git rev-parse --is-inside-work-tree
@@ -66,6 +80,41 @@ docker compose -f .\docker-compose.yml exec -T db psql -U maconly -d maconly_db 
 If host shell shows `No module named pytest`, prefer one of:
 1. Run tests inside Docker backend container.
 2. Install dev dependencies in host Python environment.
+
+## CI parity (local)
+CI runs with:
+
+- `DATABASE_URL=sqlite:///./ci.db`
+- `MONITORING_SCHEDULER_ENABLED=false`
+
+To mirror CI locally (host run):
+
+```powershell
+$env:DATABASE_URL = "sqlite:///./ci.db"
+$env:MONITORING_SCHEDULER_ENABLED = "false"
+python -m pytest -q
+```
+
+## Context guard (prevent losing project vector)
+
+Run before opening PR:
+
+```powershell
+.\scripts\dev.ps1 context
+```
+
+Direct command variant:
+
+```powershell
+$base = git merge-base HEAD origin/main
+if (-not $base) { $base = "HEAD~1" }
+python .\scripts\context_guard.py --base $base --head HEAD
+```
+
+Guard policy summary:
+- Runtime code changes require `STATUS.md` or `PROJECT_CANON.md` update.
+- API/schema changes require `README.md` or `PROJECT_CANON.md` update.
+- Planning-engine changes require one of `ROADMAP.md`, `STATUS.md`, `PROJECT_CANON.md` updates.
 
 ## Interactive rebase / COMMIT_EDITMSG swap recovery
 If Vim opens and reports a swap file for `.git/COMMIT_EDITMSG`:

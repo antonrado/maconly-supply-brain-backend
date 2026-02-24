@@ -8,8 +8,9 @@ Minimize Anton's time by running tasks as agentic loops with reproducible eviden
 2. Read canon docs (`VISION.md`, `ARCHITECTURE_CANON.md`, `ROADMAP.md`, `PROJECT_CANON.md`, `STATUS.md`).
 3. Propose a short implementation plan.
 4. Apply focused multi-file edits.
-5. Run verification commands.
-6. Report back in machine-readable format with changed files + commit hash.
+5. Sync canonical docs in the same PR when runtime/API/planning behavior changes.
+6. Run verification commands (including context guard when applicable).
+7. Report back in machine-readable format with changed files + commit hash.
 
 ## When to sync with Director (ChatGPT)
 - Before any API contract break.
@@ -56,3 +57,9 @@ report_back_format:
 - If user asks for **RAW OUTPUT only**, return command output only (no commentary).
 - Otherwise keep report short and structured.
 - Do not paste huge logs; include compact raw snippets and exact reproduction commands.
+
+## Context guard quick command
+
+```powershell
+.\scripts\dev.ps1 context
+```

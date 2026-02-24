@@ -27,3 +27,11 @@
 ## Verification philosophy
 - Every substantial task should include command-level verification (PowerShell-safe).
 - STATUS.md stores minimal raw outputs and exact commands for reproducibility.
+
+## Engineering governance baseline
+- CI gates run compile + automated tests on PR/push (`.github/workflows/ci.yml`).
+- CI enforces context sync using `scripts/context_guard.py` (fails PR when runtime/API/planning changes are not reflected in canonical docs).
+- PRs use a structured template with risk/migration/rollback sections.
+- Definition of Done lives in `CONTRIBUTING.md`.
+- Releases follow explicit policy in `RELEASE_POLICY.md`.
+- Significant architectural decisions are captured in `docs/adr/`.

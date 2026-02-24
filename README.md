@@ -1,6 +1,7 @@
 # MACONLY Supply Brain Backend
 
-This is a minimal backend scaffold for experimenting with the core MACONLY Supply Brain domain models and Alembic migrations.
+Production backend for MACONLY Supply Brain. The system powers internal planning,
+monitoring, and order decision workflows with a stable API-first contract.
 
 ## Setup
 
@@ -10,11 +11,16 @@ pip install -r requirements.txt
 
 ## Database
 
-By default Alembic is configured to use a local SQLite database file:
+Default DB runtime and migrations are configured for PostgreSQL:
 
 ```ini
-sqlalchemy.url = sqlite:///./maconly_supply_brain.db
+sqlalchemy.url = postgresql+psycopg2://maconly:maconly@db:5432/maconly_db
 ```
+
+Notes:
+
+- Local Docker Compose runs PostgreSQL under service name `db`.
+- CI runs tests on SQLite with `DATABASE_URL=sqlite:///./ci.db` for fast isolated checks.
 
 ## Migrations
 
@@ -77,6 +83,16 @@ Notes:
 - All changes performed by tools (including Windsurf) should be committed with meaningful messages.
 - Resolve conflicts consciously; do not just overwrite remote or local changes blindly.
 
+## Engineering governance and quality gates
+
+- Contribution and Definition of Done: `CONTRIBUTING.md`
+- Release discipline and rollback requirements: `RELEASE_POLICY.md`
+- Architecture decision records: `docs/adr/README.md`
+- CI workflow and automated checks: `.github/workflows/ci.yml`
+- Context synchronization guard (prevents code/docs drift): `scripts/context_guard.py`
+- Pull request template: `.github/pull_request_template.md`
+- Ownership policy: `.github/CODEOWNERS` (replace placeholder owner before enforcing required review)
+
 ## WB Manager Public API
 
 The backend exposes a small public API surface used by the WB Manager frontend under the common prefix:
@@ -114,6 +130,7 @@ Main endpoints:
 
 - `GET /demand` — WB-based demand metrics per article.
 - `GET /order-proposal` — article/SKU-level purchase proposal based on WB demand and planning settings.
+- `POST /core/production-order/proposal` — Planning Core production-order recommendation for a single article with model-B deficit conversion, minima handling, alternatives and explanation.
 - `GET /bundle-availability` — number of bundles that can be assembled from NSC single-stock for a given article, bundle type and warehouse.
 - `GET /article-bundle-snapshot` — article-level bundle & inventory snapshot for NSC/WB:
   - NSC single-SKU stock by color/size.

@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
+from app.core.db import get_db
 from app.core.planning.domain import PlanningProposalRequest
 from app.core.planning.service import PlanningService
+from app.schemas.planning_production_order import (
+    ProductionOrderProposalRequest,
+    ProductionOrderProposalResponse,
+)
+from app.services.planning_production_order import build_production_order_proposal
 
 
 router = APIRouter()
@@ -35,3 +42,14 @@ async def create_planning_core_proposal(request: PlanningProposalRequest) -> dic
         "status": "ok",
         "proposal": proposal.dict(),
     }
+
+
+@router.post(
+    "/core/production-order/proposal",
+    response_model=ProductionOrderProposalResponse,
+)
+async def create_production_order_proposal(
+    request: ProductionOrderProposalRequest,
+    db: Session = Depends(get_db),
+) -> ProductionOrderProposalResponse:
+    return build_production_order_proposal(db=db, request=request)

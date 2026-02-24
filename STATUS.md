@@ -2,7 +2,7 @@
 
 ## Current stage
 
-Planning Core v1 contract is active, monitoring APIs are active, and scheduler single-instance guard is implemented in code.
+Planning Core v1 contract is active, monitoring APIs are active, scheduler single-instance guard is implemented, and engineering quality gates are now scaffolded.
 
 ## Implemented now (code-backed)
 
@@ -18,6 +18,19 @@ Planning Core v1 contract is active, monitoring APIs are active, and scheduler s
   - `GET /api/v1/planning/core/health`
   - `POST /api/v1/planning/core/proposal`
 - Planning proposal service currently has minimal DB-backed hook: reads SKU rows and returns deterministic `lines` with `recommended_units=0` and `reason="data_hook_only"`.
+- Planning Core production-order proposal endpoint added:
+  - `POST /api/v1/planning/core/production-order/proposal`
+  - Handles article settings, model-B deficit conversion, minima (fabric/elastic), alternatives, and explanation blocks.
+- Tests added for production-order endpoint:
+  - `tests/test_planning_core_production_order_api.py`
+- Governance baseline added:
+  - CI pipeline: `.github/workflows/ci.yml`
+  - Context synchronization guard in CI: `scripts/context_guard.py`
+  - PR template: `.github/pull_request_template.md`
+  - Contribution rules and DoD: `CONTRIBUTING.md`
+  - Release policy: `RELEASE_POLICY.md`
+  - ADR process: `docs/adr/`
+  - CODEOWNERS scaffold: `.github/CODEOWNERS`
 
 ## Known operational friction
 
@@ -25,6 +38,7 @@ Planning Core v1 contract is active, monitoring APIs are active, and scheduler s
 - Docker Desktop engine may be unavailable (`dockerDesktopLinuxEngine` pipe error).
 - Host Python may miss `pytest`; prefer Docker-based test runs or install dev deps.
 - PowerShell JSON quoting can break curl payloads; file-based `--data-binary "@..."` is the safe default.
+- `.github/CODEOWNERS` currently contains a placeholder owner and must be replaced with a real GitHub handle/team before enabling required reviews.
 
 ## Verification commands (PowerShell, reproducible)
 
@@ -37,6 +51,7 @@ docker compose -f .\docker-compose.yml logs --tail=200 backend
 curl.exe -i http://localhost:8000/api/v1/planning/core/health
 '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
 curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+.\scripts\dev.ps1 context
 docker compose -f .\docker-compose.yml exec -T db psql -U maconly -d maconly_db -c "SELECT count(*) FROM monitoring_snapshots;"
 ```
 

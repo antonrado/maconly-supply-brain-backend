@@ -2,13 +2,14 @@ from __future__ import annotations
 
 """Planning Core v1 service interface.
 
-This module intentionally contains *no* business logic. It only defines the
-shape of the future Planning Core service so that API layers can depend on a
-stable interface while the implementation is developed incrementally.
+This module contains minimal business logic to demonstrate data integration
+with existing database tables while maintaining a stable API contract.
 """
 
 from datetime import datetime, timezone
+from sqlalchemy.orm import Session
 
+from app.core.db import SessionLocal
 from app.core.planning.domain import (
     DemandInput,
     OrderProposal,
@@ -20,13 +21,13 @@ from app.core.planning.domain import (
     PlanningSettings,
     SupplyInput,
 )
+from app.models.models import Article, SkuUnit
 
 
 class PlanningService:
     """Interface for Planning Core v1 operations.
 
-    All methods deliberately raise NotImplementedError; real implementations
-    will be provided in future tasks.
+    Contains minimal data integration logic while maintaining stable API contract.
     """
 
     def compute_order_proposal(
@@ -55,24 +56,29 @@ class PlanningService:
         return PlanningHealth(status="ok", issues=[])
 
     def build_proposal(self, sales_window_days=None, horizon_days=None) -> PlanningProposal:
-        """Build a structured PlanningProposal with minimal logic for API responses."""
+        """Build a PlanningProposal with real SKU data from database."""
 
         now = datetime.now(timezone.utc)
         
-        # TODO: Replace with real demand/supply data and calculations
-        # Currently using stub data to demonstrate non-empty response structure
-        lines = [
-            PlanningProposalLine(
-                sku="SKU-001",
-                recommended_units=100,
-                reason="stub_logic"
-            ),
-            PlanningProposalLine(
-                sku="SKU-002", 
-                recommended_units=50,
-                reason="stub_logic"
-            )
-        ]
+        # Fetch real SKU data from database
+        db: Session = SessionLocal()
+        try:
+            # Get first 10 SKU units with their article codes
+            sku_units = db.query(SkuUnit).join(Article).limit(10).all()
+            
+            lines = []
+            for sku_unit in sku_units:
+                # Create SKU identifier from article code
+                sku_identifier = f"{sku_unit.article.code}-{sku_unit.color_id}-{sku_unit.size_id}"
+                
+                lines.append(PlanningProposalLine(
+                    sku=sku_identifier,
+                    recommended_units=0,
+                    reason="data_hook_only"
+                ))
+            
+        finally:
+            db.close()
         
         total_units = sum(line.recommended_units for line in lines)
         
