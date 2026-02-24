@@ -30,6 +30,25 @@ function Invoke-CompileCheck {
     }
 }
 
+function Wait-BackendRunning {
+    param(
+        [int]$TimeoutSeconds = 30
+    )
+
+    $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $Deadline) {
+        $RunningServices = docker compose -f $ComposeFile ps --status running --services 2>$null
+        $BackendRunning = $LASTEXITCODE -eq 0 -and (($RunningServices | ForEach-Object { $_.Trim() }) -contains "backend")
+        if ($BackendRunning) {
+            return $true
+        }
+
+        Start-Sleep -Milliseconds 500
+    }
+
+    return $false
+}
+
 function Invoke-SmokeTests {
     $TargetTests = @(
         "tests/test_planning_core_production_order_api.py",
@@ -55,6 +74,11 @@ function Invoke-SmokeTests {
         docker compose -f $ComposeFile up -d --build backend
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
+        }
+
+        if (-not (Wait-BackendRunning -TimeoutSeconds 30)) {
+            Write-Host "[verify] backend did not reach running state in time." -ForegroundColor Yellow
+            exit 1
         }
 
         docker compose -f $ComposeFile exec -T backend python -c "import pytest, httpx" 2>$null

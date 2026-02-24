@@ -54,6 +54,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Replaced mutable list defaults with `Field(default_factory=list)` in touched schemas.
 - Local verify workflow hardening:
   - Added `pytest` and `httpx` to image dependencies so `scripts/dev.ps1 verify` no longer performs ad-hoc pip installs inside running backend containers.
+  - Added backend-running wait gate after `up -d --build backend` to avoid dependency-check race when container is still starting.
 - Governance baseline added:
   - CI pipeline: `.github/workflows/ci.yml`
   - Context synchronization guard in CI: `scripts/context_guard.py`
