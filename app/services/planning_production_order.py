@@ -43,6 +43,9 @@ from app.schemas.planning_production_order import (
     ProductionOrderRecommendationLine,
 )
 
+FROM_WB_SALES_STALE_AFTER_DAYS = 3
+FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+
 
 @dataclass
 class _EffectiveSettings:
@@ -458,6 +461,81 @@ def _load_wb_bundle_stock_updated_at_by_bundle(
     }
 
 
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def _build_from_wb_freshness_snapshot(
+    *,
+    effective_as_of_date: date | None,
+    wb_stock_updated_at_by_bundle: dict[int, str | None],
+    now: datetime,
+) -> tuple[str, str, str, dict[int, int | None]]:
+    anchor_date = now.date()
+
+    sales_age_days_value: int | None = None
+    if effective_as_of_date is not None:
+        sales_age_days_value = max((anchor_date - effective_as_of_date).days, 0)
+
+    stock_age_days_by_bundle: dict[int, int | None] = {}
+    for bundle_type_id, updated_at_text in wb_stock_updated_at_by_bundle.items():
+        updated_at = _parse_iso_datetime(updated_at_text)
+        if updated_at is None:
+            stock_age_days_by_bundle[bundle_type_id] = None
+            continue
+
+        stock_age_days_by_bundle[bundle_type_id] = max((anchor_date - updated_at.date()).days, 0)
+
+    stock_known_ages = [age for age in stock_age_days_by_bundle.values() if age is not None]
+    stock_oldest_age_days_value = max(stock_known_ages) if stock_known_ages else None
+
+    stale_sales = (
+        sales_age_days_value is not None
+        and sales_age_days_value > FROM_WB_SALES_STALE_AFTER_DAYS
+    )
+    stale_stock = (
+        stock_oldest_age_days_value is not None
+        and stock_oldest_age_days_value > FROM_WB_STOCK_STALE_AFTER_DAYS
+    )
+
+    if sales_age_days_value is None and stock_oldest_age_days_value is None:
+        freshness_status = "no_data"
+    elif stale_sales or stale_stock:
+        freshness_status = "stale"
+    else:
+        freshness_status = "fresh"
+
+    sales_age_days_text = "none" if sales_age_days_value is None else str(sales_age_days_value)
+    stock_oldest_age_days_text = (
+        "none" if stock_oldest_age_days_value is None else str(stock_oldest_age_days_value)
+    )
+
+    return (
+        freshness_status,
+        sales_age_days_text,
+        stock_oldest_age_days_text,
+        stock_age_days_by_bundle,
+    )
+
+
 def _get_wb_mapped_bundle_type_ids(
     db: Session,
     article_id: int,
@@ -659,6 +737,16 @@ def build_production_order_proposal_from_wb(
         bundle_type_id: int(wb_stock_by_bundle.get(bundle_type_id, 0))
         for bundle_type_id in bundle_type_ids
     }
+    (
+        freshness_status,
+        freshness_sales_age_days,
+        freshness_stock_oldest_age_days,
+        freshness_stock_age_days_by_bundle,
+    ) = _build_from_wb_freshness_snapshot(
+        effective_as_of_date=effective_as_of_date,
+        wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
+        now=response.generated_at,
+    )
     response.explanation.steps.insert(
         0,
         (
@@ -670,7 +758,12 @@ def build_production_order_proposal_from_wb(
             f" sales_window={window_text},"
             f" daily_sales_by_bundle={daily_sales_snapshot}, "
             f"wb_stock_by_bundle={wb_stock_snapshot}, "
-            f"wb_stock_updated_at_by_bundle={wb_stock_updated_at_by_bundle}."
+            f"wb_stock_updated_at_by_bundle={wb_stock_updated_at_by_bundle}, "
+            f"freshness_status={freshness_status}, "
+            f"freshness_sales_age_days={freshness_sales_age_days}, "
+            f"freshness_stock_oldest_age_days={freshness_stock_oldest_age_days}, "
+            f"freshness_stock_age_days_by_bundle={freshness_stock_age_days_by_bundle}, "
+            f"freshness_threshold_days=sales:{FROM_WB_SALES_STALE_AFTER_DAYS}|stock:{FROM_WB_STOCK_STALE_AFTER_DAYS}."
         ),
     )
     return response
