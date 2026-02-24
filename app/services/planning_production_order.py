@@ -356,21 +356,48 @@ def _load_wb_bundle_stock(
     return dict(stock_by_bundle_type)
 
 
-def _resolve_bundle_type_ids_for_article(
+def _get_wb_mapped_bundle_type_ids(
+    db: Session,
+    article_id: int,
+    bundle_type_ids_filter: list[int] | None = None,
+) -> set[int]:
+    query = (
+        db.query(ArticleWbMapping.bundle_type_id)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.is_not(None),
+        )
+    )
+
+    if bundle_type_ids_filter:
+        query = query.filter(ArticleWbMapping.bundle_type_id.in_(bundle_type_ids_filter))
+
+    rows = query.distinct().all()
+    return {int(row.bundle_type_id) for row in rows}
+
+
+def _resolve_bundle_type_ids_for_from_wb(
     db: Session,
     article_id: int,
     requested_bundle_type_ids: list[int],
 ) -> list[int]:
     if requested_bundle_type_ids:
-        return sorted(set(requested_bundle_type_ids))
+        requested = sorted(set(requested_bundle_type_ids))
+        mapped = _get_wb_mapped_bundle_type_ids(
+            db=db,
+            article_id=article_id,
+            bundle_type_ids_filter=requested,
+        )
+        missing = [bundle_type_id for bundle_type_id in requested if bundle_type_id not in mapped]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Missing WB mapping for bundle_type_id(s): {missing}",
+            )
+        return requested
 
-    rows = (
-        db.query(BundleRecipe.bundle_type_id)
-        .filter(BundleRecipe.article_id == article_id)
-        .distinct()
-        .all()
-    )
-    return sorted({int(row.bundle_type_id) for row in rows})
+    mapped_all = _get_wb_mapped_bundle_type_ids(db=db, article_id=article_id)
+    return sorted(mapped_all)
 
 
 def _load_wb_bundle_daily_sales(
@@ -444,7 +471,7 @@ def build_production_order_proposal_from_wb(
     db: Session,
     request: ProductionOrderProposalFromWbRequest,
 ) -> ProductionOrderProposalResponse:
-    bundle_type_ids = _resolve_bundle_type_ids_for_article(
+    bundle_type_ids = _resolve_bundle_type_ids_for_from_wb(
         db=db,
         article_id=request.article_id,
         requested_bundle_type_ids=request.bundle_type_ids,
@@ -452,7 +479,7 @@ def build_production_order_proposal_from_wb(
     if not bundle_type_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No bundle types found for the article",
+            detail="No WB-mapped bundle types found for the article",
         )
 
     daily_sales_by_bundle, effective_as_of_date = _load_wb_bundle_daily_sales(

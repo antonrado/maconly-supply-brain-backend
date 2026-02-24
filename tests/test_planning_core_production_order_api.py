@@ -583,7 +583,26 @@ def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "No bundle types found for the article"
+    assert response.json()["detail"] == "No WB-mapped bundle types found for the article"
+
+
+def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_type(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == (
+        f"Missing WB mapping for bundle_type_id(s): [{seeded['bundle_type'].id}]"
+    )
 
 
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
