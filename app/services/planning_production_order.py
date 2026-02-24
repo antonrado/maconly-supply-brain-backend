@@ -55,6 +55,7 @@ class _EffectiveSettings:
     service_level_percent: int
     alert_threshold_days: int
     lead_time_days_total: int
+    safety_stock_days: int
     fabric_min_batch_default: int
     elastic_min_batch_default: int
     allow_order_with_buffer: bool
@@ -190,6 +191,7 @@ def _build_effective_settings(
     target_coverage_days = 60
     service_level_percent = 90
     alert_threshold_days = 90
+    safety_stock_days = 0
     fabric_min_batch_default = 7000
     elastic_min_batch_default = 3000
 
@@ -207,6 +209,7 @@ def _build_effective_settings(
 
     if planning_settings is not None:
         alert_threshold_days = planning_settings.alert_threshold_days
+        safety_stock_days = planning_settings.safety_stock_days
 
     if overrides is not None:
         if overrides.target_coverage_days is not None:
@@ -259,6 +262,7 @@ def _build_effective_settings(
         service_level_percent=service_level_percent,
         alert_threshold_days=alert_threshold_days,
         lead_time_days_total=lead_time_days_total,
+        safety_stock_days=safety_stock_days,
         fabric_min_batch_default=fabric_min_batch_default,
         elastic_min_batch_default=elastic_min_batch_default,
         allow_order_with_buffer=allow_order_with_buffer,
@@ -1287,13 +1291,14 @@ def build_production_order_proposal(
     )
 
     available_bundles_for_cover = ready_bundle_stock_total + competition_raw_bundle_stock
+    reorder_point_days = settings.lead_time_days_total + settings.safety_stock_days
 
     if total_daily_sales <= 0:
         days_of_cover_estimate = 9999.0
         risk_level = "no_data"
     else:
         days_of_cover_estimate = available_bundles_for_cover / total_daily_sales
-        if days_of_cover_estimate < settings.lead_time_days_total:
+        if days_of_cover_estimate < reorder_point_days:
             risk_level = "critical"
         elif days_of_cover_estimate < settings.alert_threshold_days:
             risk_level = "warning"
@@ -1310,7 +1315,10 @@ def build_production_order_proposal(
         days_of_cover_estimate=days_of_cover_estimate,
     )
     target_bundle_horizon_days = (
-        settings.target_coverage_days + settings.lead_time_days_total + economic_buffer_days
+        settings.target_coverage_days
+        + settings.lead_time_days_total
+        + settings.safety_stock_days
+        + economic_buffer_days
     )
 
     required_bundle_units = _ceil_to_int(
@@ -1572,8 +1580,9 @@ def build_production_order_proposal(
 
     explanation = ProductionOrderExplanationBlock(
         summary=(
-            f"Риск {risk_level}: оценка покрытия {days_of_cover_estimate:.1f} дней при lead time "
-            f"{settings.lead_time_days_total} дней."
+            f"Риск {risk_level}: оценка покрытия {days_of_cover_estimate:.1f} дней при reorder point "
+            f"{reorder_point_days} дней (lead_time={settings.lead_time_days_total}, "
+            f"safety_stock={settings.safety_stock_days})."
         ),
         steps=[
             (
@@ -1589,6 +1598,10 @@ def build_production_order_proposal(
             (
                 f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
                 f"bundle_deficit_total={bundle_deficit_total}, распределение через size_weights."
+            ),
+            (
+                f"Reorder policy: lead_time_days={settings.lead_time_days_total}, "
+                f"safety_stock_days={settings.safety_stock_days}, reorder_point_days={reorder_point_days}."
             ),
             (
                 f"Economic buffer policy: enabled={settings.allow_order_with_buffer}, "
@@ -1625,6 +1638,11 @@ def build_production_order_proposal(
                 "size_weights": size_weights_source,
                 "in_flight": in_flight_source,
                 "bundle_stock": bundle_stock_source,
+            },
+            "reorder_policy": {
+                "lead_time_days_total": settings.lead_time_days_total,
+                "safety_stock_days": settings.safety_stock_days,
+                "reorder_point_days": reorder_point_days,
             },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,

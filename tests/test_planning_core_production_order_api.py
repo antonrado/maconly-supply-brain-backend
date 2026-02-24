@@ -681,6 +681,61 @@ def test_production_order_proposal_economic_buffer_policy(client, db_session):
     assert "economic_buffer_days=0" not in buffer_step_with
 
 
+def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload["overrides"]["allow_order_with_buffer"] = False
+
+    response_without_safety_stock = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload,
+    )
+    assert response_without_safety_stock.status_code == 200, response_without_safety_stock.text
+
+    planning_settings = (
+        db_session.query(PlanningSettings)
+        .filter(PlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    planning_settings.safety_stock_days = 21
+    db_session.commit()
+
+    response_with_safety_stock = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload,
+    )
+    assert response_with_safety_stock.status_code == 200, response_with_safety_stock.text
+
+    body_without = response_without_safety_stock.json()
+    body_with = response_with_safety_stock.json()
+
+    assert body_without["recommendation"] is not None
+    assert body_with["recommendation"] is not None
+    assert body_with["recommendation"]["total_units"] > body_without["recommendation"]["total_units"]
+
+    reorder_step = next(
+        (step for step in body_with["explanation"]["steps"] if "Reorder policy" in step),
+        "",
+    )
+    assert "lead_time_days=70" in reorder_step
+    assert "safety_stock_days=21" in reorder_step
+    assert "reorder_point_days=91" in reorder_step
+
+    assert body_with["explanation"]["meta"]["reorder_policy"] == {
+        "lead_time_days_total": 70,
+        "safety_stock_days": 21,
+        "reorder_point_days": 91,
+    }
+
+
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
