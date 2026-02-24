@@ -1198,6 +1198,7 @@ def build_production_order_proposal(
     elastic_uplift_delta = 0
     elastic_uplift_scope = "none"
     elastic_uplift_keys: list[tuple[int, int]] = []
+    elastic_uplift_line_alloc: dict[tuple[int, int], int] = {}
 
     if current_total_units > 0 and elastic_target > 0 and current_total_units < elastic_target:
         delta = elastic_target - current_total_units
@@ -1222,7 +1223,10 @@ def build_production_order_proposal(
             base_add = delta // len(keys)
             rem = delta % len(keys)
             for index, key in enumerate(keys):
-                line_qty[key] += base_add + (1 if index < rem else 0)
+                add_qty = base_add + (1 if index < rem else 0)
+                line_qty[key] += add_qty
+                if add_qty > 0:
+                    elastic_uplift_line_alloc[key] = add_qty
 
     candidate_lines: list[ProductionOrderRecommendationLine] = []
     for (color_id, size_id), qty in sorted(line_qty.items(), key=lambda item: (item[0][0], item[0][1])):
@@ -1303,7 +1307,8 @@ def build_production_order_proposal(
                 f"Elastic uplift: delta={elastic_uplift_delta}, "
                 f"scope={elastic_uplift_scope}, "
                 f"affected_lines={len(elastic_uplift_keys)}, "
-                f"line_keys={elastic_uplift_keys}."
+                f"line_keys={elastic_uplift_keys}, "
+                f"line_alloc={elastic_uplift_line_alloc}."
             ),
             (
                 f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "

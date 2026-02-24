@@ -330,6 +330,9 @@ def test_production_order_proposal_elastic_binding_scope_selects_bound_type(clie
     assert "scoped_lines=2" in scope_step
     assert "scope=binding_scope" in uplift_step
     assert "affected_lines=2" in uplift_step
+    assert "line_alloc={" in uplift_step
+    assert f"({seeded['color_1'].id}, {seeded['size_s'].id}):" in uplift_step
+    assert f"({seeded['color_1'].id}, {seeded['size_m'].id}):" in uplift_step
 
 
 def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_lines(client, db_session):
@@ -476,6 +479,8 @@ def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_sku(
     assert "scoped_lines=1" in scope_step
     assert "scope=binding_scope" in uplift_step
     assert "affected_lines=1" in uplift_step
+    assert "line_alloc={" in uplift_step
+    assert f"{scoped_key}:" in uplift_step
 
 
 def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(client, db_session):
@@ -532,6 +537,7 @@ def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(cli
     assert "delta=0" in uplift_step
     assert "scope=none" in uplift_step
     assert "affected_lines=0" in uplift_step
+    assert "line_alloc={}" in uplift_step
 
 
 def test_production_order_proposal_returns_alternatives(client, db_session):
