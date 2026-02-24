@@ -9,6 +9,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models.models import (
     Article,
+    ArticleWbMapping,
     ArticlePlanningSettings,
     BundleRecipe,
     BundleType,
@@ -21,6 +22,7 @@ from app.models.models import (
     Size,
     SkuUnit,
     StockBalance,
+    WbStock,
     Warehouse,
 )
 
@@ -436,6 +438,53 @@ def test_production_order_proposal_competition_aware_raw_stock_breakdown(client,
     assert "оценка сырьевого потенциала=20" in raw_stock_step
     assert f"{seeded['bundle_type'].id}:14" in raw_stock_step
     assert f"{competing_bundle_type.id}:6" in raw_stock_step
+
+
+def test_production_order_proposal_uses_wb_bundle_stock_fallback(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=25,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_stock"] = []
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    source_step = next(
+        (step for step in body["explanation"]["steps"] if "Источник параметров" in step),
+        "",
+    )
+    stock_step = next(
+        (step for step in body["explanation"]["steps"] if "ready stock наборов" in step),
+        "",
+    )
+
+    assert "bundle_stock=wb_defaults" in source_step
+    assert "ready stock наборов (WB+локальный)=25" in stock_step
 
 
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001

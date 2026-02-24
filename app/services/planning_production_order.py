@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.models import (
     Article,
     ArticlePlanningSettings,
+    ArticleWbMapping,
     BundleRecipe,
     Color,
     ColorPlanningSettings,
@@ -22,6 +23,7 @@ from app.models.models import (
     ProductionOrderSizeWeightSetting,
     SkuUnit,
     StockBalance,
+    WbStock,
 )
 from app.schemas.planning_production_order import (
     ElasticConstraintApplied,
@@ -302,6 +304,52 @@ def _load_admin_size_weights(
             result[row.size_id] = float(row.weight)
 
     return result
+
+
+def _load_wb_bundle_stock(
+    db: Session,
+    article_id: int,
+    bundle_type_ids: list[int],
+) -> dict[int, int]:
+    if not bundle_type_ids:
+        return {}
+
+    mappings = (
+        db.query(ArticleWbMapping)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(bundle_type_ids),
+        )
+        .all()
+    )
+    if not mappings:
+        return {}
+
+    wb_skus = {mapping.wb_sku for mapping in mappings if mapping.wb_sku}
+    if not wb_skus:
+        return {}
+
+    stock_rows = (
+        db.query(
+            WbStock.wb_sku,
+            func.sum(WbStock.stock_qty).label("total_qty"),
+        )
+        .filter(WbStock.wb_sku.in_(wb_skus))
+        .group_by(WbStock.wb_sku)
+        .all()
+    )
+    qty_by_wb_sku = {
+        str(row.wb_sku): max(int(row.total_qty or 0), 0)
+        for row in stock_rows
+    }
+
+    stock_by_bundle_type: dict[int, int] = defaultdict(int)
+    for mapping in mappings:
+        if mapping.bundle_type_id is None:
+            continue
+        stock_by_bundle_type[mapping.bundle_type_id] += qty_by_wb_sku.get(mapping.wb_sku, 0)
+
+    return dict(stock_by_bundle_type)
 
 
 def _in_flight_stage_factor(stage: str | None) -> float:
@@ -641,7 +689,34 @@ def build_production_order_proposal(
     demand_by_bundle = {item.bundle_type_id: item.daily_sales for item in request.bundle_daily_sales}
     total_daily_sales = float(sum(demand_by_bundle.values()))
 
-    stock_by_bundle = {item.bundle_type_id: item.wb_qty + item.local_qty for item in request.bundle_stock}
+    stock_by_bundle = {
+        item.bundle_type_id: item.wb_qty + item.local_qty for item in request.bundle_stock
+    }
+    bundle_stock_source = "request"
+
+    missing_bundle_type_ids = [
+        bundle_type_id
+        for bundle_type_id in bundle_type_ids
+        if bundle_type_id not in stock_by_bundle
+    ]
+    if missing_bundle_type_ids:
+        wb_bundle_stock = _load_wb_bundle_stock(
+            db=db,
+            article_id=request.article_id,
+            bundle_type_ids=missing_bundle_type_ids,
+        )
+        for bundle_type_id in missing_bundle_type_ids:
+            if bundle_type_id in wb_bundle_stock:
+                stock_by_bundle[bundle_type_id] = wb_bundle_stock[bundle_type_id]
+
+        if wb_bundle_stock:
+            if request.bundle_stock:
+                bundle_stock_source = "mixed_request_plus_wb"
+            else:
+                bundle_stock_source = "wb_defaults"
+        elif not request.bundle_stock:
+            bundle_stock_source = "none"
+
     ready_bundle_stock_total = sum(stock_by_bundle.get(bundle_type_id, 0) for bundle_type_id in bundle_type_ids)
 
     shares_by_bundle: dict[int, float] = {}
@@ -917,7 +992,7 @@ def build_production_order_proposal(
             ),
             (
                 f"Источник параметров: size_weights={size_weights_source}, "
-                f"in_flight={in_flight_source}."
+                f"in_flight={in_flight_source}, bundle_stock={bundle_stock_source}."
             ),
             (
                 f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "
