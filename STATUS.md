@@ -27,6 +27,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `from-wb` validates requested `bundle_type_ids` against `article_wb_mapping` and returns 400 on missing mappings.
   - In-flight supply now uses ETA/stage-sensitive effective contribution (not binary include/exclude), and explanation reports raw/effective in-flight qty.
   - Elastic minima now respect admin elastic binding scope: active bindings select applicable elastic types for current candidate lines; non-matching binding scope does not force elastic minimum uplift.
+  - Explanation now includes elastic uplift trace (`delta`, `scope`, `affected_lines`, `line_keys`) for easier audit/debug of minimum-batch adjustments.
   - Economic buffer policy is now applied for warning/critical risk zones when `allow_order_with_buffer=true`; explanation includes buffer days and adjusted target horizon.
   - Raw bundle potential now uses competition-aware allocation across bundle types that share colors, with per-bundle breakdown in explanation.
   - Bundle stock input now supports WB ingestion fallback: if request omits `bundle_stock` entries, planner fills missing bundle types from `article_wb_mapping + wb_stock`.

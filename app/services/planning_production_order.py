@@ -1158,8 +1158,13 @@ def build_production_order_proposal(
             elastic_target = candidate
             elastic_type_id = row.elastic_type_id
 
+    elastic_uplift_delta = 0
+    elastic_uplift_scope = "none"
+    elastic_uplift_keys: list[tuple[int, int]] = []
+
     if current_total_units > 0 and elastic_target > 0 and current_total_units < elastic_target:
         delta = elastic_target - current_total_units
+        elastic_uplift_delta = delta
         constraints_applied.elastic_min_batches.append(
             ElasticConstraintApplied(
                 article_id=request.article_id,
@@ -1172,8 +1177,11 @@ def build_production_order_proposal(
         if line_qty:
             if elastic_bindings and elastic_scope_line_keys:
                 keys = sorted(elastic_scope_line_keys)
+                elastic_uplift_scope = "binding_scope"
             else:
                 keys = sorted(line_qty.keys())
+                elastic_uplift_scope = "all_lines"
+            elastic_uplift_keys = list(keys)
             base_add = delta // len(keys)
             rem = delta % len(keys)
             for index, key in enumerate(keys):
@@ -1253,6 +1261,12 @@ def build_production_order_proposal(
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
                 f"scoped_settings={len(scoped_elastic_rows)}, "
                 f"scoped_lines={len(elastic_scope_line_keys)}."
+            ),
+            (
+                f"Elastic uplift: delta={elastic_uplift_delta}, "
+                f"scope={elastic_uplift_scope}, "
+                f"affected_lines={len(elastic_uplift_keys)}, "
+                f"line_keys={elastic_uplift_keys}."
             ),
             (
                 f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "

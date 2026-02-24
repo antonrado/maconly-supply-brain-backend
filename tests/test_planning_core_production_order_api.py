@@ -320,10 +320,16 @@ def test_production_order_proposal_elastic_binding_scope_selects_bound_type(clie
         (step for step in body["explanation"]["steps"] if "Elastic scope" in step),
         "",
     )
+    uplift_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic uplift" in step),
+        "",
+    )
     assert "mode=binding_scope" in scope_step
     assert f"applicable_types=[{elastic_type_1.id}]" in scope_step
     assert "scoped_settings=1" in scope_step
     assert "scoped_lines=2" in scope_step
+    assert "scope=binding_scope" in uplift_step
+    assert "affected_lines=2" in uplift_step
 
 
 def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_lines(client, db_session):
@@ -463,7 +469,13 @@ def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_sku(
         (step for step in scoped_body["explanation"]["steps"] if "Elastic scope" in step),
         "",
     )
+    uplift_step = next(
+        (step for step in scoped_body["explanation"]["steps"] if "Elastic uplift" in step),
+        "",
+    )
     assert "scoped_lines=1" in scope_step
+    assert "scope=binding_scope" in uplift_step
+    assert "affected_lines=1" in uplift_step
 
 
 def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(client, db_session):
@@ -510,9 +522,16 @@ def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(cli
         (step for step in body["explanation"]["steps"] if "Elastic scope" in step),
         "",
     )
+    uplift_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic uplift" in step),
+        "",
+    )
     assert "mode=binding_scope" in scope_step
     assert "applicable_types=[]" in scope_step
     assert "scoped_settings=0" in scope_step
+    assert "delta=0" in uplift_step
+    assert "scope=none" in uplift_step
+    assert "affected_lines=0" in uplift_step
 
 
 def test_production_order_proposal_returns_alternatives(client, db_session):
