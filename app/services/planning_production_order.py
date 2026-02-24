@@ -19,6 +19,7 @@ from app.models.models import (
     ElasticPlanningSettings,
     GlobalPlanningSettings,
     PlanningSettings,
+    ProductionOrderElasticBinding,
     ProductionOrderInFlightDefault,
     ProductionOrderSizeWeightSetting,
     SkuUnit,
@@ -283,6 +284,41 @@ def _add_units_for_color(
             continue
         key = (color_id, size_id)
         line_qty[key] = line_qty.get(key, 0) + qty
+
+
+def _resolve_applicable_elastic_type_ids(
+    bindings: list[ProductionOrderElasticBinding],
+    line_qty: dict[tuple[int, int], int],
+    sku_by_color_size: dict[tuple[int, int], SkuUnit],
+) -> set[int]:
+    active_line_keys = {
+        key
+        for key, qty in line_qty.items()
+        if qty > 0
+    }
+    if not active_line_keys:
+        return set()
+
+    active_color_ids = {color_id for color_id, _size_id in active_line_keys}
+    active_sku_ids = {
+        sku.id
+        for key, sku in sku_by_color_size.items()
+        if key in active_line_keys
+    }
+
+    applicable: set[int] = set()
+    for binding in bindings:
+        if not binding.is_active:
+            continue
+
+        if binding.sku_unit_id is not None and binding.sku_unit_id in active_sku_ids:
+            applicable.add(binding.elastic_type_id)
+            continue
+
+        if binding.color_id is not None and binding.color_id in active_color_ids:
+            applicable.add(binding.elastic_type_id)
+
+    return applicable
 
 
 def _load_admin_size_weights(
@@ -1072,12 +1108,41 @@ def build_production_order_proposal(
         .all()
     )
 
+    elastic_bindings = (
+        db.query(ProductionOrderElasticBinding)
+        .filter(
+            ProductionOrderElasticBinding.article_id == request.article_id,
+            ProductionOrderElasticBinding.is_active.is_(True),
+        )
+        .all()
+    )
+
+    applicable_elastic_type_ids = _resolve_applicable_elastic_type_ids(
+        bindings=elastic_bindings,
+        line_qty=line_qty,
+        sku_by_color_size=sku_by_color_size,
+    )
+
+    scoped_elastic_rows = list(elastic_rows)
+    elastic_scope_mode = "all_types"
+    if elastic_bindings:
+        elastic_scope_mode = "binding_scope"
+        if applicable_elastic_type_ids:
+            scoped_elastic_rows = [
+                row for row in elastic_rows if row.elastic_type_id in applicable_elastic_type_ids
+            ]
+        else:
+            scoped_elastic_rows = []
+
     current_total_units = sum(line_qty.values())
 
     elastic_target = settings.elastic_min_batch_default
     elastic_type_id: int | None = None
 
-    for row in elastic_rows:
+    if elastic_bindings and not applicable_elastic_type_ids:
+        elastic_target = 0
+
+    for row in scoped_elastic_rows:
         candidate = row.elastic_min_batch_qty
         if candidate is None or candidate <= 0:
             candidate = settings.elastic_min_batch_default
@@ -1172,6 +1237,11 @@ def build_production_order_proposal(
             (
                 f"Источник параметров: size_weights={size_weights_source}, "
                 f"in_flight={in_flight_source}, bundle_stock={bundle_stock_source}."
+            ),
+            (
+                f"Elastic scope: mode={elastic_scope_mode}, "
+                f"applicable_types={sorted(applicable_elastic_type_ids)}, "
+                f"scoped_settings={len(scoped_elastic_rows)}."
             ),
             (
                 f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "

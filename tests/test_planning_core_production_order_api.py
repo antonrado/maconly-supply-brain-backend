@@ -19,6 +19,7 @@ from app.models.models import (
     ElasticType,
     GlobalPlanningSettings,
     PlanningSettings,
+    ProductionOrderElasticBinding,
     Size,
     SkuUnit,
     StockBalance,
@@ -266,6 +267,111 @@ def test_production_order_proposal_applies_elastic_minimum(client, db_session):
     assert elastic_constraints
     assert elastic_constraints[0]["applied_min"] == 15000
     assert elastic_constraints[0]["required"] < elastic_constraints[0]["applied_min"]
+
+
+def test_production_order_proposal_elastic_binding_scope_selects_bound_type(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    elastic_type_1 = ElasticType(code="PO-EL-BIND-1", name="PO-EL-BIND-1")
+    elastic_type_2 = ElasticType(code="PO-EL-BIND-2", name="PO-EL-BIND-2")
+    db_session.add_all([elastic_type_1, elastic_type_2])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type_1.id,
+                elastic_min_batch_qty=12000,
+            ),
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type_2.id,
+                elastic_min_batch_qty=20000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type_1.id,
+                color_id=seeded["color_1"].id,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    elastic_constraints = body["constraints_applied"]["elastic_min_batches"]
+    assert elastic_constraints
+    assert elastic_constraints[0]["applied_min"] == 12000
+
+    scope_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic scope" in step),
+        "",
+    )
+    assert "mode=binding_scope" in scope_step
+    assert f"applicable_types=[{elastic_type_1.id}]" in scope_step
+    assert "scoped_settings=1" in scope_step
+
+
+def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    elastic_type = ElasticType(code="PO-EL-NOMATCH", name="PO-EL-NOMATCH")
+    color_3 = Color(inner_code="PO-C3", pantone_code="BLACK-03", description="Blue")
+    db_session.add_all([elastic_type, color_3])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                elastic_min_batch_qty=15000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                color_id=color_3.id,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["constraints_applied"]["elastic_min_batches"] == []
+
+    scope_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic scope" in step),
+        "",
+    )
+    assert "mode=binding_scope" in scope_step
+    assert "applicable_types=[]" in scope_step
+    assert "scoped_settings=0" in scope_step
 
 
 def test_production_order_proposal_returns_alternatives(client, db_session):
