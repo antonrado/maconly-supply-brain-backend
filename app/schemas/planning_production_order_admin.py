@@ -16,7 +16,7 @@ class ProductionOrderElasticBindingInput(BaseModel):
     sku_unit_id: int | None = Field(default=None, ge=1)
     is_active: bool = True
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_scope(cls, values: dict) -> dict:
         color_id = values.get("color_id")
         sku_unit_id = values.get("sku_unit_id")

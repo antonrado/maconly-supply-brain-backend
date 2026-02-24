@@ -51,6 +51,17 @@ function Invoke-SmokeTests {
     $BackendRunning = $LASTEXITCODE -eq 0 -and (($RunningServices | ForEach-Object { $_.Trim() }) -contains "backend")
 
     if ($BackendRunning) {
+        docker compose -f $ComposeFile exec -T backend python -c "import pytest, httpx" 2>$null
+        $BackendTestDepsAvailable = $LASTEXITCODE -eq 0
+
+        if (-not $BackendTestDepsAvailable) {
+            Write-Host "[verify] backend test dependencies missing, installing..."
+            docker compose -f $ComposeFile exec -T backend python -m pip install --disable-pip-version-check -q pytest httpx
+            if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+            }
+        }
+
         docker compose -f $ComposeFile exec -T backend python -m pytest -q @TargetTests
         if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
