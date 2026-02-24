@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ProductionOrderSizeWeightInput(BaseModel):
@@ -16,13 +16,11 @@ class ProductionOrderElasticBindingInput(BaseModel):
     sku_unit_id: int | None = Field(default=None, ge=1)
     is_active: bool = True
 
-    @root_validator(skip_on_failure=True)
-    def validate_scope(cls, values: dict) -> dict:
-        color_id = values.get("color_id")
-        sku_unit_id = values.get("sku_unit_id")
-        if color_id is None and sku_unit_id is None:
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ProductionOrderElasticBindingInput":
+        if self.color_id is None and self.sku_unit_id is None:
             raise ValueError("Either color_id or sku_unit_id must be provided")
-        return values
+        return self
 
 
 class ProductionOrderInFlightDefaultInput(BaseModel):
@@ -39,7 +37,8 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
     elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
     in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
 
-    @validator("size_weights")
+    @field_validator("size_weights")
+    @classmethod
     def validate_unique_size_ids(
         cls,
         value: list[ProductionOrderSizeWeightInput],
@@ -51,7 +50,8 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
             seen.add(item.size_id)
         return value
 
-    @validator("elastic_bindings")
+    @field_validator("elastic_bindings")
+    @classmethod
     def validate_unique_elastic_bindings(
         cls,
         value: list[ProductionOrderElasticBindingInput],
@@ -64,7 +64,8 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
             seen.add(key)
         return value
 
-    @validator("in_flight_supply_defaults")
+    @field_validator("in_flight_supply_defaults")
+    @classmethod
     def validate_unique_in_flight_defaults(
         cls,
         value: list[ProductionOrderInFlightDefaultInput],

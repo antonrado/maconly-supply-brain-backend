@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class BundleDemandInput(BaseModel):
@@ -52,7 +52,8 @@ class ProductionOrderProposalRequest(BaseModel):
     size_weights: dict[int, float] = Field(default_factory=dict)
     overrides: PlanningOverridesInput | None = None
 
-    @validator("bundle_daily_sales")
+    @field_validator("bundle_daily_sales")
+    @classmethod
     def validate_bundle_daily_sales(cls, value: list[BundleDemandInput]) -> list[BundleDemandInput]:
         if not value:
             raise ValueError("bundle_daily_sales must not be empty")
@@ -65,7 +66,8 @@ class ProductionOrderProposalRequest(BaseModel):
 
         return value
 
-    @validator("bundle_stock")
+    @field_validator("bundle_stock")
+    @classmethod
     def validate_bundle_stock(cls, value: list[BundleStockInput]) -> list[BundleStockInput]:
         seen: set[int] = set()
         for item in value:
@@ -74,7 +76,8 @@ class ProductionOrderProposalRequest(BaseModel):
             seen.add(item.bundle_type_id)
         return value
 
-    @validator("size_weights")
+    @field_validator("size_weights")
+    @classmethod
     def validate_size_weights(cls, value: dict[int, float]) -> dict[int, float]:
         for size_id, weight in value.items():
             if size_id < 1:
@@ -94,7 +97,8 @@ class ProductionOrderProposalFromWbRequest(BaseModel):
     size_weights: dict[int, float] = Field(default_factory=dict)
     overrides: PlanningOverridesInput | None = None
 
-    @validator("bundle_type_ids")
+    @field_validator("bundle_type_ids")
+    @classmethod
     def validate_bundle_type_ids(cls, value: list[int]) -> list[int]:
         seen: set[int] = set()
         for bundle_type_id in value:
@@ -105,7 +109,8 @@ class ProductionOrderProposalFromWbRequest(BaseModel):
             seen.add(bundle_type_id)
         return value
 
-    @validator("size_weights")
+    @field_validator("size_weights")
+    @classmethod
     def validate_size_weights(cls, value: dict[int, float]) -> dict[int, float]:
         for size_id, weight in value.items():
             if size_id < 1:

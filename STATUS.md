@@ -29,6 +29,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Economic buffer policy is now applied for warning/critical risk zones when `allow_order_with_buffer=true`; explanation includes buffer days and adjusted target horizon.
   - Raw bundle potential now uses competition-aware allocation across bundle types that share colors, with per-bundle breakdown in explanation.
   - Bundle stock input now supports WB ingestion fallback: if request omits `bundle_stock` entries, planner fills missing bundle types from `article_wb_mapping + wb_stock`.
+  - Production-order request/admin schemas migrated to Pydantic v2 validator APIs (`@field_validator`/`@model_validator`) to reduce deprecation surface without changing API contract.
 - WB ingestion reliability fix:
   - `POST /api/v1/wb/sales-daily/import` now stamps `created_at` on inserts to satisfy DB NOT NULL constraints and keep WB→planning adapter flow stable.
 - Planning Core production-order admin settings endpoints added:
