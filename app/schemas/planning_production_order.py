@@ -92,6 +92,7 @@ class ProductionOrderProposalFromWbRequest(BaseModel):
     planning_horizon_days: int = Field(90, ge=1, le=365)
     observation_window_days: int = Field(30, ge=1, le=365)
     as_of_date: date | None = None
+    freshness_mode: Literal["warn", "strict"] = "warn"
     bundle_type_ids: list[int] = Field(default_factory=list)
     in_flight_supply: list[InFlightSupplyInput] = Field(default_factory=list)
     size_weights: dict[int, float] = Field(default_factory=dict)

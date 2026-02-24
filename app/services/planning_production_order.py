@@ -683,6 +683,34 @@ def build_production_order_proposal_from_wb(
         article_id=request.article_id,
         bundle_type_ids=bundle_type_ids,
     )
+    (
+        freshness_status,
+        freshness_sales_age_days,
+        freshness_stock_oldest_age_days,
+        freshness_stock_age_days_by_bundle,
+    ) = _build_from_wb_freshness_snapshot(
+        effective_as_of_date=effective_as_of_date,
+        wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
+        now=datetime.now(timezone.utc),
+    )
+
+    if request.freshness_mode == "strict" and freshness_status != "fresh":
+        sales_age_text = "none" if freshness_sales_age_days is None else str(freshness_sales_age_days)
+        stock_age_text = (
+            "none"
+            if freshness_stock_oldest_age_days is None
+            else str(freshness_stock_oldest_age_days)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "WB data freshness check failed: "
+                f"status={freshness_status}, "
+                f"sales_age_days={sales_age_text}, "
+                f"stock_oldest_age_days={stock_age_text}, "
+                f"thresholds=sales:{FROM_WB_SALES_STALE_AFTER_DAYS}|stock:{FROM_WB_STOCK_STALE_AFTER_DAYS}."
+            ),
+        )
 
     proposal_request = ProductionOrderProposalRequest(
         article_id=request.article_id,
@@ -737,16 +765,6 @@ def build_production_order_proposal_from_wb(
         bundle_type_id: int(wb_stock_by_bundle.get(bundle_type_id, 0))
         for bundle_type_id in bundle_type_ids
     }
-    (
-        freshness_status,
-        freshness_sales_age_days,
-        freshness_stock_oldest_age_days,
-        freshness_stock_age_days_by_bundle,
-    ) = _build_from_wb_freshness_snapshot(
-        effective_as_of_date=effective_as_of_date,
-        wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
-        now=response.generated_at,
-    )
     freshness_sales_age_days_text = (
         "none" if freshness_sales_age_days is None else str(freshness_sales_age_days)
     )
@@ -756,6 +774,7 @@ def build_production_order_proposal_from_wb(
 
     response.explanation.meta["from_wb"] = {
         "observation_window_days": request.observation_window_days,
+        "freshness_mode": request.freshness_mode,
         "requested_as_of_date": request.as_of_date.isoformat() if request.as_of_date else None,
         "as_of_date": effective_as_of_date.isoformat() if effective_as_of_date else None,
         "as_of_source": as_of_source,
@@ -788,6 +807,7 @@ def build_production_order_proposal_from_wb(
         (
             "WB ingestion adapter: "
             f"observation_window_days={request.observation_window_days}, "
+            f"freshness_mode={request.freshness_mode}, "
             f"requested_as_of_date={requested_as_of_text}, "
             f"as_of_date={as_of_text}, as_of_source={as_of_source}, "
             f"bundle_type_ids={bundle_type_ids}."

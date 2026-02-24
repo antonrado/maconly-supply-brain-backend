@@ -850,6 +850,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     )
 
     assert "observation_window_days=30" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "requested_as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_source=request" in wb_adapter_step
@@ -868,6 +869,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     assert from_wb_meta["observation_window_days"] == 30
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == "2026-01-10"
     assert from_wb_meta["as_of_date"] == "2026-01-10"
     assert from_wb_meta["as_of_source"] == "request"
@@ -940,6 +942,7 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
     )
 
     assert "requested_as_of_date=none" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_source=latest_sales" in wb_adapter_step
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
@@ -951,6 +954,7 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] == "2026-01-10"
     assert from_wb_meta["as_of_source"] == "latest_sales"
@@ -1007,6 +1011,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     )
 
     assert "requested_as_of_date=none" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "as_of_date=none" in wb_adapter_step
     assert "as_of_source=none" in wb_adapter_step
     assert "sales_window=none" in wb_adapter_step
@@ -1021,6 +1026,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
     assert from_wb_meta["as_of_source"] == "none"
@@ -1078,6 +1084,7 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["as_of_date"] is None
     assert from_wb_meta["as_of_source"] == "none"
     assert from_wb_meta["sales_window"] is None
@@ -1145,6 +1152,7 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
     )
 
     assert "requested_as_of_date=2026-01-20" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_source=clamped_to_latest_sales" in wb_adapter_step
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
@@ -1157,6 +1165,7 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == "2026-01-20"
     assert from_wb_meta["as_of_date"] == "2026-01-10"
     assert from_wb_meta["as_of_source"] == "clamped_to_latest_sales"
@@ -1251,6 +1260,7 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     )
 
     assert "requested_as_of_date=2026-01-15" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "as_of_source=request" in wb_adapter_step
     assert "sales_window=2025-12-17..2026-01-15" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 1.0}}" in wb_adapter_step
@@ -1266,6 +1276,7 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == "2026-01-15"
     assert from_wb_meta["as_of_date"] == "2026-01-15"
     assert from_wb_meta["as_of_source"] == "request"
@@ -1276,6 +1287,97 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 1.0
     assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 12
     assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is not None
+
+
+def test_production_order_proposal_from_wb_strict_rejects_stale_data(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-STRICT-STALE",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-STRICT-STALE",
+            date=datetime(2020, 1, 1, tzinfo=timezone.utc).date(),
+            sales_qty=10,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-STRICT-STALE",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2020-01-01",
+        "freshness_mode": "strict",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+
+    detail = response.json()["detail"]
+    assert "WB data freshness check failed" in detail
+    assert "status=stale" in detail
+
+
+def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-STRICT-NODATA",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "freshness_mode": "strict",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+
+    detail = response.json()["detail"]
+    assert "WB data freshness check failed" in detail
+    assert "status=no_data" in detail
 
 
 def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(client, db_session):
@@ -1324,6 +1426,22 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
     assert response.json()["detail"] == (
         f"Missing WB mapping for bundle_type_id(s): [{seeded['bundle_type'].id}]"
     )
+
+
+def test_production_order_proposal_from_wb_validation_error_invalid_freshness_mode(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "freshness_mode": "hard_fail",
+            "bundle_type_ids": [1],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 422, response.text
 
 
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
