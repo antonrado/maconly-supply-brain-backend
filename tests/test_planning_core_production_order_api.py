@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from app.core.db import get_db
 from app.main import app
 from app.services.planning_production_order import (
+    LAYER2_ALLOCATION_METHOD,
+    LAYER4_SCENARIO_FACTORS,
+    LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    _build_layer2_allocation_decisions,
     _build_layer5_intervention_signals,
 )
 from app.models.models import (
@@ -789,7 +793,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "unit_capital": 1.0,
     }
 
-    assert layer2["method"] == "time_window_gmroi_proxy"
+    assert layer2["method"] == LAYER2_ALLOCATION_METHOD
+    assert layer2["decision_gate"] == "profit_until_eta"
+    assert layer2["tie_break"] == "hold"
+    assert layer2["gmroi_usage"] == "diagnostic_only"
     assert len(layer2["decisions"]) == 4
     assert layer2["summary"] == {"main": 4, "assorti": 0, "hold": 0}
 
@@ -806,6 +813,13 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "Conservative",
         "Balanced",
         "Aggressive",
+    ]
+    assert layer4["factors"] == [
+        {
+            "scenario": scenario,
+            "factor": factor,
+        }
+        for scenario, factor in LAYER4_SCENARIO_FACTORS
     ]
 
     conservative = layer4["scenarios"][0]
@@ -826,6 +840,23 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "no_effective_in_flight_and_high_stockout_risk",
         "in_flight_present_but_stockout_risk_persists",
     }
+
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["source"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["calibration_state"] == "alpha_proxy_not_calibrated"
+    assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD
+    assert alpha_proxy["margin_proxy"] == {"main": 1.0, "assorti": 0.85}
+    assert alpha_proxy["unit_capital_proxy"] == 1.0
+    assert alpha_proxy["layer_3_purchase_factors"] == {
+        "main": 1.0,
+        "assorti": 0.75,
+        "hold": 0.35,
+    }
+    assert alpha_proxy["layer_4_scenario_factors"] == layer4["factors"]
+    assert (
+        alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+        == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    )
 
     layer1_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
@@ -849,6 +880,9 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     )
     assert "sku_count=4" in layer1_step
     assert "main=4" in layer2_step
+    assert f"method={LAYER2_ALLOCATION_METHOD}" in layer2_step
+    assert "decision_gate=profit_until_eta" in layer2_step
+    assert "tie_break=hold" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "Conservative(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
@@ -1020,6 +1054,32 @@ def test_layer5_intervention_signals_not_triggered_when_not_unavoidable():
         "aggressive_stockout_risk_proxy": 0.05,
         "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
     }
+
+
+def test_layer2_allocation_decision_tie_break_is_hold():
+    stock_health_metrics = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "current_stock": 10,
+            "in_flight": 0,
+            "velocity_main": 0.85,
+            "velocity_assorti": 1.0,
+            "capital_locked": 10.0,
+        }
+    ]
+
+    decisions, summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=stock_health_metrics,
+        lead_time_days_total=30,
+    )
+
+    assert summary == {"main": 0, "assorti": 0, "hold": 1}
+    assert len(decisions) == 1
+    assert decisions[0]["profit_if_main_until_eta"] == 0.85
+    assert decisions[0]["profit_if_assorti_until_eta"] == 0.85
+    assert decisions[0]["allocation_decision"] == "hold"
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):

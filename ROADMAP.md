@@ -30,8 +30,9 @@
 - Expose machine-readable metrics in explanation meta.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
-- Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta`.
-- GMROI proxy and explicit decision (`main` / `assorti` / `hold`) per SKU.
+- Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
+- GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
+- Explicit decision (`main` / `assorti` / `hold`) per SKU.
 - No hard-coded "critical SKU" classifier as primary allocator.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
@@ -49,6 +50,11 @@
 - Current signal set: `accelerate_production` / `increase_price_to_slow_velocity`.
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
+### 2.6 Explainability payload controls (planned)
+- Introduce response explainability modes: `full` (current default) and `compact` (summary + compact meta).
+- Keep deterministic behavior identical across modes; mode changes payload size only.
+- Rollout after Layer 1-5 semantics and proxy contracts are stabilized.
+
 ## v1 Stable Alpha boundaries (strict)
 - Deterministic, explainable, test-covered.
 - No ML.
@@ -63,12 +69,14 @@
 - Layer-by-layer delivery, no scope creep.
 
 ## Immediate high-leverage follow-ups
-1. Complete Layer 1 metric contract and lock regression tests.
-2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
-3. Finalize Layer 4 scenario contract and stabilize regression coverage.
-4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
-5. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
-6. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
+1. Replace keyword-based assorti detection with explicit classification source (bundle-type field or admin mapping) + source tracing.
+2. Complete Layer 1 metric contract and lock regression tests.
+3. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
+4. Finalize Layer 4 scenario contract and stabilize regression coverage.
+5. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
+6. Define/implement explainability `compact|full` payload mode contract.
+7. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
+8. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.

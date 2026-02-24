@@ -46,6 +46,8 @@ from app.schemas.planning_production_order import (
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+LAYER2_ALLOCATION_METHOD = "time_window_profit_proxy_with_gmroi_diagnostics"
+LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
 LAYER2_UNIT_CAPITAL_PROXY = 1.0
@@ -54,6 +56,11 @@ LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "assorti": 0.75,
     "hold": 0.35,
 }
+LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
+    ("Conservative", 0.80),
+    ("Balanced", 1.00),
+    ("Aggressive", 1.20),
+)
 LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
 
 
@@ -580,12 +587,6 @@ def _build_layer4_scenarios(
     expected_horizon_sales: float,
     layer3_purchase_shaping: dict[str, int],
 ) -> list[dict[str, str | int | float]]:
-    scenario_factors: list[tuple[str, float]] = [
-        ("Conservative", 0.80),
-        ("Balanced", 1.00),
-        ("Aggressive", 1.20),
-    ]
-
     decision_lines_total = max(
         int(layer3_purchase_shaping.get("main_lines", 0))
         + int(layer3_purchase_shaping.get("assorti_lines", 0))
@@ -602,7 +603,7 @@ def _build_layer4_scenarios(
     scenarios: list[dict[str, str | int | float]] = []
     reorder_anchor = max(int(reorder_point_days), 1)
 
-    for scenario_name, factor in scenario_factors:
+    for scenario_name, factor in LAYER4_SCENARIO_FACTORS:
         purchase_units = max(_ceil_to_int(float(base_purchase_units) * factor), 0)
         total_capital_required = round(float(purchase_units) * LAYER2_UNIT_CAPITAL_PROXY, 2)
 
@@ -2047,6 +2048,13 @@ def build_production_order_proposal(
         }
         for (color_id, size_id), qty in sorted(elastic_uplift_line_alloc.items(), key=lambda item: item[0])
     ]
+    layer4_scenario_factor_items = [
+        {
+            "scenario": scenario_name,
+            "factor": factor,
+        }
+        for scenario_name, factor in LAYER4_SCENARIO_FACTORS
+    ]
 
     explanation = ProductionOrderExplanationBlock(
         summary=(
@@ -2087,7 +2095,8 @@ def build_production_order_proposal(
                 f"high_stockout_risk_skus={layer1_high_stockout_risk_count}."
             ),
             (
-                "Layer 2 allocation: method=time_window_gmroi_proxy, "
+                f"Layer 2 allocation: method={LAYER2_ALLOCATION_METHOD}, "
+                "decision_gate=profit_until_eta, tie_break=hold, "
                 f"main={layer2_allocation_summary['main']}, "
                 f"assorti={layer2_allocation_summary['assorti']}, "
                 f"hold={layer2_allocation_summary['hold']}."
@@ -2164,9 +2173,12 @@ def build_production_order_proposal(
                 },
             },
             "layer_2_allocation": {
-                "method": "time_window_gmroi_proxy",
+                "method": LAYER2_ALLOCATION_METHOD,
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
+                "decision_gate": "profit_until_eta",
+                "tie_break": "hold",
+                "gmroi_usage": "diagnostic_only",
             },
             "layer_3_purchase_shaping": {
                 "method": "allocation_decision_factors",
@@ -2175,9 +2187,23 @@ def build_production_order_proposal(
             },
             "layer_4_scenarios": {
                 "method": "deterministic_factor_scenarios",
+                "factors": layer4_scenario_factor_items,
                 "scenarios": layer4_scenarios,
             },
             "layer_5_intervention": layer5_intervention,
+            "alpha_proxy_economics": {
+                "source": LAYER_PROXY_VALUE_SOURCE,
+                "calibration_state": "alpha_proxy_not_calibrated",
+                "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD,
+                "margin_proxy": {
+                    "main": LAYER2_MAIN_MARGIN_PROXY,
+                    "assorti": LAYER2_ASSORTI_MARGIN_PROXY,
+                },
+                "unit_capital_proxy": LAYER2_UNIT_CAPITAL_PROXY,
+                "layer_3_purchase_factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
+                "layer_4_scenario_factors": layer4_scenario_factor_items,
+                "layer_5_unavoidable_stockout_risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+            },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,
                 "days": economic_buffer_days,
