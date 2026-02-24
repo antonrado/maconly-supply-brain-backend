@@ -28,6 +28,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Economic buffer policy is now applied for warning/critical risk zones when `allow_order_with_buffer=true`; explanation includes buffer days and adjusted target horizon.
   - Raw bundle potential now uses competition-aware allocation across bundle types that share colors, with per-bundle breakdown in explanation.
   - Bundle stock input now supports WB ingestion fallback: if request omits `bundle_stock` entries, planner fills missing bundle types from `article_wb_mapping + wb_stock`.
+- WB ingestion reliability fix:
+  - `POST /api/v1/wb/sales-daily/import` now stamps `created_at` on inserts to satisfy DB NOT NULL constraints and keep WB→planning adapter flow stable.
 - Planning Core production-order admin settings endpoints added:
   - `GET /api/v1/planning/core/production-order/settings/{article_id}`
   - `PUT /api/v1/planning/core/production-order/settings/{article_id}`

@@ -557,6 +557,90 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "ready stock наборов (WB+локальный)=20" in stock_step
 
 
+def test_production_order_proposal_from_wb_via_import_endpoints(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    wb_sku = "WB-PO-INGEST-1"
+
+    map_response = client.post(
+        "/api/v1/wb/article-mapping/import",
+        json={
+            "items": [
+                {
+                    "article_id": seeded["article"].id,
+                    "wb_sku": wb_sku,
+                    "bundle_type_id": seeded["bundle_type"].id,
+                    "size_id": seeded["size_s"].id,
+                }
+            ]
+        },
+    )
+    assert map_response.status_code == 200, map_response.text
+
+    sales_response = client.post(
+        "/api/v1/wb/sales-daily/import",
+        json={
+            "items": [
+                {
+                    "wb_sku": wb_sku,
+                    "date": "2026-01-15",
+                    "sales_qty": 30,
+                    "revenue": 1500.0,
+                }
+            ]
+        },
+    )
+    assert sales_response.status_code == 200, sales_response.text
+
+    stock_response = client.post(
+        "/api/v1/wb/stock/import",
+        json={
+            "items": [
+                {
+                    "wb_sku": wb_sku,
+                    "warehouse_id": 1,
+                    "warehouse_name": "WB-1",
+                    "stock_qty": 12,
+                }
+            ]
+        },
+    )
+    assert stock_response.status_code == 200, stock_response.text
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-15",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    proposal_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload,
+    )
+    assert proposal_response.status_code == 200, proposal_response.text
+
+    body = proposal_response.json()
+    source_step = next(
+        (step for step in body["explanation"]["steps"] if "Источник параметров" in step),
+        "",
+    )
+    stock_step = next(
+        (step for step in body["explanation"]["steps"] if "ready stock наборов" in step),
+        "",
+    )
+
+    assert "bundle_stock=request" in source_step
+    assert "ready stock наборов (WB+локальный)=12" in stock_step
+
+
 def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(client, db_session):
     article = Article(code="PO-NO-BT", name="PO-NO-BT")
     db_session.add(article)

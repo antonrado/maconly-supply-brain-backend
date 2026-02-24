@@ -58,6 +58,7 @@ def load_sales_daily(db: Session, items: list[WbSalesDailyItem]) -> WbImportSumm
                 date=item.date,
                 sales_qty=item.sales_qty,
                 revenue=item.revenue,
+                created_at=_utcnow(),
             )
             db.add(row)
             existing_map[key] = row
