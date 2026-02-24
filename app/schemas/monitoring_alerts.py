@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.services.monitoring_metrics import get_alert_rule_metrics
 
@@ -22,8 +22,7 @@ class AlertRuleSchema(BaseModel):
     severity: str
     is_active: bool
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertRuleCreate(BaseModel):
@@ -36,20 +35,23 @@ class AlertRuleCreate(BaseModel):
     severity: str
     is_active: bool = True
 
-    @validator("metric")
+    @field_validator("metric")
+    @classmethod
     def validate_metric(cls, value: str) -> str:  # noqa: D417
         if value not in ALLOWED_METRICS:
             allowed = ", ".join(sorted(ALLOWED_METRICS))
             raise ValueError(f"metric must be one of: {allowed}")
         return value
 
-    @validator("threshold_type")
+    @field_validator("threshold_type")
+    @classmethod
     def validate_threshold_type(cls, value: str) -> str:  # noqa: D417
         if value not in ALLOWED_THRESHOLD_TYPES:
             raise ValueError("threshold_type must be 'above' or 'below'")
         return value
 
-    @validator("severity")
+    @field_validator("severity")
+    @classmethod
     def validate_severity(cls, value: str) -> str:  # noqa: D417
         if value not in ALLOWED_SEVERITIES:
             raise ValueError("severity must be 'warning' or 'critical'")
@@ -64,7 +66,8 @@ class AlertRuleUpdate(BaseModel):
     severity: str | None = None
     is_active: bool | None = None
 
-    @validator("metric")
+    @field_validator("metric")
+    @classmethod
     def validate_metric(cls, value: str | None) -> str | None:  # noqa: D417
         if value is None:
             return value
@@ -73,7 +76,8 @@ class AlertRuleUpdate(BaseModel):
             raise ValueError(f"metric must be one of: {allowed}")
         return value
 
-    @validator("threshold_type")
+    @field_validator("threshold_type")
+    @classmethod
     def validate_threshold_type(cls, value: str | None) -> str | None:  # noqa: D417
         if value is None:
             return value
@@ -81,7 +85,8 @@ class AlertRuleUpdate(BaseModel):
             raise ValueError("threshold_type must be 'above' or 'below'")
         return value
 
-    @validator("severity")
+    @field_validator("severity")
+    @classmethod
     def validate_severity(cls, value: str | None) -> str | None:  # noqa: D417
         if value is None:
             return value

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class StockBalanceBase(BaseModel):
@@ -24,5 +24,4 @@ class StockBalanceUpdate(BaseModel):
 class StockBalanceRead(StockBalanceBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

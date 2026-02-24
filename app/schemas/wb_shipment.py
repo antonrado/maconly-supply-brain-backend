@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .wb_replenishment import WbReplenishmentRequest
 
@@ -91,7 +91,7 @@ class WbShipmentRead(WbShipmentBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    items: list[WbShipmentItemRead] = []
+    items: list[WbShipmentItemRead] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,8 +110,7 @@ class WbShipmentHeaderRead(BaseModel):
     red_risk_count: int
     yellow_risk_count: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WbShipmentAggregates(BaseModel):
@@ -153,7 +152,7 @@ class WbShipmentPresetResponse(BaseModel):
     suggested_max_replenishment_per_article: int | None
 
     # Recent shipments
-    recent_shipments: list[WbShipmentRecentHeader] = []
+    recent_shipments: list[WbShipmentRecentHeader] = Field(default_factory=list)
 
     # Volume aggregates
     avg_total_final_qty_last3: float | None = None

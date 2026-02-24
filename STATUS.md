@@ -7,6 +7,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Implemented now (code-backed)
 
 - FastAPI app mounts `api_router` under `/api/v1` and starts `MonitoringScheduler` on startup.
+- FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
 - Monitoring scheduler uses PostgreSQL advisory lock (`pg_try_advisory_lock` / `pg_advisory_unlock`) via a dedicated connection (`engine.raw_connection`) to keep one writer in multi-instance runtime.
 - Monitoring API includes:
   - `GET /api/v1/planning/monitoring/timeseries`
@@ -45,6 +46,10 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `tests/test_planning_core_production_order_api.py`
 - Tests added for production-order admin settings:
   - `tests/test_planning_core_production_order_settings_api.py`
+- Pydantic v2 migration hardening completed across monitoring/core schema surfaces:
+  - Replaced deprecated `@validator`/`@root_validator` with `@field_validator`/`@model_validator` where applicable.
+  - Replaced legacy `class Config(orm_mode=True)` with `model_config = ConfigDict(from_attributes=True)` in touched read schemas.
+  - Replaced mutable list defaults with `Field(default_factory=list)` in touched schemas.
 - Governance baseline added:
   - CI pipeline: `.github/workflows/ci.yml`
   - Context synchronization guard in CI: `scripts/context_guard.py`

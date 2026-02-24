@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ArticlePlanningSettingsBase(BaseModel):
@@ -25,8 +25,7 @@ class ArticlePlanningSettingsUpdate(BaseModel):
 class ArticlePlanningSettingsRead(ArticlePlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ColorPlanningSettingsBase(BaseModel):
@@ -46,8 +45,7 @@ class ColorPlanningSettingsUpdate(BaseModel):
 class ColorPlanningSettingsRead(ColorPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ElasticTypeBase(BaseModel):
@@ -67,8 +65,7 @@ class ElasticTypeUpdate(BaseModel):
 class ElasticTypeRead(ElasticTypeBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ElasticPlanningSettingsBase(BaseModel):
@@ -88,8 +85,7 @@ class ElasticPlanningSettingsUpdate(BaseModel):
 class ElasticPlanningSettingsRead(ElasticPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GlobalPlanningSettingsBase(BaseModel):
@@ -115,8 +111,7 @@ class GlobalPlanningSettingsUpdate(BaseModel):
 class GlobalPlanningSettingsRead(GlobalPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PlanningSettingsBase(BaseModel):
@@ -148,8 +143,7 @@ class PlanningSettingsUpdate(BaseModel):
 class PlanningSettingsRead(PlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ArticlePlanningSettingsExperimentalSnapshot(BaseModel):
@@ -206,8 +200,8 @@ class ArticlePlanningConfigSnapshot(BaseModel):
     article_code: str
     article_planning_settings: ArticlePlanningSettingsSnapshot | None = None
     planning_settings: PlanningSettingsSnapshot | None = None
-    color_settings: list[ColorPlanningSettingsSnapshot] = []
-    elastic_settings: list[ElasticPlanningSettingsSnapshot] = []
+    color_settings: list[ColorPlanningSettingsSnapshot] = Field(default_factory=list)
+    elastic_settings: list[ElasticPlanningSettingsSnapshot] = Field(default_factory=list)
 
 
 class PlanningConfigSnapshotResponse(BaseModel):
