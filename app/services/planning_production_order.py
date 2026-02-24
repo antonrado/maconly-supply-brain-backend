@@ -464,15 +464,24 @@ def _load_wb_bundle_daily_sales(
 
     wb_skus = {mapping.wb_sku for mapping in mappings if mapping.wb_sku}
     effective_as_of_date = as_of_date
+    max_sales_date = None
 
-    if effective_as_of_date is None and wb_skus:
+    if wb_skus:
         max_sales_date = (
             db.query(func.max(WbSalesDaily.date))
             .filter(WbSalesDaily.wb_sku.in_(wb_skus))
             .scalar()
         )
-        if max_sales_date is not None:
-            effective_as_of_date = max_sales_date
+
+    if effective_as_of_date is None and max_sales_date is not None:
+        effective_as_of_date = max_sales_date
+
+    if (
+        effective_as_of_date is not None
+        and max_sales_date is not None
+        and effective_as_of_date > max_sales_date
+    ):
+        effective_as_of_date = max_sales_date
 
     if effective_as_of_date is None:
         return {bundle_type_id: 0.0 for bundle_type_id in bundle_type_ids}, None

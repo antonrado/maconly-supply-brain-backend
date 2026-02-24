@@ -25,6 +25,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Handles article settings, model-B deficit conversion, minima (fabric/elastic), alternatives, and explanation blocks.
   - `from-wb` adapter path auto-builds `bundle_daily_sales` and `bundle_stock` from WB-ingested tables (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
   - `from-wb` explanation now includes resolved sales window bounds plus adapter snapshots for `daily_sales_by_bundle` and `wb_stock_by_bundle` to make WB-derived input reconstruction auditable.
+  - `from-wb` now clamps future `as_of_date` requests to latest available WB sales date to prevent drifted/empty future windows.
   - `from-wb` validates requested `bundle_type_ids` against `article_wb_mapping` and returns 400 on missing mappings.
   - In-flight supply now uses ETA/stage-sensitive effective contribution (not binary include/exclude), and explanation reports raw/effective in-flight qty.
   - Elastic minima now respect admin elastic binding scope: active bindings select applicable elastic types for current candidate lines; non-matching binding scope does not force elastic minimum uplift.
