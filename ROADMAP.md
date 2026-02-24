@@ -39,9 +39,10 @@
 - Complete deterministic purchase recommendation math on top of Layer 1/2 outputs.
 - Preserve deterministic math and full explainability.
 
-### 2.4 Layer 4 - Scenario output (planned)
-- Deterministic scenarios: Conservative / Balanced / Aggressive.
-- For each scenario: capital required, turnover proxy, stockout risk proxy, assorti sustainability impact.
+### 2.4 Layer 4 - Scenario output (in progress)
+- Deterministic scenarios are wired in explanation meta: Conservative / Balanced / Aggressive.
+- Per-scenario outputs include: capital required, turnover proxy, stockout risk proxy, assorti sustainability proxy/impact.
+- Finalize calibration rules and intervention handoff contract.
 
 ### 2.5 Layer 5 - Intervention signals (planned)
 - If unavoidable stockout is detected: emit intervention flags (accelerate production / increase price to slow velocity).
@@ -62,9 +63,10 @@
 
 ## Immediate high-leverage follow-ups
 1. Complete Layer 1 metric contract and lock regression tests.
-2. Wire Layer 2 allocation outcomes into Layer 3 purchase quantities.
-3. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-3 stabilizes.
-4. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
+2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
+3. Finalize Layer 4 scenario contract and stabilize regression coverage.
+4. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-4 stabilizes.
+5. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.

@@ -570,6 +570,84 @@ def _apply_layer3_purchase_shaping(
     )
 
 
+def _build_layer4_scenarios(
+    *,
+    base_purchase_units: int,
+    available_bundles_for_cover: int,
+    total_daily_sales: float,
+    reorder_point_days: int,
+    expected_horizon_sales: float,
+    layer3_purchase_shaping: dict[str, int],
+) -> list[dict[str, str | int | float]]:
+    scenario_factors: list[tuple[str, float]] = [
+        ("Conservative", 0.80),
+        ("Balanced", 1.00),
+        ("Aggressive", 1.20),
+    ]
+
+    decision_lines_total = max(
+        int(layer3_purchase_shaping.get("main_lines", 0))
+        + int(layer3_purchase_shaping.get("assorti_lines", 0))
+        + int(layer3_purchase_shaping.get("hold_lines", 0)),
+        0,
+    )
+    assorti_lines = max(int(layer3_purchase_shaping.get("assorti_lines", 0)), 0)
+    assorti_share = (
+        float(assorti_lines) / float(decision_lines_total)
+        if decision_lines_total > 0
+        else 0.0
+    )
+
+    scenarios: list[dict[str, str | int | float]] = []
+    reorder_anchor = max(int(reorder_point_days), 1)
+
+    for scenario_name, factor in scenario_factors:
+        purchase_units = max(_ceil_to_int(float(base_purchase_units) * factor), 0)
+        total_capital_required = round(float(purchase_units) * LAYER2_UNIT_CAPITAL_PROXY, 2)
+
+        projected_units = max(int(available_bundles_for_cover) + purchase_units, 0)
+        if total_daily_sales > 0:
+            projected_cover_days = float(projected_units) / float(total_daily_sales)
+            stockout_risk_proxy = max(
+                0.0,
+                min(
+                    (float(reorder_anchor) - projected_cover_days) / float(reorder_anchor),
+                    1.0,
+                ),
+            )
+            expected_turnover_proxy = float(expected_horizon_sales) / float(max(projected_units, 1))
+        else:
+            projected_cover_days = 9999.0
+            stockout_risk_proxy = 0.0
+            expected_turnover_proxy = 0.0
+
+        if assorti_share <= 0:
+            assorti_sustainability_impact = "neutral_no_assorti_signal"
+        elif factor < 1.0:
+            assorti_sustainability_impact = "negative"
+        elif factor > 1.0:
+            assorti_sustainability_impact = "positive"
+        else:
+            assorti_sustainability_impact = "neutral"
+
+        assorti_sustainability_proxy = round(assorti_share * factor, 4)
+
+        scenarios.append(
+            {
+                "scenario": scenario_name,
+                "purchase_units": int(purchase_units),
+                "total_capital_required": total_capital_required,
+                "expected_turnover_proxy": round(expected_turnover_proxy, 4),
+                "stockout_risk_proxy": round(stockout_risk_proxy, 4),
+                "projected_cover_days": round(projected_cover_days, 2),
+                "assorti_sustainability_proxy": assorti_sustainability_proxy,
+                "assorti_sustainability_impact": assorti_sustainability_impact,
+            }
+        )
+
+    return scenarios
+
+
 def _resolve_elastic_binding_scope(
     bindings: list[ProductionOrderElasticBinding],
     line_qty: dict[tuple[int, int], int],
@@ -1867,6 +1945,15 @@ def build_production_order_proposal(
         )
 
     candidate_total_units = sum(line.recommended_qty for line in candidate_lines)
+    expected_horizon_sales = total_daily_sales * request.planning_horizon_days
+    layer4_scenarios = _build_layer4_scenarios(
+        base_purchase_units=candidate_total_units,
+        available_bundles_for_cover=available_bundles_for_cover,
+        total_daily_sales=total_daily_sales,
+        reorder_point_days=reorder_point_days,
+        expected_horizon_sales=expected_horizon_sales,
+        layer3_purchase_shaping=layer3_purchase_shaping,
+    )
     action = _choose_action(
         risk_level=risk_level,
         candidate_units=candidate_total_units,
@@ -1892,7 +1979,6 @@ def build_production_order_proposal(
 
     alternatives = _build_alternatives(action)
 
-    expected_horizon_sales = total_daily_sales * request.planning_horizon_days
     elastic_uplift_line_keys_items = [
         {
             "color_id": color_id,
@@ -1964,6 +2050,12 @@ def build_production_order_proposal(
                 f"hold:{layer3_purchase_shaping['hold_lines']}."
             ),
             (
+                "Layer 4 scenarios: "
+                f"Conservative(capital={layer4_scenarios[0]['total_capital_required']},risk={layer4_scenarios[0]['stockout_risk_proxy']}), "
+                f"Balanced(capital={layer4_scenarios[1]['total_capital_required']},risk={layer4_scenarios[1]['stockout_risk_proxy']}), "
+                f"Aggressive(capital={layer4_scenarios[2]['total_capital_required']},risk={layer4_scenarios[2]['stockout_risk_proxy']})."
+            ),
+            (
                 f"Elastic scope: mode={elastic_scope_mode}, "
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
                 f"scoped_settings={len(scoped_elastic_rows)}, "
@@ -2018,6 +2110,10 @@ def build_production_order_proposal(
                 "method": "allocation_decision_factors",
                 "factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
                 **layer3_purchase_shaping,
+            },
+            "layer_4_scenarios": {
+                "method": "deterministic_factor_scenarios",
+                "scenarios": layer4_scenarios,
             },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,

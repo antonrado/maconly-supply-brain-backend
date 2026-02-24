@@ -736,7 +736,7 @@ def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(c
     }
 
 
-def test_production_order_proposal_exposes_layer1_layer2_layer3_meta(client, db_session):
+def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_meta(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
     payload = _build_payload(
@@ -757,6 +757,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_meta(client, db_
     layer1 = meta["layer_1_stock_health"]
     layer2 = meta["layer_2_allocation"]
     layer3 = meta["layer_3_purchase_shaping"]
+    layer4 = meta["layer_4_scenarios"]
 
     assert layer1["summary"]["sku_count"] == 4
     assert len(layer1["metrics"]) == 4
@@ -794,6 +795,23 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_meta(client, db_
     assert layer3["hold_lines"] == 0
     assert layer3["qty_before"] >= layer3["qty_after"] >= 0
 
+    assert layer4["method"] == "deterministic_factor_scenarios"
+    assert len(layer4["scenarios"]) == 3
+    assert [item["scenario"] for item in layer4["scenarios"]] == [
+        "Conservative",
+        "Balanced",
+        "Aggressive",
+    ]
+
+    conservative = layer4["scenarios"][0]
+    balanced = layer4["scenarios"][1]
+    aggressive = layer4["scenarios"][2]
+    assert conservative["total_capital_required"] < balanced["total_capital_required"] < aggressive["total_capital_required"]
+    assert conservative["stockout_risk_proxy"] >= balanced["stockout_risk_proxy"] >= aggressive["stockout_risk_proxy"]
+    assert conservative["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
+    assert balanced["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
+    assert aggressive["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
+
     layer1_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
         "",
@@ -806,9 +824,15 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_meta(client, db_
         (step for step in body["explanation"]["steps"] if "Layer 3 purchase shaping" in step),
         "",
     )
+    layer4_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 4 scenarios" in step),
+        "",
+    )
     assert "sku_count=4" in layer1_step
     assert "main=4" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
+    assert "Conservative(capital=" in layer4_step
+    assert "Aggressive(capital=" in layer4_step
 
     if body["recommendation"] is not None and body["recommendation"]["lines"]:
         assert all(
@@ -896,6 +920,16 @@ def test_production_order_proposal_layer3_shaping_reduces_qty_for_assorti_decisi
         "|layer2:assorti" in line["source_reason"]
         for line in body_assorti["recommendation"]["lines"]
     )
+
+    layer4_assorti = body_assorti["explanation"]["meta"]["layer_4_scenarios"]["scenarios"]
+    assert [item["scenario"] for item in layer4_assorti] == [
+        "Conservative",
+        "Balanced",
+        "Aggressive",
+    ]
+    assert layer4_assorti[0]["assorti_sustainability_impact"] == "negative"
+    assert layer4_assorti[1]["assorti_sustainability_impact"] == "neutral"
+    assert layer4_assorti[2]["assorti_sustainability_impact"] == "positive"
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):
