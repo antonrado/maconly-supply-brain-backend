@@ -885,8 +885,8 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
     assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
     assert from_wb_meta["freshness"]["threshold_source"] == {
-        "sales": "default",
-        "stock": "default",
+        "sales": "global_default",
+        "stock": "global_default",
     }
 
 
@@ -1384,6 +1384,83 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
     assert "status=no_data" in detail
 
 
+def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaults(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-ADMIN-THRESHOLDS",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-ADMIN-THRESHOLDS",
+            date=datetime(2020, 1, 1, tzinfo=timezone.utc).date(),
+            sales_qty=10,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-ADMIN-THRESHOLDS",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 3650,
+            "freshness_stock_stale_after_days": 3650,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2020-01-01",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    wb_adapter_step = next(
+        (step for step in body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
+    assert "freshness_threshold_days=sales:3650|stock:3650" in wb_adapter_step
+    assert "freshness_threshold_source=sales:admin_defaults|stock:admin_defaults" in wb_adapter_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3650, "stock": 3650}
+    assert from_wb_meta["freshness"]["threshold_source"] == {
+        "sales": "admin_defaults",
+        "stock": "admin_defaults",
+    }
+
+
 def test_production_order_proposal_from_wb_strict_with_custom_thresholds_allows_old_data(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
@@ -1414,6 +1491,18 @@ def test_production_order_proposal_from_wb_strict_with_custom_thresholds_allows_
         )
     )
     db_session.commit()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 1,
+            "freshness_stock_stale_after_days": 1,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
 
     payload = {
         "article_id": seeded["article"].id,

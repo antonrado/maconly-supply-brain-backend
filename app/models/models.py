@@ -113,6 +113,14 @@ class ArticlePlanningSettings(Base):
     target_coverage_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     service_level_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    production_order_freshness_sales_stale_after_days: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    production_order_freshness_stock_stale_after_days: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
 
 
 class ColorPlanningSettings(Base):

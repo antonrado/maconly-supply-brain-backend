@@ -36,6 +36,8 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
     size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
     elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
     in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    freshness_sales_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
+    freshness_stock_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
 
     @field_validator("size_weights")
     @classmethod
@@ -84,3 +86,5 @@ class ProductionOrderAdminSettingsResponse(BaseModel):
     size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
     elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
     in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    freshness_sales_stale_after_days: int | None = None
+    freshness_stock_stale_after_days: int | None = None

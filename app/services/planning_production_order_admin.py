@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import (
     Article,
+    ArticlePlanningSettings,
     ElasticType,
     ProductionOrderElasticBinding,
     ProductionOrderInFlightDefault,
@@ -151,6 +152,11 @@ def get_production_order_admin_settings(
         .filter(ProductionOrderInFlightDefault.article_id == article_id)
         .all()
     )
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == article_id)
+        .first()
+    )
 
     size_weights = [
         ProductionOrderSizeWeightInput(size_id=row.size_id, weight=float(row.weight))
@@ -199,6 +205,18 @@ def get_production_order_admin_settings(
         size_weights=size_weights,
         elastic_bindings=elastic_bindings,
         in_flight_supply_defaults=in_flight_supply_defaults,
+        freshness_sales_stale_after_days=(
+            int(article_settings.production_order_freshness_sales_stale_after_days)
+            if article_settings is not None
+            and article_settings.production_order_freshness_sales_stale_after_days is not None
+            else None
+        ),
+        freshness_stock_stale_after_days=(
+            int(article_settings.production_order_freshness_stock_stale_after_days)
+            if article_settings is not None
+            and article_settings.production_order_freshness_stock_stale_after_days is not None
+            else None
+        ),
     )
 
 
@@ -277,6 +295,26 @@ def upsert_production_order_admin_settings(
                 is_active=is_active,
             )
         )
+
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == article_id)
+        .first()
+    )
+    if article_settings is None:
+        article_settings = ArticlePlanningSettings(
+            article_id=article_id,
+            include_in_planning=True,
+            priority=0,
+        )
+        db.add(article_settings)
+
+    article_settings.production_order_freshness_sales_stale_after_days = (
+        payload.freshness_sales_stale_after_days
+    )
+    article_settings.production_order_freshness_stock_stale_after_days = (
+        payload.freshness_stock_stale_after_days
+    )
 
     db.commit()
 

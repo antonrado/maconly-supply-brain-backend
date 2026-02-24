@@ -150,6 +150,8 @@ def test_production_order_settings_get_empty(client, db_session):
     assert body["size_weights"] == []
     assert body["elastic_bindings"] == []
     assert body["in_flight_supply_defaults"] == []
+    assert body["freshness_sales_stale_after_days"] is None
+    assert body["freshness_stock_stale_after_days"] is None
 
 
 def test_production_order_settings_put_and_get_roundtrip(client, db_session):
@@ -182,6 +184,8 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
                 "is_active": True,
             }
         ],
+        "freshness_sales_stale_after_days": 14,
+        "freshness_stock_stale_after_days": 9,
     }
 
     put_response = client.put(
@@ -194,6 +198,8 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
     assert len(body["size_weights"]) == 2
     assert len(body["elastic_bindings"]) == 2
     assert len(body["in_flight_supply_defaults"]) == 1
+    assert body["freshness_sales_stale_after_days"] == 14
+    assert body["freshness_stock_stale_after_days"] == 9
 
     get_response = client.get(f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}")
     assert get_response.status_code == 200, get_response.text

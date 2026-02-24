@@ -533,6 +533,61 @@ def _build_from_wb_freshness_snapshot(
     )
 
 
+def _resolve_from_wb_freshness_thresholds(
+    db: Session,
+    article_id: int,
+    request_sales_stale_after_days: int | None,
+    request_stock_stale_after_days: int | None,
+) -> tuple[int, int, dict[str, str]]:
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == article_id)
+        .first()
+    )
+
+    admin_sales_stale_after_days = (
+        int(article_settings.production_order_freshness_sales_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_sales_stale_after_days is not None
+        else None
+    )
+    admin_stock_stale_after_days = (
+        int(article_settings.production_order_freshness_stock_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_stock_stale_after_days is not None
+        else None
+    )
+
+    if request_sales_stale_after_days is not None:
+        sales_stale_after_days = int(request_sales_stale_after_days)
+        sales_source = "request"
+    elif admin_sales_stale_after_days is not None:
+        sales_stale_after_days = admin_sales_stale_after_days
+        sales_source = "admin_defaults"
+    else:
+        sales_stale_after_days = FROM_WB_SALES_STALE_AFTER_DAYS
+        sales_source = "global_default"
+
+    if request_stock_stale_after_days is not None:
+        stock_stale_after_days = int(request_stock_stale_after_days)
+        stock_source = "request"
+    elif admin_stock_stale_after_days is not None:
+        stock_stale_after_days = admin_stock_stale_after_days
+        stock_source = "admin_defaults"
+    else:
+        stock_stale_after_days = FROM_WB_STOCK_STALE_AFTER_DAYS
+        stock_source = "global_default"
+
+    return (
+        sales_stale_after_days,
+        stock_stale_after_days,
+        {
+            "sales": sales_source,
+            "stock": stock_source,
+        },
+    )
+
+
 def _get_wb_mapped_bundle_type_ids(
     db: Session,
     article_id: int,
@@ -685,28 +740,16 @@ def build_production_order_proposal_from_wb(
         article_id=request.article_id,
         bundle_type_ids=bundle_type_ids,
     )
-    sales_stale_after_days = (
-        int(request.freshness_sales_stale_after_days)
-        if request.freshness_sales_stale_after_days is not None
-        else FROM_WB_SALES_STALE_AFTER_DAYS
+    (
+        sales_stale_after_days,
+        stock_stale_after_days,
+        freshness_threshold_source,
+    ) = _resolve_from_wb_freshness_thresholds(
+        db=db,
+        article_id=request.article_id,
+        request_sales_stale_after_days=request.freshness_sales_stale_after_days,
+        request_stock_stale_after_days=request.freshness_stock_stale_after_days,
     )
-    stock_stale_after_days = (
-        int(request.freshness_stock_stale_after_days)
-        if request.freshness_stock_stale_after_days is not None
-        else FROM_WB_STOCK_STALE_AFTER_DAYS
-    )
-    freshness_threshold_source = {
-        "sales": (
-            "request"
-            if request.freshness_sales_stale_after_days is not None
-            else "default"
-        ),
-        "stock": (
-            "request"
-            if request.freshness_stock_stale_after_days is not None
-            else "default"
-        ),
-    }
     (
         freshness_status,
         freshness_sales_age_days,
