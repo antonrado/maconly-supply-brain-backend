@@ -15,6 +15,15 @@
   - Не содержит фронтенд/UI-код — данный репозиторий описывает только backend.
   - Не управляет внешней инфраструктурой (оркестрация, деплой, и т.п.) за пределами Docker Compose-конфигурации для локальной/разработческой среды.
 
+## 1.1 Canonical doc map
+
+- `VISION.md` — продуктовая цель и границы.
+- `ARCHITECTURE_CANON.md` — архитектурные инварианты и принципы.
+- `ROADMAP.md` — фазы развития и приоритеты.
+- `AGENT_WORKFLOW.md` — стандарт выполнения задач агентом и шаблон machine-readable задач.
+- `RUNBOOK.md` — локальный запуск/диагностика (Windows PowerShell).
+- `STATUS.md` — текущее состояние, команды верификации и минимальные raw outputs.
+
 ---
 
 ## 2. Core Principles (immutable)
@@ -97,30 +106,24 @@
   - Эндпоинты `/status`, `/bootstrap`, `/snapshot`, `/history`, `/timeseries` отдают HTTP 200 и валидный JSON при актуальном состоянии схемы.
   - Планировщик успешно создаёт периодические записи в `monitoring_snapshots` (подтверждено через `SELECT count(*) FROM monitoring_snapshots;`).
 
-### 4.2 Planning Core v1 — Skeleton
+### 4.2 Planning Core v1 — Contract + minimal implementation
 
 - **Purpose**
   - Подготовить минимальный каркас для будущего ядра планирования (Planning Core v1), не влияя на существующую функциональность мониторинга.
 
 - **What is implemented now**
-  - Модуль `app/core/planning/domain.py` с минимальными датаклассами:
-    - `PlanningSettings`
-    - `DemandInput`
-    - `SupplyInput`
-    - `OrderProposal`
-    - `PlanningHealth`
-  - Модуль `app/core/planning/service.py` с классом `PlanningService` и методами, которые возвращают stub-данные:
-    - `compute_order_proposal(...)`
-    - `get_planning_health(...)`
-    - `build_proposal_stub()` — собирает структурированный объект `PlanningProposal` без бизнес-логики.
-  - HTTP-эндпоинты (скелет) в `app/api/v1/endpoints/planning_core.py` и роутинг в `app/api/v1/router.py`:
-    - `GET  /api/v1/planning/core/health` — возвращает HTTP 200 и JSON-ответ `{ "status": "ok" }`.
-    - `POST /api/v1/planning/core/proposal` — возвращает HTTP 200 и структурированный JSON-ответ на основе схемы `PlanningProposal` (contract-first stub).
+  - Модуль `app/core/planning/domain.py` содержит минимальные dataclass- и Pydantic-контракты (`PlanningSettings`, `DemandInput`, `SupplyInput`, `OrderProposal`, `PlanningHealth`, `PlanningProposal*`).
+  - Модуль `app/core/planning/service.py` содержит `PlanningService`:
+    - `compute_order_proposal(...)` и `get_planning_health(...)` пока остаются заглушками интерфейса.
+    - `build_proposal(...)` уже подключён к БД на минимальном уровне: читает SKU-строки (`SkuUnit` + `Article`) и формирует детерминированный `PlanningProposal`.
+  - HTTP-эндпоинты в `app/api/v1/endpoints/planning_core.py` + роутинг в `app/api/v1/router.py`:
+    - `GET  /api/v1/planning/core/health` — HTTP 200 и `{ "status": "ok" }`.
+    - `POST /api/v1/planning/core/proposal` — HTTP 200 и структурированный `PlanningProposal`.
 
 - **Explicitly NOT implemented yet**
-  - **Нет** бизнес-логики планирования, **нет** вычислений заказов и спроса.
-  - **Нет** новых таблиц БД и **нет** Alembic-миграций для Planning Core.
-  - Эндпоинты Planning Core v1 **намеренно** возвращают stub-ответы.
+  - Полноценные расчёты спроса/поставок и оптимизация объёмов заказа.
+  - Выделенная схема БД/миграции именно под Planning Core decision engine.
+  - Продвинутая explainability-логика причин рекомендаций.
 
 ---
 
@@ -128,14 +131,14 @@
 
 - **Characteristics**
   - **Schema-first**: контракт описан через Pydantic-модели `PlanningProposal`, `PlanningProposalRequest`, `PlanningProposalInputs`, `PlanningProposalSummary`, `PlanningProposalLine` в `app/core/planning/domain.py`.
-  - **Minimal logic**: эндпоинт `/api/v1/planning/core/proposal` возвращает структурированный ответ с базовой логикой (не пустышка).
+  - **Minimal logic**: эндпоинт `/api/v1/planning/core/proposal` возвращает структурированный ответ с минимальной БД-интеграцией (не пустышка).
   - **What's calculated**: 
-    - Количество SKU (`total_skus`) и общее количество единиц (`total_units`) считаются на основе строк предложения.
+    - Количество SKU (`total_skus`) и общее количество единиц (`total_units`) считаются на основе сгенерированных строк предложения.
     - Время генерации (`generated_at`) отражает текущее UTC.
     - Входные параметры (`sales_window_days`, `horizon_days`) отражаются в ответе без изменений.
   - **What's still stub**: 
-    - SKU (`SKU-001`, `SKU-002`) и рекомендуемые количества (`100`, `50`) являются фиктивными данными.
-    - Причина (`reason="stub_logic"`) указывает на временную реализацию.
+    - `recommended_units` пока фиксированы (`0`) и не являются результатом полноценной модели.
+    - `reason="data_hook_only"` указывает на временную минимальную логику.
     - Отсутствуют реальные расчёты спроса, запасов и оптимизации.
   - **Stable API guarantee**: форма ответа Planning Core v1 (поля `version`, `generated_at`, `inputs`, `summary`, `lines`) считается стабильным контрактом для фронтенда и последующих модулей.
   - **Input validation**: эндпоинт принимает `sales_window_days` и `horizon_days` (опционально), валидирует диапазон 7..365 дней через Pydantic `Field(ge=7, le=365)`, возвращает HTTP 422 при нарушении.
@@ -148,8 +151,8 @@
 
 - **Stage name**: Planning Core v1
 - **Goal**: сформировать и зафиксировать в backend-е первую версию ядра планирования (модели, сервисы, API), на которое будут опираться остальные модули.
-- **Status**: SKELETON ONLY  
-  На текущем этапе создан только скелет (структура модулей и HTTP-эндпоинтов). Бизнес-логика планирования и взаимодействие с БД ещё не реализованы.
+- **Status**: CONTRACT STABLE, LOGIC MINIMAL  
+  Контракт API зафиксирован; минимальная интеграция с БД присутствует в `build_proposal(...)`. Полноценная decision-логика остаётся задачей следующих этапов.
 
 ---
 
@@ -178,6 +181,8 @@
 - Любая известная проблема или технический долг фиксируется в секции **Open Questions / Risks**.
 - Любое изменение в коде или схемах должно фиксироваться коммитом в git и пушиться на настроенный удалённый репозиторий.
 - Каждый завершённый мини-этап работы фиксируется коммитом в git, пушится на удалённый репозиторий и сопровождается записью в Change Log.
+- Canonical context обновляется в репо-доках (VISION/ARCHITECTURE_CANON/ROADMAP/AGENT_WORKFLOW/RUNBOOK/STATUS), а не хранится только в чате.
+- Если потребован формат `RAW OUTPUT`, агент возвращает только raw output без комментариев.
 
 ## 7. Change Log
 
@@ -191,3 +196,4 @@
 | 2025-12-29 | Verified multi-instance scheduler advisory lock with two backend services under Docker Compose. | Подтвердить, что при двух backend-инстансах только один получает lock и выполняет планировщик. |
 | 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, stub endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
 | 2025-12-31 | Updated Planning Core v1 endpoints to return HTTP 200 stub responses for health and proposal. | Обновить Planning Core v1 для возвращения stub-ответов. |
+| 2026-02-24 | Added canonical docs set (VISION, ARCHITECTURE_CANON, ROADMAP, AGENT_WORKFLOW, RUNBOOK) and refreshed STATUS/PROJECT_CANON with reproducible verification commands. | Перенести ключевой контекст и решения из чата в репозиторий как единый источник правды. |

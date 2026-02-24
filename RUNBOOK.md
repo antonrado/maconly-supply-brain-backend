@@ -1,0 +1,79 @@
+# RUNBOOK (WINDOWS / POWERSHELL)
+
+## Repo root
+```powershell
+cd "C:\Users\USER\CascadeProjects\maconly-supply-brain-backend"
+```
+
+## Git sanity checks
+```powershell
+git rev-parse --is-inside-work-tree
+git status -sb
+git log -1 --oneline
+```
+
+If you see `not a git repository`, you are in the wrong directory; switch to the repo root above.
+
+## Docker sanity checks
+```powershell
+docker version
+docker compose version
+docker compose -f .\docker-compose.yml ps
+```
+
+### If Docker pipe error appears
+Error pattern: `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`.
+
+Quick triage:
+1. Start Docker Desktop.
+2. Wait until engine is healthy.
+3. Re-run:
+```powershell
+docker compose -f .\docker-compose.yml ps
+```
+
+## Start stack and inspect
+```powershell
+docker compose -f .\docker-compose.yml up -d --build
+docker compose -f .\docker-compose.yml ps
+docker compose -f .\docker-compose.yml logs --tail=200 backend
+docker compose -f .\docker-compose.yml logs --tail=200 backend2
+```
+
+## Planning Core checks
+### Health
+```powershell
+curl.exe -i http://localhost:8000/api/v1/planning/core/health
+```
+
+### Proposal (PowerShell-safe JSON)
+Create body file:
+```powershell
+'{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
+```
+
+Send request:
+```powershell
+curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+```
+
+## Monitoring snapshot count (DB)
+```powershell
+docker compose -f .\docker-compose.yml exec -T db psql -U maconly -d maconly_db -c "SELECT count(*) FROM monitoring_snapshots;"
+```
+
+## Pytest availability issue
+If host shell shows `No module named pytest`, prefer one of:
+1. Run tests inside Docker backend container.
+2. Install dev dependencies in host Python environment.
+
+## Interactive rebase / COMMIT_EDITMSG swap recovery
+If Vim opens and reports a swap file for `.git/COMMIT_EDITMSG`:
+1. If you do not need recovery, choose `D` (delete swap).
+2. Save and close commit message editor.
+3. Continue:
+```powershell
+git rebase --continue
+```
+
+Note: some Git versions do not support `git rebase --continue --no-edit`; use editor flow.
