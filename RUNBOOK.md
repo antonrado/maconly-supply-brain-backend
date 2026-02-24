@@ -17,6 +17,7 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 proposal
 .\scripts\dev.ps1 test
 .\scripts\dev.ps1 context
+.\scripts\dev.ps1 verify
 ```
 
 ## Git sanity checks
@@ -115,6 +116,23 @@ Guard policy summary:
 - Runtime code changes require `STATUS.md` or `PROJECT_CANON.md` update.
 - API/schema changes require `README.md` or `PROJECT_CANON.md` update.
 - Planning-engine changes require one of `ROADMAP.md`, `STATUS.md`, `PROJECT_CANON.md` updates.
+
+## One-command local verification
+
+Run before opening PR (recommended):
+
+```powershell
+.\scripts\dev.ps1 verify
+```
+
+What `verify` does:
+1. Runs context guard (`scripts/context_guard.py`).
+2. Runs compile check (`python -m compileall app tests scripts alembic`).
+3. Runs smoke tests:
+   - host pytest (`python -m pytest`) when available, otherwise
+   - docker backend pytest (`docker compose exec backend ...`) if backend is running.
+
+If neither host pytest nor running backend container is available, `verify` fails fast with guidance.
 
 ## Interactive rebase / COMMIT_EDITMSG swap recovery
 If Vim opens and reports a swap file for `.git/COMMIT_EDITMSG`:

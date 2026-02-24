@@ -1,10 +1,67 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "context")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "context", "verify")]
     [string]$Command
 )
 
 $ComposeFile = ".\\docker-compose.yml"
+
+function Get-ContextBaseRef {
+    $BaseRef = git merge-base HEAD origin/main 2>$null
+    if (-not $BaseRef) {
+        return "HEAD~1"
+    }
+
+    return $BaseRef.Trim()
+}
+
+function Invoke-ContextGuard {
+    $BaseRef = Get-ContextBaseRef
+    python .\scripts\context_guard.py --base $BaseRef --head HEAD
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
+function Invoke-CompileCheck {
+    python -m compileall app tests scripts alembic
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
+function Invoke-SmokeTests {
+    $TargetTests = @(
+        "tests/test_planning_core_production_order_api.py",
+        "tests/test_planning_core_production_order_settings_api.py"
+    )
+
+    python -c "import pytest" 2>$null
+    $HostPytestAvailable = $LASTEXITCODE -eq 0
+
+    if ($HostPytestAvailable) {
+        python -m pytest -q @TargetTests
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+        return
+    }
+
+    $RunningServices = docker compose -f $ComposeFile ps --status running --services 2>$null
+    $BackendRunning = $LASTEXITCODE -eq 0 -and (($RunningServices | ForEach-Object { $_.Trim() }) -contains "backend")
+
+    if ($BackendRunning) {
+        docker compose -f $ComposeFile exec -T backend python -m pytest -q @TargetTests
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+        return
+    }
+
+    Write-Host "verify: tests were not run (host pytest missing and backend container is not running)." -ForegroundColor Yellow
+    Write-Host "Run '.\\scripts\\dev.ps1 up' or install pytest locally, then rerun '.\\scripts\\dev.ps1 verify'." -ForegroundColor Yellow
+    exit 1
+}
 
 switch ($Command) {
     "up" {
@@ -27,11 +84,18 @@ switch ($Command) {
         curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
     }
     "context" {
-        $BaseRef = git merge-base HEAD origin/main 2>$null
-        if (-not $BaseRef) {
-            $BaseRef = "HEAD~1"
-        }
+        Invoke-ContextGuard
+    }
+    "verify" {
+        Write-Host "[verify] context guard..."
+        Invoke-ContextGuard
 
-        python .\scripts\context_guard.py --base $BaseRef.Trim() --head HEAD
+        Write-Host "[verify] compile check..."
+        Invoke-CompileCheck
+
+        Write-Host "[verify] smoke tests..."
+        Invoke-SmokeTests
+
+        Write-Host "[verify] OK"
     }
 }
