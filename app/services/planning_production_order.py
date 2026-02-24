@@ -571,7 +571,17 @@ def build_production_order_proposal_from_wb(
     )
 
     response = build_production_order_proposal(db=db, request=proposal_request)
+    requested_as_of_text = request.as_of_date.isoformat() if request.as_of_date is not None else "none"
     as_of_text = effective_as_of_date.isoformat() if effective_as_of_date is not None else "none"
+    if effective_as_of_date is None:
+        as_of_source = "none"
+    elif request.as_of_date is None:
+        as_of_source = "latest_sales"
+    elif request.as_of_date != effective_as_of_date:
+        as_of_source = "clamped_to_latest_sales"
+    else:
+        as_of_source = "request"
+
     if effective_as_of_date is not None:
         window_start = (effective_as_of_date - timedelta(days=request.observation_window_days - 1)).isoformat()
         window_text = f"{window_start}..{as_of_text}"
@@ -590,7 +600,9 @@ def build_production_order_proposal_from_wb(
         (
             "WB ingestion adapter: "
             f"observation_window_days={request.observation_window_days}, "
-            f"as_of_date={as_of_text}, bundle_type_ids={bundle_type_ids}."
+            f"requested_as_of_date={requested_as_of_text}, "
+            f"as_of_date={as_of_text}, as_of_source={as_of_source}, "
+            f"bundle_type_ids={bundle_type_ids}."
             f" sales_window={window_text},"
             f" daily_sales_by_bundle={daily_sales_snapshot}, "
             f"wb_stock_by_bundle={wb_stock_snapshot}."
