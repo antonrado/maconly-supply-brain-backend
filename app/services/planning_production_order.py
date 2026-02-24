@@ -563,6 +563,11 @@ def build_production_order_proposal_from_wb(
 
     response = build_production_order_proposal(db=db, request=proposal_request)
     as_of_text = effective_as_of_date.isoformat() if effective_as_of_date is not None else "none"
+    if effective_as_of_date is not None:
+        window_start = (effective_as_of_date - timedelta(days=request.observation_window_days - 1)).isoformat()
+        window_text = f"{window_start}..{as_of_text}"
+    else:
+        window_text = "none"
     daily_sales_snapshot = {
         bundle_type_id: round(float(daily_sales_by_bundle.get(bundle_type_id, 0.0)), 4)
         for bundle_type_id in bundle_type_ids
@@ -577,6 +582,7 @@ def build_production_order_proposal_from_wb(
             "WB ingestion adapter: "
             f"observation_window_days={request.observation_window_days}, "
             f"as_of_date={as_of_text}, bundle_type_ids={bundle_type_ids}."
+            f" sales_window={window_text},"
             f" daily_sales_by_bundle={daily_sales_snapshot}, "
             f"wb_stock_by_bundle={wb_stock_snapshot}."
         ),

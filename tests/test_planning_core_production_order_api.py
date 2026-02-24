@@ -819,6 +819,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
 
     assert "observation_window_days=30" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
+    assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 2.0}}" in wb_adapter_step
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 20}}" in wb_adapter_step
     assert "bundle_stock=request" in source_step
@@ -909,6 +910,7 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
         "",
     )
 
+    assert "sales_window=2025-12-17..2026-01-15" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 1.0}}" in wb_adapter_step
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 12}}" in wb_adapter_step
     assert "bundle_stock=request" in source_step
