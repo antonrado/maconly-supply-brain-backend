@@ -381,6 +381,63 @@ def test_production_order_proposal_economic_buffer_policy(client, db_session):
     assert "economic_buffer_days=0" not in buffer_step_with
 
 
+def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    competing_bundle_type = BundleType(code="PO-BT-2", name="PO-BT-2")
+    db_session.add(competing_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=competing_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=competing_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_daily_sales"] = [
+        {"bundle_type_id": seeded["bundle_type"].id, "daily_sales": 20.0},
+        {"bundle_type_id": competing_bundle_type.id, "daily_sales": 10.0},
+    ]
+    payload["bundle_stock"] = [
+        {"bundle_type_id": seeded["bundle_type"].id, "wb_qty": 5, "local_qty": 5},
+        {"bundle_type_id": competing_bundle_type.id, "wb_qty": 0, "local_qty": 0},
+    ]
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    raw_stock_step = next(
+        (
+            step
+            for step in body["explanation"]["steps"]
+            if "competition-aware by bundle" in step
+        ),
+        "",
+    )
+    assert "оценка сырьевого потенциала=20" in raw_stock_step
+    assert f"{seeded['bundle_type'].id}:14" in raw_stock_step
+    assert f"{competing_bundle_type.id}:6" in raw_stock_step
+
+
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal",

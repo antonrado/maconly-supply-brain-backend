@@ -369,6 +369,67 @@ def _compute_economic_buffer_days(
     return max(min(buffer_days, 14), 0)
 
 
+def _estimate_competition_aware_raw_bundle_stock(
+    *,
+    bundle_type_ids: list[int],
+    recipe_colors_by_bundle: dict[int, set[int]],
+    all_recipe_color_ids: list[int],
+    size_ids: list[int],
+    stock_by_color_size: dict[tuple[int, int], int],
+    shares_by_bundle: dict[int, float],
+) -> dict[int, int]:
+    raw_by_bundle: dict[int, int] = {bundle_type_id: 0 for bundle_type_id in bundle_type_ids}
+
+    color_consumers: dict[int, list[int]] = {}
+    for color_id in all_recipe_color_ids:
+        color_consumers[color_id] = [
+            bundle_type_id
+            for bundle_type_id in bundle_type_ids
+            if color_id in recipe_colors_by_bundle.get(bundle_type_id, set())
+        ]
+
+    for size_id in size_ids:
+        color_bundle_alloc: dict[tuple[int, int], int] = {}
+
+        for color_id in all_recipe_color_ids:
+            color_qty = max(stock_by_color_size.get((color_id, size_id), 0), 0)
+            if color_qty <= 0:
+                continue
+
+            consumers = color_consumers.get(color_id, [])
+            if not consumers:
+                continue
+
+            if len(consumers) == 1:
+                color_bundle_alloc[(color_id, consumers[0])] = color_qty
+                continue
+
+            consumer_weights = _normalize_weights(
+                consumers,
+                {bundle_type_id: shares_by_bundle.get(bundle_type_id, 0.0) for bundle_type_id in consumers},
+            )
+            allocated = _allocate_units(color_qty, consumer_weights)
+            for bundle_type_id, allocated_qty in allocated.items():
+                if allocated_qty <= 0:
+                    continue
+                color_bundle_alloc[(color_id, bundle_type_id)] = allocated_qty
+
+        for bundle_type_id in bundle_type_ids:
+            recipe_colors = recipe_colors_by_bundle.get(bundle_type_id, set())
+            if not recipe_colors:
+                continue
+
+            color_quantities = [
+                color_bundle_alloc.get((color_id, bundle_type_id), 0) for color_id in recipe_colors
+            ]
+            if not color_quantities or any(quantity <= 0 for quantity in color_quantities):
+                continue
+
+            raw_by_bundle[bundle_type_id] += min(color_quantities)
+
+    return raw_by_bundle
+
+
 def _load_admin_in_flight_defaults(
     db: Session,
     article_id: int,
@@ -592,29 +653,21 @@ def build_production_order_proposal(
         for bundle_type_id in bundle_type_ids:
             shares_by_bundle[bundle_type_id] = equal_share
 
-    # Estimate raw bundle availability with a simple competition-aware heuristic:
-    # exclusive potential per bundle type, then weighted by demand share.
-    exclusive_raw_by_bundle: dict[int, int] = {}
-    for bundle_type_id in bundle_type_ids:
-        recipe_colors = recipe_colors_by_bundle[bundle_type_id]
+    competition_raw_by_bundle = _estimate_competition_aware_raw_bundle_stock(
+        bundle_type_ids=bundle_type_ids,
+        recipe_colors_by_bundle=recipe_colors_by_bundle,
+        all_recipe_color_ids=all_recipe_color_ids,
+        size_ids=size_ids,
+        stock_by_color_size=stock_by_color_size,
+        shares_by_bundle=shares_by_bundle,
+    )
+    competition_raw_bundle_stock = sum(competition_raw_by_bundle.values())
+    competition_raw_breakdown = ", ".join(
+        f"{bundle_type_id}:{competition_raw_by_bundle.get(bundle_type_id, 0)}"
+        for bundle_type_id in bundle_type_ids
+    )
 
-        total_possible = 0
-        for size_id in size_ids:
-            if any((color_id, size_id) not in sku_by_color_size for color_id in recipe_colors):
-                continue
-
-            quantities = [stock_by_color_size.get((color_id, size_id), 0) for color_id in recipe_colors]
-            total_possible += min(quantities) if quantities else 0
-
-        exclusive_raw_by_bundle[bundle_type_id] = total_possible
-
-    weighted_raw_bundle_stock = 0
-    for bundle_type_id in bundle_type_ids:
-        raw_exclusive = exclusive_raw_by_bundle.get(bundle_type_id, 0)
-        share = shares_by_bundle.get(bundle_type_id, 0.0)
-        weighted_raw_bundle_stock += floor(raw_exclusive * share)
-
-    available_bundles_for_cover = ready_bundle_stock_total + weighted_raw_bundle_stock
+    available_bundles_for_cover = ready_bundle_stock_total + competition_raw_bundle_stock
 
     if total_daily_sales <= 0:
         days_of_cover_estimate = 9999.0
@@ -851,7 +904,8 @@ def build_production_order_proposal(
             ),
             (
                 f"Учтены ready stock наборов (WB+локальный)={ready_bundle_stock_total} и "
-                f"оценка сырьевого потенциала={weighted_raw_bundle_stock}."
+                f"оценка сырьевого потенциала={competition_raw_bundle_stock} "
+                f"(competition-aware by bundle: {competition_raw_breakdown})."
             ),
             (
                 f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
