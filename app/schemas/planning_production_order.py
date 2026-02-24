@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -163,6 +163,7 @@ class ProductionOrderAlternative(BaseModel):
 class ProductionOrderExplanationBlock(BaseModel):
     summary: str
     steps: list[str]
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProductionOrderProposalResponse(BaseModel):

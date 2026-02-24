@@ -488,7 +488,7 @@ def _build_from_wb_freshness_snapshot(
     effective_as_of_date: date | None,
     wb_stock_updated_at_by_bundle: dict[int, str | None],
     now: datetime,
-) -> tuple[str, str, str, dict[int, int | None]]:
+) -> tuple[str, int | None, int | None, dict[int, int | None]]:
     anchor_date = now.date()
 
     sales_age_days_value: int | None = None
@@ -523,15 +523,10 @@ def _build_from_wb_freshness_snapshot(
     else:
         freshness_status = "fresh"
 
-    sales_age_days_text = "none" if sales_age_days_value is None else str(sales_age_days_value)
-    stock_oldest_age_days_text = (
-        "none" if stock_oldest_age_days_value is None else str(stock_oldest_age_days_value)
-    )
-
     return (
         freshness_status,
-        sales_age_days_text,
-        stock_oldest_age_days_text,
+        sales_age_days_value,
+        stock_oldest_age_days_value,
         stock_age_days_by_bundle,
     )
 
@@ -725,9 +720,14 @@ def build_production_order_proposal_from_wb(
         as_of_source = "request"
 
     if effective_as_of_date is not None:
-        window_start = (effective_as_of_date - timedelta(days=request.observation_window_days - 1)).isoformat()
-        window_text = f"{window_start}..{as_of_text}"
+        window_start_date = (
+            effective_as_of_date - timedelta(days=request.observation_window_days - 1)
+        ).isoformat()
+        window_end_date = effective_as_of_date.isoformat()
+        window_text = f"{window_start_date}..{as_of_text}"
     else:
+        window_start_date = None
+        window_end_date = None
         window_text = "none"
     daily_sales_snapshot = {
         bundle_type_id: round(float(daily_sales_by_bundle.get(bundle_type_id, 0.0)), 4)
@@ -747,6 +747,42 @@ def build_production_order_proposal_from_wb(
         wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
         now=response.generated_at,
     )
+    freshness_sales_age_days_text = (
+        "none" if freshness_sales_age_days is None else str(freshness_sales_age_days)
+    )
+    freshness_stock_oldest_age_days_text = (
+        "none" if freshness_stock_oldest_age_days is None else str(freshness_stock_oldest_age_days)
+    )
+
+    response.explanation.meta["from_wb"] = {
+        "observation_window_days": request.observation_window_days,
+        "requested_as_of_date": request.as_of_date.isoformat() if request.as_of_date else None,
+        "as_of_date": effective_as_of_date.isoformat() if effective_as_of_date else None,
+        "as_of_source": as_of_source,
+        "bundle_type_ids": bundle_type_ids,
+        "sales_window": (
+            {
+                "start_date": window_start_date,
+                "end_date": window_end_date,
+            }
+            if window_start_date is not None and window_end_date is not None
+            else None
+        ),
+        "daily_sales_by_bundle": daily_sales_snapshot,
+        "wb_stock_by_bundle": wb_stock_snapshot,
+        "wb_stock_updated_at_by_bundle": wb_stock_updated_at_by_bundle,
+        "freshness": {
+            "status": freshness_status,
+            "sales_age_days": freshness_sales_age_days,
+            "stock_oldest_age_days": freshness_stock_oldest_age_days,
+            "stock_age_days_by_bundle": freshness_stock_age_days_by_bundle,
+            "threshold_days": {
+                "sales": FROM_WB_SALES_STALE_AFTER_DAYS,
+                "stock": FROM_WB_STOCK_STALE_AFTER_DAYS,
+            },
+        },
+    }
+
     response.explanation.steps.insert(
         0,
         (
@@ -760,8 +796,8 @@ def build_production_order_proposal_from_wb(
             f"wb_stock_by_bundle={wb_stock_snapshot}, "
             f"wb_stock_updated_at_by_bundle={wb_stock_updated_at_by_bundle}, "
             f"freshness_status={freshness_status}, "
-            f"freshness_sales_age_days={freshness_sales_age_days}, "
-            f"freshness_stock_oldest_age_days={freshness_stock_oldest_age_days}, "
+            f"freshness_sales_age_days={freshness_sales_age_days_text}, "
+            f"freshness_stock_oldest_age_days={freshness_stock_oldest_age_days_text}, "
             f"freshness_stock_age_days_by_bundle={freshness_stock_age_days_by_bundle}, "
             f"freshness_threshold_days=sales:{FROM_WB_SALES_STALE_AFTER_DAYS}|stock:{FROM_WB_STOCK_STALE_AFTER_DAYS}."
         ),
@@ -1427,6 +1463,22 @@ def build_production_order_proposal(
     alternatives = _build_alternatives(action)
 
     expected_horizon_sales = total_daily_sales * request.planning_horizon_days
+    elastic_uplift_line_keys_items = [
+        {
+            "color_id": color_id,
+            "size_id": size_id,
+        }
+        for color_id, size_id in elastic_uplift_keys
+    ]
+    elastic_uplift_line_alloc_items = [
+        {
+            "color_id": color_id,
+            "size_id": size_id,
+            "qty": qty,
+        }
+        for (color_id, size_id), qty in sorted(elastic_uplift_line_alloc.items(), key=lambda item: item[0])
+    ]
+
     explanation = ProductionOrderExplanationBlock(
         summary=(
             f"Риск {risk_level}: оценка покрытия {days_of_cover_estimate:.1f} дней при lead time "
@@ -1477,6 +1529,36 @@ def build_production_order_proposal(
                 f"elastic_constraints={len(constraints_applied.elastic_min_batches)}."
             ),
         ],
+        meta={
+            "sources": {
+                "size_weights": size_weights_source,
+                "in_flight": in_flight_source,
+                "bundle_stock": bundle_stock_source,
+            },
+            "economic_buffer": {
+                "enabled": settings.allow_order_with_buffer,
+                "days": economic_buffer_days,
+                "target_horizon_days": target_bundle_horizon_days,
+            },
+            "in_flight_effective": {
+                "raw_qty": in_flight_raw_qty_total,
+                "effective_qty": in_flight_effective_qty_total,
+                "lines": in_flight_effective_lines,
+            },
+            "elastic_scope": {
+                "mode": elastic_scope_mode,
+                "applicable_types": sorted(applicable_elastic_type_ids),
+                "scoped_settings": len(scoped_elastic_rows),
+                "scoped_lines": len(elastic_scope_line_keys),
+            },
+            "elastic_uplift": {
+                "delta": elastic_uplift_delta,
+                "scope": elastic_uplift_scope,
+                "affected_lines": len(elastic_uplift_keys),
+                "line_keys": elastic_uplift_line_keys_items,
+                "line_alloc": elastic_uplift_line_alloc_items,
+            },
+        },
     )
 
     return ProductionOrderProposalResponse(

@@ -334,6 +334,22 @@ def test_production_order_proposal_elastic_binding_scope_selects_bound_type(clie
     assert f"({seeded['color_1'].id}, {seeded['size_s'].id}):" in uplift_step
     assert f"({seeded['color_1'].id}, {seeded['size_m'].id}):" in uplift_step
 
+    meta = body["explanation"]["meta"]
+    assert meta["elastic_scope"]["mode"] == "binding_scope"
+    assert meta["elastic_scope"]["applicable_types"] == [elastic_type_1.id]
+    assert meta["elastic_scope"]["scoped_settings"] == 1
+    assert meta["elastic_scope"]["scoped_lines"] == 2
+    assert meta["elastic_uplift"]["scope"] == "binding_scope"
+    assert meta["elastic_uplift"]["affected_lines"] == 2
+    alloc_pairs = {
+        (item["color_id"], item["size_id"])
+        for item in meta["elastic_uplift"]["line_alloc"]
+    }
+    assert alloc_pairs == {
+        (seeded["color_1"].id, seeded["size_s"].id),
+        (seeded["color_1"].id, seeded["size_m"].id),
+    }
+
 
 def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_lines(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -538,6 +554,15 @@ def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(cli
     assert "scope=none" in uplift_step
     assert "affected_lines=0" in uplift_step
     assert "line_alloc={}" in uplift_step
+
+    meta = body["explanation"]["meta"]
+    assert meta["elastic_scope"]["mode"] == "binding_scope"
+    assert meta["elastic_scope"]["applicable_types"] == []
+    assert meta["elastic_scope"]["scoped_settings"] == 0
+    assert meta["elastic_uplift"]["delta"] == 0
+    assert meta["elastic_uplift"]["scope"] == "none"
+    assert meta["elastic_uplift"]["affected_lines"] == 0
+    assert meta["elastic_uplift"]["line_alloc"] == []
 
 
 def test_production_order_proposal_returns_alternatives(client, db_session):
@@ -841,6 +866,23 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=20" in stock_step
 
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["observation_window_days"] == 30
+    assert from_wb_meta["requested_as_of_date"] == "2026-01-10"
+    assert from_wb_meta["as_of_date"] == "2026-01-10"
+    assert from_wb_meta["as_of_source"] == "request"
+    assert from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-12",
+        "end_date": "2026-01-10",
+    }
+    assert from_wb_meta["bundle_type_ids"] == [seeded["bundle_type"].id]
+    bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 2.0
+    assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 20
+    assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key].startswith("2026-01-11T")
+    assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
+    assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
+
 
 def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -908,6 +950,15 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
 
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["requested_as_of_date"] is None
+    assert from_wb_meta["as_of_date"] == "2026-01-10"
+    assert from_wb_meta["as_of_source"] == "latest_sales"
+    assert from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-12",
+        "end_date": "2026-01-10",
+    }
+
 
 def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -968,6 +1019,16 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
 
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["requested_as_of_date"] is None
+    assert from_wb_meta["as_of_date"] is None
+    assert from_wb_meta["as_of_source"] == "none"
+    assert from_wb_meta["sales_window"] is None
+    assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 0.0
+    assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 7
+    assert from_wb_meta["freshness"]["sales_age_days"] is None
+
 
 def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_no_stock(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -1014,6 +1075,17 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
     assert "freshness_stock_oldest_age_days=none" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["as_of_date"] is None
+    assert from_wb_meta["as_of_source"] == "none"
+    assert from_wb_meta["sales_window"] is None
+    assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is None
+    assert from_wb_meta["freshness"]["status"] == "no_data"
+    assert from_wb_meta["freshness"]["sales_age_days"] is None
+    assert from_wb_meta["freshness"]["stock_oldest_age_days"] is None
+    assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] is None
 
 
 def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_session):
@@ -1083,6 +1155,15 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
     assert "freshness_sales_age_days=" in wb_adapter_step
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["requested_as_of_date"] == "2026-01-20"
+    assert from_wb_meta["as_of_date"] == "2026-01-10"
+    assert from_wb_meta["as_of_source"] == "clamped_to_latest_sales"
+    assert from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-12",
+        "end_date": "2026-01-10",
+    }
 
 
 def test_production_order_proposal_from_wb_via_import_endpoints(client, db_session):
@@ -1182,6 +1263,19 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=12" in stock_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    bundle_key = str(seeded["bundle_type"].id)
+    assert from_wb_meta["requested_as_of_date"] == "2026-01-15"
+    assert from_wb_meta["as_of_date"] == "2026-01-15"
+    assert from_wb_meta["as_of_source"] == "request"
+    assert from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-17",
+        "end_date": "2026-01-15",
+    }
+    assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 1.0
+    assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 12
+    assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is not None
 
 
 def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(client, db_session):
