@@ -323,6 +323,147 @@ def test_production_order_proposal_elastic_binding_scope_selects_bound_type(clie
     assert "mode=binding_scope" in scope_step
     assert f"applicable_types=[{elastic_type_1.id}]" in scope_step
     assert "scoped_settings=1" in scope_step
+    assert "scoped_lines=2" in scope_step
+
+
+def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_lines(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    baseline_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert baseline_response.status_code == 200, baseline_response.text
+
+    baseline_body = baseline_response.json()
+    baseline_lines = baseline_body["recommendation"]["lines"]
+
+    baseline_totals_by_color: dict[int, int] = {}
+    for line in baseline_lines:
+        baseline_totals_by_color[line["color_id"]] = (
+            baseline_totals_by_color.get(line["color_id"], 0) + line["recommended_qty"]
+        )
+
+    elastic_type = ElasticType(code="PO-EL-SCOPE-ONLY", name="PO-EL-SCOPE-ONLY")
+    db_session.add(elastic_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                elastic_min_batch_qty=22000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                color_id=seeded["color_1"].id,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    scoped_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert scoped_response.status_code == 200, scoped_response.text
+
+    scoped_body = scoped_response.json()
+    scoped_lines = scoped_body["recommendation"]["lines"]
+
+    scoped_totals_by_color: dict[int, int] = {}
+    for line in scoped_lines:
+        scoped_totals_by_color[line["color_id"]] = (
+            scoped_totals_by_color.get(line["color_id"], 0) + line["recommended_qty"]
+        )
+
+    color_1_id = seeded["color_1"].id
+    color_2_id = seeded["color_2"].id
+
+    assert scoped_totals_by_color.get(color_1_id, 0) > baseline_totals_by_color.get(color_1_id, 0)
+    assert scoped_totals_by_color.get(color_2_id, 0) == baseline_totals_by_color.get(color_2_id, 0)
+
+
+def test_production_order_proposal_elastic_binding_scope_uplift_only_scoped_sku(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    baseline_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert baseline_response.status_code == 200, baseline_response.text
+
+    baseline_body = baseline_response.json()
+    baseline_by_key: dict[tuple[int, int], int] = {
+        (line["color_id"], line["size_id"]): line["recommended_qty"]
+        for line in baseline_body["recommendation"]["lines"]
+    }
+
+    sku_scope = (
+        db_session.query(SkuUnit)
+        .filter(
+            SkuUnit.article_id == seeded["article"].id,
+            SkuUnit.color_id == seeded["color_1"].id,
+            SkuUnit.size_id == seeded["size_s"].id,
+        )
+        .one()
+    )
+
+    elastic_type = ElasticType(code="PO-EL-SCOPE-SKU", name="PO-EL-SCOPE-SKU")
+    db_session.add(elastic_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                elastic_min_batch_qty=22000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                sku_unit_id=sku_scope.id,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    scoped_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert scoped_response.status_code == 200, scoped_response.text
+
+    scoped_body = scoped_response.json()
+    scoped_by_key: dict[tuple[int, int], int] = {
+        (line["color_id"], line["size_id"]): line["recommended_qty"]
+        for line in scoped_body["recommendation"]["lines"]
+    }
+
+    scoped_key = (seeded["color_1"].id, seeded["size_s"].id)
+    assert scoped_by_key[scoped_key] > baseline_by_key[scoped_key]
+
+    for key, baseline_qty in baseline_by_key.items():
+        if key == scoped_key:
+            continue
+        assert scoped_by_key[key] == baseline_qty
+
+    scope_step = next(
+        (step for step in scoped_body["explanation"]["steps"] if "Elastic scope" in step),
+        "",
+    )
+    assert "scoped_lines=1" in scope_step
 
 
 def test_production_order_proposal_elastic_binding_scope_skips_when_no_match(client, db_session):
