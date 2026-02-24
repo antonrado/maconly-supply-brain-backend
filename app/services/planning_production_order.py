@@ -399,6 +399,65 @@ def _load_wb_bundle_stock(
     return dict(stock_by_bundle_type)
 
 
+def _load_wb_bundle_stock_updated_at_by_bundle(
+    db: Session,
+    article_id: int,
+    bundle_type_ids: list[int],
+) -> dict[int, str | None]:
+    if not bundle_type_ids:
+        return {}
+
+    mappings = (
+        db.query(ArticleWbMapping)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(bundle_type_ids),
+        )
+        .all()
+    )
+    if not mappings:
+        return {}
+
+    wb_skus = {mapping.wb_sku for mapping in mappings if mapping.wb_sku}
+    if not wb_skus:
+        return {bundle_type_id: None for bundle_type_id in bundle_type_ids}
+
+    updated_rows = (
+        db.query(
+            WbStock.wb_sku,
+            func.max(WbStock.updated_at).label("last_updated_at"),
+        )
+        .filter(WbStock.wb_sku.in_(wb_skus))
+        .group_by(WbStock.wb_sku)
+        .all()
+    )
+    updated_at_by_wb_sku = {
+        str(row.wb_sku): row.last_updated_at
+        for row in updated_rows
+    }
+
+    latest_updated_at_by_bundle: dict[int, datetime | None] = {
+        bundle_type_id: None for bundle_type_id in bundle_type_ids
+    }
+    for mapping in mappings:
+        if mapping.bundle_type_id is None:
+            continue
+
+        bundle_type_id = int(mapping.bundle_type_id)
+        updated_at = updated_at_by_wb_sku.get(mapping.wb_sku)
+        if updated_at is None:
+            continue
+
+        current_updated_at = latest_updated_at_by_bundle.get(bundle_type_id)
+        if current_updated_at is None or updated_at > current_updated_at:
+            latest_updated_at_by_bundle[bundle_type_id] = updated_at
+
+    return {
+        bundle_type_id: (updated_at.isoformat() if updated_at is not None else None)
+        for bundle_type_id, updated_at in latest_updated_at_by_bundle.items()
+    }
+
+
 def _get_wb_mapped_bundle_type_ids(
     db: Session,
     article_id: int,
@@ -546,6 +605,11 @@ def build_production_order_proposal_from_wb(
         article_id=request.article_id,
         bundle_type_ids=bundle_type_ids,
     )
+    wb_stock_updated_at_by_bundle = _load_wb_bundle_stock_updated_at_by_bundle(
+        db=db,
+        article_id=request.article_id,
+        bundle_type_ids=bundle_type_ids,
+    )
 
     proposal_request = ProductionOrderProposalRequest(
         article_id=request.article_id,
@@ -605,7 +669,8 @@ def build_production_order_proposal_from_wb(
             f"bundle_type_ids={bundle_type_ids}."
             f" sales_window={window_text},"
             f" daily_sales_by_bundle={daily_sales_snapshot}, "
-            f"wb_stock_by_bundle={wb_stock_snapshot}."
+            f"wb_stock_by_bundle={wb_stock_snapshot}, "
+            f"wb_stock_updated_at_by_bundle={wb_stock_updated_at_by_bundle}."
         ),
     )
     return response

@@ -762,6 +762,7 @@ def test_production_order_proposal_uses_wb_bundle_stock_fallback(client, db_sess
 
 def test_production_order_proposal_from_wb_endpoint(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
 
     db_session.add(
         ArticleWbMapping(
@@ -786,7 +787,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
             warehouse_id=1,
             warehouse_name="WB-1",
             stock_qty=20,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=stock_updated_at,
         )
     )
     db_session.commit()
@@ -830,12 +831,15 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 2.0}}" in wb_adapter_step
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 20}}" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=20" in stock_step
 
 
 def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 9, tzinfo=timezone.utc)
 
     db_session.add(
         ArticleWbMapping(
@@ -860,7 +864,7 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
             warehouse_id=1,
             warehouse_name="WB-1",
             stock_qty=20,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=stock_updated_at,
         )
     )
     db_session.commit()
@@ -892,10 +896,13 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
     assert "as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_source=latest_sales" in wb_adapter_step
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
 
 
 def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 8, tzinfo=timezone.utc)
 
     db_session.add(
         ArticleWbMapping(
@@ -911,7 +918,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
             warehouse_id=1,
             warehouse_name="WB-1",
             stock_qty=7,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=stock_updated_at,
         )
     )
     db_session.commit()
@@ -945,10 +952,13 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert "sales_window=none" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 0.0}}" in wb_adapter_step
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 7}}" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
 
 
 def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 7, tzinfo=timezone.utc)
 
     db_session.add(
         ArticleWbMapping(
@@ -973,7 +983,7 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
             warehouse_id=1,
             warehouse_name="WB-1",
             stock_qty=20,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=stock_updated_at,
         )
     )
     db_session.commit()
@@ -1007,6 +1017,8 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
     assert "as_of_source=clamped_to_latest_sales" in wb_adapter_step
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 2.0}}" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
 
 
 def test_production_order_proposal_from_wb_via_import_endpoints(client, db_session):
@@ -1098,6 +1110,8 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert "sales_window=2025-12-17..2026-01-15" in wb_adapter_step
     assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 1.0}}" in wb_adapter_step
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 12}}" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=12" in stock_step
 
