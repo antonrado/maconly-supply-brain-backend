@@ -304,6 +304,44 @@ def _load_admin_size_weights(
     return result
 
 
+def _in_flight_stage_factor(stage: str | None) -> float:
+    stage_key = (stage or "other").strip().lower()
+    stage_factors: dict[str, float] = {
+        "production": 0.85,
+        "china_to_nsk": 0.90,
+        "packaging": 0.97,
+        "nsk_to_wb": 1.00,
+        "other": 0.80,
+    }
+    return stage_factors.get(stage_key, stage_factors["other"])
+
+
+def _estimate_effective_in_flight_qty(
+    qty: int,
+    eta_days: int,
+    lead_time_days_total: int,
+    stage: str | None,
+) -> int:
+    if qty <= 0:
+        return 0
+
+    eta = max(int(eta_days), 0)
+    lead_time = max(int(lead_time_days_total), 0)
+
+    if lead_time > 0 and eta > lead_time:
+        return 0
+
+    if lead_time <= 0:
+        eta_factor = 1.0
+    else:
+        eta_factor = (lead_time - eta + 1) / (lead_time + 1)
+        eta_factor = max(min(eta_factor, 1.0), 0.0)
+
+    stage_factor = _in_flight_stage_factor(stage)
+    effective = floor(qty * eta_factor * stage_factor)
+    return max(int(effective), 0)
+
+
 def _load_admin_in_flight_defaults(
     db: Session,
     article_id: int,
@@ -480,18 +518,37 @@ def build_production_order_proposal(
         else:
             in_flight_source = "none"
 
-    # Add in-flight supply that is expected to arrive before lead time horizon.
+    in_flight_raw_qty_total = 0
+    in_flight_effective_qty_total = 0
+    in_flight_effective_lines = 0
+
+    # Add in-flight supply with ETA/stage sensitivity.
     for in_flight in effective_in_flight_supply:
         if in_flight.article_id != request.article_id:
-            continue
-        if in_flight.eta_days > settings.lead_time_days_total:
             continue
 
         key = (in_flight.color_id, in_flight.size_id)
         if key not in sku_by_color_size:
             continue
 
-        stock_by_color_size[key] = stock_by_color_size.get(key, 0) + in_flight.qty
+        raw_qty = max(int(in_flight.qty), 0)
+        if raw_qty <= 0:
+            continue
+
+        in_flight_raw_qty_total += raw_qty
+        effective_qty = _estimate_effective_in_flight_qty(
+            qty=raw_qty,
+            eta_days=int(in_flight.eta_days),
+            lead_time_days_total=settings.lead_time_days_total,
+            stage=getattr(in_flight, "stage", "other"),
+        )
+        if effective_qty <= 0:
+            continue
+
+        in_flight_effective_qty_total += effective_qty
+        in_flight_effective_lines += 1
+
+        stock_by_color_size[key] = stock_by_color_size.get(key, 0) + effective_qty
 
     demand_by_bundle = {item.bundle_type_id: item.daily_sales for item in request.bundle_daily_sales}
     total_daily_sales = float(sum(demand_by_bundle.values()))
@@ -765,6 +822,10 @@ def build_production_order_proposal(
             (
                 f"Источник параметров: size_weights={size_weights_source}, "
                 f"in_flight={in_flight_source}."
+            ),
+            (
+                f"In-flight вклад (ETA/stage): raw_qty={in_flight_raw_qty_total}, "
+                f"effective_qty={in_flight_effective_qty_total}, lines={in_flight_effective_lines}."
             ),
             (
                 f"Применены ограничения: fabric_constraints={len(constraints_applied.fabric_min_batches)}, "

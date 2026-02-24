@@ -283,6 +283,47 @@ def test_production_order_proposal_returns_alternatives(client, db_session):
     assert actions.issubset({"wait", "order_with_buffer", "order_minimum_only"})
 
 
+def test_production_order_proposal_in_flight_eta_stage_sensitivity(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["in_flight_supply"] = [
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_1"].id,
+            "size_id": seeded["size_s"].id,
+            "qty": 100,
+            "eta_days": 10,
+            "stage": "nsk_to_wb",
+        },
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_2"].id,
+            "size_id": seeded["size_m"].id,
+            "qty": 100,
+            "eta_days": 120,
+            "stage": "production",
+        },
+    ]
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    in_flight_step = next(
+        (step for step in body["explanation"]["steps"] if "In-flight вклад" in step),
+        "",
+    )
+    assert "raw_qty=200" in in_flight_step
+    assert "effective_qty=" in in_flight_step
+    assert "lines=1" in in_flight_step
+    assert "effective_qty=200" not in in_flight_step
+
+
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal",

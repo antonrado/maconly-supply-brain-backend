@@ -51,6 +51,12 @@ function Invoke-SmokeTests {
     $BackendRunning = $LASTEXITCODE -eq 0 -and (($RunningServices | ForEach-Object { $_.Trim() }) -contains "backend")
 
     if ($BackendRunning) {
+        Write-Host "[verify] syncing backend image with current workspace..."
+        docker compose -f $ComposeFile up -d --build backend
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
         docker compose -f $ComposeFile exec -T backend python -c "import pytest, httpx" 2>$null
         $BackendTestDepsAvailable = $LASTEXITCODE -eq 0
 
