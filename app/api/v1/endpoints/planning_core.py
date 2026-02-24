@@ -10,6 +10,14 @@ from app.schemas.planning_production_order import (
     ProductionOrderProposalRequest,
     ProductionOrderProposalResponse,
 )
+from app.schemas.planning_production_order_admin import (
+    ProductionOrderAdminSettingsResponse,
+    ProductionOrderAdminSettingsUpsertRequest,
+)
+from app.services.planning_production_order_admin import (
+    get_production_order_admin_settings,
+    upsert_production_order_admin_settings,
+)
 from app.services.planning_production_order import build_production_order_proposal
 
 
@@ -53,3 +61,30 @@ async def create_production_order_proposal(
     db: Session = Depends(get_db),
 ) -> ProductionOrderProposalResponse:
     return build_production_order_proposal(db=db, request=request)
+
+
+@router.get(
+    "/core/production-order/settings/{article_id}",
+    response_model=ProductionOrderAdminSettingsResponse,
+)
+async def read_production_order_admin_settings(
+    article_id: int,
+    db: Session = Depends(get_db),
+) -> ProductionOrderAdminSettingsResponse:
+    return get_production_order_admin_settings(db=db, article_id=article_id)
+
+
+@router.put(
+    "/core/production-order/settings/{article_id}",
+    response_model=ProductionOrderAdminSettingsResponse,
+)
+async def write_production_order_admin_settings(
+    article_id: int,
+    payload: ProductionOrderAdminSettingsUpsertRequest,
+    db: Session = Depends(get_db),
+) -> ProductionOrderAdminSettingsResponse:
+    return upsert_production_order_admin_settings(
+        db=db,
+        article_id=article_id,
+        payload=payload,
+    )

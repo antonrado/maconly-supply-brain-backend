@@ -160,6 +160,71 @@ class ElasticPlanningSettings(Base):
     )
 
 
+class ProductionOrderSizeWeightSetting(Base):
+    __tablename__ = "production_order_size_weight_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=False)
+    size_id: Mapped[int] = mapped_column(ForeignKey("size.id"), nullable=False)
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id",
+            "size_id",
+            name="uq_po_size_weight_article_size",
+        ),
+    )
+
+
+class ProductionOrderElasticBinding(Base):
+    __tablename__ = "production_order_elastic_bindings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=False)
+    elastic_type_id: Mapped[int] = mapped_column(
+        ForeignKey("elastic_type.id"),
+        nullable=False,
+    )
+    color_id: Mapped[int | None] = mapped_column(ForeignKey("color.id"), nullable=True)
+    sku_unit_id: Mapped[int | None] = mapped_column(ForeignKey("sku_unit.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id",
+            "elastic_type_id",
+            "color_id",
+            "sku_unit_id",
+            name="uq_po_elastic_binding_scope",
+        ),
+    )
+
+
+class ProductionOrderInFlightDefault(Base):
+    __tablename__ = "production_order_in_flight_defaults"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("article.id"), nullable=False)
+    color_id: Mapped[int] = mapped_column(ForeignKey("color.id"), nullable=False)
+    size_id: Mapped[int] = mapped_column(ForeignKey("size.id"), nullable=False)
+    qty: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    eta_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stage: Mapped[str] = mapped_column(String(50), nullable=False, default="other")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "article_id",
+            "color_id",
+            "size_id",
+            "stage",
+            "eta_days",
+            name="uq_po_in_flight_default_scope",
+        ),
+    )
+
+
 class GlobalPlanningSettings(Base):
     __tablename__ = "global_planning_settings"
 

@@ -18,6 +18,8 @@ from app.models.models import (
     ElasticPlanningSettings,
     GlobalPlanningSettings,
     PlanningSettings,
+    ProductionOrderInFlightDefault,
+    ProductionOrderSizeWeightSetting,
     SkuUnit,
     StockBalance,
 )
@@ -277,6 +279,46 @@ def _add_units_for_color(
         line_qty[key] = line_qty.get(key, 0) + qty
 
 
+def _load_admin_size_weights(
+    db: Session,
+    article_id: int,
+    size_ids: list[int],
+) -> dict[int, float]:
+    if not size_ids:
+        return {}
+
+    rows = (
+        db.query(ProductionOrderSizeWeightSetting)
+        .filter(
+            ProductionOrderSizeWeightSetting.article_id == article_id,
+            ProductionOrderSizeWeightSetting.size_id.in_(size_ids),
+        )
+        .all()
+    )
+
+    result: dict[int, float] = {}
+    for row in rows:
+        if row.weight > 0:
+            result[row.size_id] = float(row.weight)
+
+    return result
+
+
+def _load_admin_in_flight_defaults(
+    db: Session,
+    article_id: int,
+) -> list[ProductionOrderInFlightDefault]:
+    return (
+        db.query(ProductionOrderInFlightDefault)
+        .filter(
+            ProductionOrderInFlightDefault.article_id == article_id,
+            ProductionOrderInFlightDefault.is_active.is_(True),
+            ProductionOrderInFlightDefault.qty > 0,
+        )
+        .all()
+    )
+
+
 def build_production_order_proposal(
     db: Session,
     request: ProductionOrderProposalRequest,
@@ -389,7 +431,22 @@ def build_production_order_proposal(
     for color_id in color_to_sizes:
         color_to_sizes[color_id] = sorted(set(color_to_sizes[color_id]))
 
-    size_weights = _normalize_weights(size_ids, request.size_weights)
+    requested_size_weights = {
+        int(size_id): float(weight) for size_id, weight in request.size_weights.items() if weight > 0
+    }
+    size_weights_source = "request"
+    if not requested_size_weights:
+        requested_size_weights = _load_admin_size_weights(
+            db=db,
+            article_id=request.article_id,
+            size_ids=size_ids,
+        )
+        if requested_size_weights:
+            size_weights_source = "admin_defaults"
+        else:
+            size_weights_source = "uniform_fallback"
+
+    size_weights = _normalize_weights(size_ids, requested_size_weights)
 
     stock_agg_rows = (
         db.query(
@@ -408,8 +465,23 @@ def build_production_order_proposal(
     for sku in sku_units:
         stock_by_color_size[(sku.color_id, sku.size_id)] = stock_by_sku_id.get(sku.id, 0)
 
+    effective_in_flight_supply = list(request.in_flight_supply)
+    in_flight_source = "request"
+
+    if not effective_in_flight_supply:
+        admin_defaults = _load_admin_in_flight_defaults(
+            db=db,
+            article_id=request.article_id,
+        )
+        if admin_defaults:
+            in_flight_source = "admin_defaults"
+            for row in admin_defaults:
+                effective_in_flight_supply.append(row)
+        else:
+            in_flight_source = "none"
+
     # Add in-flight supply that is expected to arrive before lead time horizon.
-    for in_flight in request.in_flight_supply:
+    for in_flight in effective_in_flight_supply:
         if in_flight.article_id != request.article_id:
             continue
         if in_flight.eta_days > settings.lead_time_days_total:
@@ -689,6 +761,10 @@ def build_production_order_proposal(
             (
                 f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
                 f"bundle_deficit_total={bundle_deficit_total}, распределение через size_weights."
+            ),
+            (
+                f"Источник параметров: size_weights={size_weights_source}, "
+                f"in_flight={in_flight_source}."
             ),
             (
                 f"Применены ограничения: fabric_constraints={len(constraints_applied.fabric_min_batches)}, "

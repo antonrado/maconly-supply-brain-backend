@@ -30,9 +30,9 @@
 - Clarify/document `backend2` purpose (lock-proof/e2e only).
 
 ## Immediate high-leverage follow-ups
-1. Add admin-facing settings contract for size weights, elastic mapping, and in-flight supply inputs.
-2. Improve model-B allocation quality (bundle competition heuristic, in-flight ETA sensitivity, economic buffer policy).
-3. Prepare integration layer for WB/API ingestion into production-order inputs.
+1. Improve model-B allocation quality (bundle competition heuristic, in-flight ETA sensitivity, economic buffer policy).
+2. Prepare integration layer for WB/API ingestion into production-order inputs.
+3. Wire production-order admin settings screens in frontend cabinet.
 4. Replace placeholder CODEOWNERS handle with real GitHub owner/team and enforce required reviews in repository settings.
 
 ## Phase 4 - Optional productization

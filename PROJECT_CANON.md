@@ -123,11 +123,23 @@
     - учитывает настройки статьи и override из запроса,
     - конвертирует дефицит по модели B,
     - применяет минималки ткани/резинки,
+    - использует admin-defaults для `size_weights` и `in_flight_supply`, если они не переданы в запросе,
     - возвращает альтернативы и explanation-блок.
+  - Модуль `app/services/planning_production_order_admin.py` реализует контракт admin-настроек Production Order:
+    - size weights по статье,
+    - elastic bindings (на уровне color/SKU),
+    - in-flight defaults по color/size/stage/eta.
+  - Добавлены таблицы admin-настроек Production Order:
+    - `production_order_size_weight_settings`
+    - `production_order_elastic_bindings`
+    - `production_order_in_flight_defaults`
+    - миграция `0009_add_production_order_admin_settings.py`.
   - HTTP-эндпоинты в `app/api/v1/endpoints/planning_core.py` + роутинг в `app/api/v1/router.py`:
     - `GET  /api/v1/planning/core/health` — HTTP 200 и `{ "status": "ok" }`.
     - `POST /api/v1/planning/core/proposal` — HTTP 200 и структурированный `PlanningProposal`.
     - `POST /api/v1/planning/core/production-order/proposal` — HTTP 200 и структурированный `ProductionOrderProposalResponse`.
+    - `GET /api/v1/planning/core/production-order/settings/{article_id}` — чтение admin defaults для production order.
+    - `PUT /api/v1/planning/core/production-order/settings/{article_id}` — атомарная замена admin defaults для production order.
 
 - **Explicitly NOT implemented yet**
   - Прямая online-интеграция WB API/МойСклад API в production-order proposal.
@@ -210,3 +222,4 @@
 | 2026-02-24 | Added engineering foundation pack (CI workflow, PR template, CONTRIBUTING, CODEOWNERS scaffold, ADR process, release policy). | Снизить риск рефакторинга «задним числом» и зафиксировать quality gates для масштабирования платформы. |
 | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
 | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
+| 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |

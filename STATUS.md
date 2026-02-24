@@ -21,8 +21,19 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Planning Core production-order proposal endpoint added:
   - `POST /api/v1/planning/core/production-order/proposal`
   - Handles article settings, model-B deficit conversion, minima (fabric/elastic), alternatives, and explanation blocks.
+- Planning Core production-order admin settings endpoints added:
+  - `GET /api/v1/planning/core/production-order/settings/{article_id}`
+  - `PUT /api/v1/planning/core/production-order/settings/{article_id}`
+  - Covers admin-managed inputs for size weights, elastic bindings (SKU/color), and in-flight defaults.
+- Production-order admin settings persistence added:
+  - `production_order_size_weight_settings`
+  - `production_order_elastic_bindings`
+  - `production_order_in_flight_defaults`
+  - migration: `alembic/versions/0009_add_production_order_admin_settings.py`
 - Tests added for production-order endpoint:
   - `tests/test_planning_core_production_order_api.py`
+- Tests added for production-order admin settings:
+  - `tests/test_planning_core_production_order_settings_api.py`
 - Governance baseline added:
   - CI pipeline: `.github/workflows/ci.yml`
   - Context synchronization guard in CI: `scripts/context_guard.py`
