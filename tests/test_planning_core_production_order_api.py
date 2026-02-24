@@ -736,6 +736,68 @@ def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(c
     }
 
 
+def test_production_order_proposal_exposes_layer1_and_layer2_meta(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+
+    layer1 = meta["layer_1_stock_health"]
+    layer2 = meta["layer_2_allocation"]
+
+    assert layer1["summary"]["sku_count"] == 4
+    assert len(layer1["metrics"]) == 4
+    for metric in layer1["metrics"]:
+        assert {
+            "color_id",
+            "size_id",
+            "velocity_main",
+            "velocity_assorti",
+            "coverage_days",
+            "current_stock",
+            "in_flight",
+            "eta_days",
+            "gross_margin",
+            "capital_locked",
+            "stockout_risk",
+            "overstock_risk",
+        }.issubset(metric.keys())
+        assert metric["velocity_assorti"] == 0.0
+
+    assert layer1["proxies"] == {
+        "main_margin": 1.0,
+        "assorti_margin": 0.85,
+        "unit_capital": 1.0,
+    }
+
+    assert layer2["method"] == "time_window_gmroi_proxy"
+    assert len(layer2["decisions"]) == 4
+    assert layer2["summary"] == {"main": 4, "assorti": 0, "hold": 0}
+
+    layer1_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
+        "",
+    )
+    layer2_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
+    assert "sku_count=4" in layer1_step
+    assert "main=4" in layer2_step
+
+
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 

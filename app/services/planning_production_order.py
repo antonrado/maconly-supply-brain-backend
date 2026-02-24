@@ -14,6 +14,7 @@ from app.models.models import (
     ArticlePlanningSettings,
     ArticleWbMapping,
     BundleRecipe,
+    BundleType,
     Color,
     ColorPlanningSettings,
     ElasticPlanningSettings,
@@ -45,6 +46,9 @@ from app.schemas.planning_production_order import (
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+LAYER2_MAIN_MARGIN_PROXY = 1.0
+LAYER2_ASSORTI_MARGIN_PROXY = 0.85
+LAYER2_UNIT_CAPITAL_PROXY = 1.0
 
 
 @dataclass
@@ -291,6 +295,210 @@ def _add_units_for_color(
             continue
         key = (color_id, size_id)
         line_qty[key] = line_qty.get(key, 0) + qty
+
+
+def _load_assorti_bundle_type_flags(
+    db: Session,
+    bundle_type_ids: list[int],
+) -> dict[int, bool]:
+    if not bundle_type_ids:
+        return {}
+
+    bundle_types = (
+        db.query(BundleType)
+        .filter(BundleType.id.in_(bundle_type_ids))
+        .all()
+    )
+
+    result: dict[int, bool] = {bundle_type_id: False for bundle_type_id in bundle_type_ids}
+    for bundle_type in bundle_types:
+        code = (bundle_type.code or "").strip().lower()
+        name = (bundle_type.name or "").strip().lower()
+        text = f"{code} {name}"
+        result[bundle_type.id] = ("assorti" in text) or ("ассорти" in text)
+
+    return result
+
+
+def _build_layer1_stock_health_metrics(
+    *,
+    bundle_type_ids: list[int],
+    demand_by_bundle: dict[int, float],
+    recipe_colors_by_bundle: dict[int, set[int]],
+    color_to_sizes: dict[int, list[int]],
+    size_weights: dict[int, float],
+    current_stock_by_color_size: dict[tuple[int, int], int],
+    in_flight_effective_by_color_size: dict[tuple[int, int], int],
+    in_flight_eta_days_by_color_size: dict[tuple[int, int], int],
+    assorti_by_bundle_type: dict[int, bool],
+    reorder_point_days: int,
+    target_coverage_days: int,
+) -> list[dict[str, int | float | None]]:
+    velocity_main_by_color_size: dict[tuple[int, int], float] = defaultdict(float)
+    velocity_assorti_by_color_size: dict[tuple[int, int], float] = defaultdict(float)
+
+    for bundle_type_id in bundle_type_ids:
+        daily_sales = float(demand_by_bundle.get(bundle_type_id, 0.0))
+        if daily_sales <= 0:
+            continue
+
+        recipe_colors = sorted(recipe_colors_by_bundle.get(bundle_type_id, set()))
+        if not recipe_colors:
+            continue
+
+        for color_id in recipe_colors:
+            sizes_for_color = color_to_sizes.get(color_id, [])
+            if not sizes_for_color:
+                continue
+
+            local_size_weights = _normalize_weights(
+                sizes_for_color,
+                {size_id: size_weights.get(size_id, 0.0) for size_id in sizes_for_color},
+            )
+
+            for size_id, weight in local_size_weights.items():
+                key = (color_id, size_id)
+                velocity = daily_sales * float(weight)
+                if assorti_by_bundle_type.get(bundle_type_id, False):
+                    velocity_assorti_by_color_size[key] += velocity
+                else:
+                    velocity_main_by_color_size[key] += velocity
+
+    all_keys = sorted(
+        set(current_stock_by_color_size.keys())
+        | set(in_flight_effective_by_color_size.keys())
+        | set(velocity_main_by_color_size.keys())
+        | set(velocity_assorti_by_color_size.keys()),
+        key=lambda item: (item[0], item[1]),
+    )
+
+    metrics: list[dict[str, int | float | None]] = []
+    reorder_point_anchor = max(reorder_point_days, 1)
+    overstock_anchor = max(target_coverage_days * 2, 1)
+
+    for color_id, size_id in all_keys:
+        key = (color_id, size_id)
+        current_stock = max(int(current_stock_by_color_size.get(key, 0)), 0)
+        in_flight_effective = max(int(in_flight_effective_by_color_size.get(key, 0)), 0)
+        eta_days = in_flight_eta_days_by_color_size.get(key)
+
+        velocity_main = max(float(velocity_main_by_color_size.get(key, 0.0)), 0.0)
+        velocity_assorti = max(float(velocity_assorti_by_color_size.get(key, 0.0)), 0.0)
+        velocity_total = velocity_main + velocity_assorti
+
+        available_units = current_stock + in_flight_effective
+        if velocity_total <= 0:
+            coverage_days = 9999.0
+            stockout_risk = 0.0
+        else:
+            coverage_days = float(available_units) / velocity_total
+            stockout_risk = max(
+                0.0,
+                min(
+                    (float(reorder_point_anchor) - coverage_days) / float(reorder_point_anchor),
+                    1.0,
+                ),
+            )
+
+        overstock_risk = max(
+            0.0,
+            min(
+                (coverage_days - float(overstock_anchor)) / float(overstock_anchor),
+                1.0,
+            ),
+        )
+
+        if velocity_total > 0:
+            gross_margin = (
+                (velocity_main * LAYER2_MAIN_MARGIN_PROXY)
+                + (velocity_assorti * LAYER2_ASSORTI_MARGIN_PROXY)
+            ) / velocity_total
+        else:
+            gross_margin = 0.0
+
+        capital_locked = float(available_units) * LAYER2_UNIT_CAPITAL_PROXY
+
+        metrics.append(
+            {
+                "color_id": color_id,
+                "size_id": size_id,
+                "velocity_main": round(velocity_main, 4),
+                "velocity_assorti": round(velocity_assorti, 4),
+                "coverage_days": round(coverage_days, 2),
+                "current_stock": current_stock,
+                "in_flight": in_flight_effective,
+                "eta_days": int(eta_days) if eta_days is not None else None,
+                "gross_margin": round(gross_margin, 4),
+                "capital_locked": round(capital_locked, 2),
+                "stockout_risk": round(stockout_risk, 4),
+                "overstock_risk": round(overstock_risk, 4),
+            }
+        )
+
+    return metrics
+
+
+def _build_layer2_allocation_decisions(
+    *,
+    stock_health_metrics: list[dict[str, int | float | None]],
+    lead_time_days_total: int,
+) -> tuple[list[dict[str, int | float | str]], dict[str, int]]:
+    decisions: list[dict[str, int | float | str]] = []
+    summary = {
+        "main": 0,
+        "assorti": 0,
+        "hold": 0,
+    }
+
+    for metric in stock_health_metrics:
+        eta_days_raw = metric.get("eta_days")
+        eta_days = int(eta_days_raw) if isinstance(eta_days_raw, int) else lead_time_days_total
+        horizon_days = max(eta_days, 1)
+
+        current_stock = max(int(metric.get("current_stock", 0)), 0)
+        in_flight = max(int(metric.get("in_flight", 0)), 0)
+        available_units = current_stock + in_flight
+
+        velocity_main = max(float(metric.get("velocity_main", 0.0)), 0.0)
+        velocity_assorti = max(float(metric.get("velocity_assorti", 0.0)), 0.0)
+
+        units_main_until_eta = min(float(available_units), velocity_main * float(horizon_days))
+        units_assorti_until_eta = min(float(available_units), velocity_assorti * float(horizon_days))
+
+        profit_if_main_until_eta = units_main_until_eta * LAYER2_MAIN_MARGIN_PROXY
+        profit_if_assorti_until_eta = units_assorti_until_eta * LAYER2_ASSORTI_MARGIN_PROXY
+
+        capital_locked = max(float(metric.get("capital_locked", 0.0)), 0.0)
+        if capital_locked > 0:
+            gmroi_main = profit_if_main_until_eta / capital_locked
+            gmroi_assorti = profit_if_assorti_until_eta / capital_locked
+        else:
+            gmroi_main = 0.0
+            gmroi_assorti = 0.0
+
+        if profit_if_main_until_eta > profit_if_assorti_until_eta:
+            allocation_decision = "main"
+        elif profit_if_assorti_until_eta > profit_if_main_until_eta:
+            allocation_decision = "assorti"
+        else:
+            allocation_decision = "hold"
+
+        summary[allocation_decision] += 1
+
+        decisions.append(
+            {
+                "color_id": int(metric["color_id"]),
+                "size_id": int(metric["size_id"]),
+                "eta_days": horizon_days,
+                "profit_if_main_until_eta": round(profit_if_main_until_eta, 4),
+                "profit_if_assorti_until_eta": round(profit_if_assorti_until_eta, 4),
+                "gmroi_main": round(gmroi_main, 4),
+                "gmroi_assorti": round(gmroi_assorti, 4),
+                "allocation_decision": allocation_decision,
+            }
+        )
+
+    return decisions, summary
 
 
 def _resolve_elastic_binding_scope(
@@ -1186,6 +1394,7 @@ def build_production_order_proposal(
     stock_by_color_size: dict[tuple[int, int], int] = {}
     for sku in sku_units:
         stock_by_color_size[(sku.color_id, sku.size_id)] = stock_by_sku_id.get(sku.id, 0)
+    current_stock_by_color_size = dict(stock_by_color_size)
 
     effective_in_flight_supply = list(request.in_flight_supply)
     in_flight_source = "request"
@@ -1205,6 +1414,8 @@ def build_production_order_proposal(
     in_flight_raw_qty_total = 0
     in_flight_effective_qty_total = 0
     in_flight_effective_lines = 0
+    in_flight_effective_by_color_size: dict[tuple[int, int], int] = defaultdict(int)
+    in_flight_eta_days_by_color_size: dict[tuple[int, int], int] = {}
 
     # Add in-flight supply with ETA/stage sensitivity.
     for in_flight in effective_in_flight_supply:
@@ -1220,9 +1431,14 @@ def build_production_order_proposal(
             continue
 
         in_flight_raw_qty_total += raw_qty
+        eta_days = int(in_flight.eta_days)
+        existing_eta = in_flight_eta_days_by_color_size.get(key)
+        if existing_eta is None or eta_days < existing_eta:
+            in_flight_eta_days_by_color_size[key] = eta_days
+
         effective_qty = _estimate_effective_in_flight_qty(
             qty=raw_qty,
-            eta_days=int(in_flight.eta_days),
+            eta_days=eta_days,
             lead_time_days_total=settings.lead_time_days_total,
             stage=getattr(in_flight, "stage", "other"),
         )
@@ -1231,6 +1447,7 @@ def build_production_order_proposal(
 
         in_flight_effective_qty_total += effective_qty
         in_flight_effective_lines += 1
+        in_flight_effective_by_color_size[key] += effective_qty
 
         stock_by_color_size[key] = stock_by_color_size.get(key, 0) + effective_qty
 
@@ -1292,6 +1509,42 @@ def build_production_order_proposal(
 
     available_bundles_for_cover = ready_bundle_stock_total + competition_raw_bundle_stock
     reorder_point_days = settings.lead_time_days_total + settings.safety_stock_days
+
+    assorti_by_bundle_type = _load_assorti_bundle_type_flags(
+        db=db,
+        bundle_type_ids=bundle_type_ids,
+    )
+    layer1_stock_health_metrics = _build_layer1_stock_health_metrics(
+        bundle_type_ids=bundle_type_ids,
+        demand_by_bundle=demand_by_bundle,
+        recipe_colors_by_bundle=recipe_colors_by_bundle,
+        color_to_sizes=color_to_sizes,
+        size_weights=size_weights,
+        current_stock_by_color_size=current_stock_by_color_size,
+        in_flight_effective_by_color_size=dict(in_flight_effective_by_color_size),
+        in_flight_eta_days_by_color_size=in_flight_eta_days_by_color_size,
+        assorti_by_bundle_type=assorti_by_bundle_type,
+        reorder_point_days=reorder_point_days,
+        target_coverage_days=settings.target_coverage_days,
+    )
+    layer2_allocation_decisions, layer2_allocation_summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=layer1_stock_health_metrics,
+        lead_time_days_total=settings.lead_time_days_total,
+    )
+    layer1_avg_coverage_days = (
+        round(
+            sum(float(item["coverage_days"]) for item in layer1_stock_health_metrics)
+            / len(layer1_stock_health_metrics),
+            2,
+        )
+        if layer1_stock_health_metrics
+        else 0.0
+    )
+    layer1_high_stockout_risk_count = sum(
+        1
+        for item in layer1_stock_health_metrics
+        if float(item["stockout_risk"]) >= 0.5
+    )
 
     if total_daily_sales <= 0:
         days_of_cover_estimate = 9999.0
@@ -1612,6 +1865,17 @@ def build_production_order_proposal(
                 f"in_flight={in_flight_source}, bundle_stock={bundle_stock_source}."
             ),
             (
+                f"Layer 1 stock health: sku_count={len(layer1_stock_health_metrics)}, "
+                f"avg_coverage_days={layer1_avg_coverage_days}, "
+                f"high_stockout_risk_skus={layer1_high_stockout_risk_count}."
+            ),
+            (
+                "Layer 2 allocation: method=time_window_gmroi_proxy, "
+                f"main={layer2_allocation_summary['main']}, "
+                f"assorti={layer2_allocation_summary['assorti']}, "
+                f"hold={layer2_allocation_summary['hold']}."
+            ),
+            (
                 f"Elastic scope: mode={elastic_scope_mode}, "
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
                 f"scoped_settings={len(scoped_elastic_rows)}, "
@@ -1643,6 +1907,24 @@ def build_production_order_proposal(
                 "lead_time_days_total": settings.lead_time_days_total,
                 "safety_stock_days": settings.safety_stock_days,
                 "reorder_point_days": reorder_point_days,
+            },
+            "layer_1_stock_health": {
+                "metrics": layer1_stock_health_metrics,
+                "summary": {
+                    "sku_count": len(layer1_stock_health_metrics),
+                    "avg_coverage_days": layer1_avg_coverage_days,
+                    "high_stockout_risk_skus": layer1_high_stockout_risk_count,
+                },
+                "proxies": {
+                    "main_margin": LAYER2_MAIN_MARGIN_PROXY,
+                    "assorti_margin": LAYER2_ASSORTI_MARGIN_PROXY,
+                    "unit_capital": LAYER2_UNIT_CAPITAL_PROXY,
+                },
+            },
+            "layer_2_allocation": {
+                "method": "time_window_gmroi_proxy",
+                "decisions": layer2_allocation_decisions,
+                "summary": layer2_allocation_summary,
             },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,
