@@ -44,9 +44,10 @@
 - Per-scenario outputs include: capital required, turnover proxy, stockout risk proxy, assorti sustainability proxy/impact.
 - Finalize calibration rules and intervention handoff contract.
 
-### 2.5 Layer 5 - Intervention signals (planned)
-- If unavoidable stockout is detected: emit intervention flags (accelerate production / increase price to slow velocity).
-- Signal-only behavior in v1 (no dynamic pricing model).
+### 2.5 Layer 5 - Intervention signals (in progress)
+- Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
+- Current signal set: `accelerate_production` / `increase_price_to_slow_velocity`.
+- Keep signal-only behavior in v1 (no dynamic pricing model).
 
 ## v1 Stable Alpha boundaries (strict)
 - Deterministic, explainable, test-covered.
@@ -65,8 +66,9 @@
 1. Complete Layer 1 metric contract and lock regression tests.
 2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
 3. Finalize Layer 4 scenario contract and stabilize regression coverage.
-4. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-4 stabilizes.
-5. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
+4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
+5. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
+6. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.

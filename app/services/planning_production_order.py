@@ -54,6 +54,7 @@ LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "assorti": 0.75,
     "hold": 0.35,
 }
+LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
 
 
 @dataclass
@@ -646,6 +647,53 @@ def _build_layer4_scenarios(
         )
 
     return scenarios
+
+
+def _build_layer5_intervention_signals(
+    *,
+    risk_level: str,
+    layer4_scenarios: list[dict[str, str | int | float]],
+    in_flight_effective_qty_total: int,
+) -> dict[str, str | bool | float | list[str]]:
+    aggressive = next(
+        (
+            item
+            for item in layer4_scenarios
+            if str(item.get("scenario", "")).strip().lower() == "aggressive"
+        ),
+        None,
+    )
+
+    aggressive_stockout_risk = (
+        float(aggressive.get("stockout_risk_proxy", 0.0))
+        if aggressive is not None
+        else 0.0
+    )
+
+    unavoidable_stockout = (
+        risk_level == "critical"
+        and aggressive_stockout_risk >= LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    )
+
+    signals: list[str] = []
+    reason = "none"
+
+    if unavoidable_stockout:
+        if in_flight_effective_qty_total <= 0:
+            signals.append("accelerate_production")
+            reason = "no_effective_in_flight_and_high_stockout_risk"
+        else:
+            signals.append("increase_price_to_slow_velocity")
+            reason = "in_flight_present_but_stockout_risk_persists"
+
+    return {
+        "method": "deterministic_unavoidable_stockout_flags",
+        "unavoidable_stockout": unavoidable_stockout,
+        "signals": signals,
+        "reason": reason,
+        "aggressive_stockout_risk_proxy": round(aggressive_stockout_risk, 4),
+        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    }
 
 
 def _resolve_elastic_binding_scope(
@@ -1954,6 +2002,11 @@ def build_production_order_proposal(
         expected_horizon_sales=expected_horizon_sales,
         layer3_purchase_shaping=layer3_purchase_shaping,
     )
+    layer5_intervention = _build_layer5_intervention_signals(
+        risk_level=risk_level,
+        layer4_scenarios=layer4_scenarios,
+        in_flight_effective_qty_total=in_flight_effective_qty_total,
+    )
     action = _choose_action(
         risk_level=risk_level,
         candidate_units=candidate_total_units,
@@ -2056,6 +2109,15 @@ def build_production_order_proposal(
                 f"Aggressive(capital={layer4_scenarios[2]['total_capital_required']},risk={layer4_scenarios[2]['stockout_risk_proxy']})."
             ),
             (
+                "Layer 5 intervention: "
+                f"unavoidable_stockout={layer5_intervention['unavoidable_stockout']}, "
+                f"signals={layer5_intervention['signals']}, "
+                f"reason={layer5_intervention['reason']}, "
+                "aggressive_stockout_risk="
+                f"{layer5_intervention['aggressive_stockout_risk_proxy']}, "
+                f"threshold={layer5_intervention['risk_threshold']}."
+            ),
+            (
                 f"Elastic scope: mode={elastic_scope_mode}, "
                 f"applicable_types={sorted(applicable_elastic_type_ids)}, "
                 f"scoped_settings={len(scoped_elastic_rows)}, "
@@ -2115,6 +2177,7 @@ def build_production_order_proposal(
                 "method": "deterministic_factor_scenarios",
                 "scenarios": layer4_scenarios,
             },
+            "layer_5_intervention": layer5_intervention,
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,
                 "days": economic_buffer_days,

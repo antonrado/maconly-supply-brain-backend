@@ -7,6 +7,10 @@ from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
+from app.services.planning_production_order import (
+    LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    _build_layer5_intervention_signals,
+)
 from app.models.models import (
     Article,
     ArticleWbMapping,
@@ -736,7 +740,7 @@ def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(c
     }
 
 
-def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_meta(client, db_session):
+def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_meta(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
     payload = _build_payload(
@@ -758,6 +762,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_meta(clie
     layer2 = meta["layer_2_allocation"]
     layer3 = meta["layer_3_purchase_shaping"]
     layer4 = meta["layer_4_scenarios"]
+    layer5 = meta["layer_5_intervention"]
 
     assert layer1["summary"]["sku_count"] == 4
     assert len(layer1["metrics"]) == 4
@@ -812,6 +817,16 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_meta(clie
     assert balanced["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
     assert aggressive["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
 
+    assert layer5["method"] == "deterministic_unavoidable_stockout_flags"
+    assert layer5["risk_threshold"] == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    assert isinstance(layer5["unavoidable_stockout"], bool)
+    assert isinstance(layer5["signals"], list)
+    assert layer5["reason"] in {
+        "none",
+        "no_effective_in_flight_and_high_stockout_risk",
+        "in_flight_present_but_stockout_risk_persists",
+    }
+
     layer1_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
         "",
@@ -828,11 +843,17 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_meta(clie
         (step for step in body["explanation"]["steps"] if "Layer 4 scenarios" in step),
         "",
     )
+    layer5_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 5 intervention" in step),
+        "",
+    )
     assert "sku_count=4" in layer1_step
     assert "main=4" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "Conservative(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
+    assert "unavoidable_stockout=" in layer5_step
+    assert "signals=" in layer5_step
 
     if body["recommendation"] is not None and body["recommendation"]["lines"]:
         assert all(
@@ -930,6 +951,75 @@ def test_production_order_proposal_layer3_shaping_reduces_qty_for_assorti_decisi
     assert layer4_assorti[0]["assorti_sustainability_impact"] == "negative"
     assert layer4_assorti[1]["assorti_sustainability_impact"] == "neutral"
     assert layer4_assorti[2]["assorti_sustainability_impact"] == "positive"
+
+
+def test_layer5_intervention_signals_accelerate_when_no_in_flight():
+    scenarios = [
+        {"scenario": "Conservative", "stockout_risk_proxy": 0.70},
+        {"scenario": "Balanced", "stockout_risk_proxy": 0.60},
+        {"scenario": "Aggressive", "stockout_risk_proxy": 0.40},
+    ]
+
+    result = _build_layer5_intervention_signals(
+        risk_level="critical",
+        layer4_scenarios=scenarios,
+        in_flight_effective_qty_total=0,
+    )
+
+    assert result == {
+        "method": "deterministic_unavoidable_stockout_flags",
+        "unavoidable_stockout": True,
+        "signals": ["accelerate_production"],
+        "reason": "no_effective_in_flight_and_high_stockout_risk",
+        "aggressive_stockout_risk_proxy": 0.4,
+        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    }
+
+
+def test_layer5_intervention_signals_price_slowdown_when_in_flight_present():
+    scenarios = [
+        {"scenario": "Conservative", "stockout_risk_proxy": 0.70},
+        {"scenario": "Balanced", "stockout_risk_proxy": 0.60},
+        {"scenario": "Aggressive", "stockout_risk_proxy": 0.31},
+    ]
+
+    result = _build_layer5_intervention_signals(
+        risk_level="critical",
+        layer4_scenarios=scenarios,
+        in_flight_effective_qty_total=50,
+    )
+
+    assert result == {
+        "method": "deterministic_unavoidable_stockout_flags",
+        "unavoidable_stockout": True,
+        "signals": ["increase_price_to_slow_velocity"],
+        "reason": "in_flight_present_but_stockout_risk_persists",
+        "aggressive_stockout_risk_proxy": 0.31,
+        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    }
+
+
+def test_layer5_intervention_signals_not_triggered_when_not_unavoidable():
+    scenarios = [
+        {"scenario": "Conservative", "stockout_risk_proxy": 0.20},
+        {"scenario": "Balanced", "stockout_risk_proxy": 0.10},
+        {"scenario": "Aggressive", "stockout_risk_proxy": 0.05},
+    ]
+
+    result = _build_layer5_intervention_signals(
+        risk_level="warning",
+        layer4_scenarios=scenarios,
+        in_flight_effective_qty_total=0,
+    )
+
+    assert result == {
+        "method": "deterministic_unavoidable_stockout_flags",
+        "unavoidable_stockout": False,
+        "signals": [],
+        "reason": "none",
+        "aggressive_stockout_risk_proxy": 0.05,
+        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    }
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):
