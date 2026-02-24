@@ -819,6 +819,8 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
 
     assert "observation_window_days=30" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
+    assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 2.0}}" in wb_adapter_step
+    assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 20}}" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=20" in stock_step
 
@@ -894,6 +896,10 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert proposal_response.status_code == 200, proposal_response.text
 
     body = proposal_response.json()
+    wb_adapter_step = next(
+        (step for step in body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
     source_step = next(
         (step for step in body["explanation"]["steps"] if "Источник параметров" in step),
         "",
@@ -903,6 +909,8 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
         "",
     )
 
+    assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 1.0}}" in wb_adapter_step
+    assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 12}}" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=12" in stock_step
 
