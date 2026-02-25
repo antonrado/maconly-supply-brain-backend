@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "po-api-smoke", "context", "verify", "verify-live")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "po-api-smoke", "po-api-smoke-positive", "context", "verify", "verify-live")]
     [string]$Command
 )
 
@@ -195,7 +195,7 @@ function Invoke-SmokeTests {
     exit 1
 }
 
-function Invoke-ProductionOrderApiSmoke {
+function Invoke-ProductionOrderApiSmokePositive {
     Write-Host "[po-api-smoke] syncing backend image with current workspace..."
     docker compose -f $ComposeFile up -d --build backend
     if ($LASTEXITCODE -ne 0) {
@@ -236,6 +236,12 @@ function Invoke-ProductionOrderApiSmoke {
     Invoke-ApiExpectedStatus -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"'
     Invoke-ApiExpectedStatus -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"'
 
+    return $SeedData
+}
+
+function Invoke-ProductionOrderApiSmoke {
+    Invoke-ProductionOrderApiSmokePositive | Out-Null
+
     $UnknownArticleDirectPayload = '{"article_id":999999999,"planning_horizon_days":90,"bundle_daily_sales":[{"bundle_type_id":1,"daily_sales":1.0}],"bundle_stock":[{"bundle_type_id":1,"wb_qty":0,"local_qty":0}],"in_flight_supply":[],"size_weights":{}}'
     Invoke-ApiExpectedStatus -Name "production-order-direct-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 404 -JsonBody $UnknownArticleDirectPayload -ExpectedBodyContains 'Article not found'
 
@@ -271,6 +277,9 @@ switch ($Command) {
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke
+    }
+    "po-api-smoke-positive" {
+        Invoke-ProductionOrderApiSmokePositive | Out-Null
     }
     "context" {
         Invoke-ContextGuard

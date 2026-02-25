@@ -15,12 +15,20 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 logs
 .\scripts\dev.ps1 health
 .\scripts\dev.ps1 proposal
+.\scripts\dev.ps1 po-api-smoke-positive
 .\scripts\dev.ps1 po-api-smoke
 .\scripts\dev.ps1 test
 .\scripts\dev.ps1 context
 .\scripts\dev.ps1 verify
 .\scripts\dev.ps1 verify-live
 ```
+
+`po-api-smoke-positive` validates only deterministic positive live API checks:
+- Auto-syncs backend image and waits for health readiness
+- Seeds deterministic smoke fixture data
+- `GET /api/v1/planning/core/health` -> `200`
+- `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
+- `POST /api/v1/planning/core/production-order/proposal/from-wb` (happy-path payload) -> `200`
 
 `po-api-smoke` validates live API connectivity for production-order routes with deterministic expected statuses:
 - Auto-syncs backend image (`docker compose up -d --build backend`) and waits for running state
