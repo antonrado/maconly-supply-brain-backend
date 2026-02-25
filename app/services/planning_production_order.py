@@ -1060,6 +1060,11 @@ def _build_layer2_contract_summary(
     layer2_allocation_summary: dict[str, int],
 ) -> dict[str, str | int | dict[str, bool] | dict[str, int]]:
     expected_decisions = ("main", "assorti", "hold")
+    expected_decision_reason_by_decision = {
+        "main": "profit_main_gt_assorti",
+        "assorti": "profit_assorti_gt_main",
+        "hold": "profit_tie_hold",
+    }
 
     summary_expected = {
         decision: max(int(layer2_allocation_summary.get(decision, 0)), 0)
@@ -1074,6 +1079,12 @@ def _build_layer2_contract_summary(
     non_negative_gmroi_metrics = True
     eta_days_positive = True
     tie_break_hold_when_equal_profit = True
+    decision_reason_matches_allocation = True
+    tie_break_applied_matches_profit_tie = True
+    near_tie_matches_profit_gap_threshold = True
+    profit_gap_consistent_with_profits = True
+    gmroi_gap_consistent_with_gmroi = True
+    capital_locked_metric_valid = True
 
     for decision_item in layer2_allocation_decisions:
         color_id_raw = decision_item.get("color_id")
@@ -1095,26 +1106,73 @@ def _build_layer2_contract_summary(
         else:
             unknown_decisions_found = True
 
+        decision_reason = str(decision_item.get("decision_reason", "")).strip()
+        expected_decision_reason = expected_decision_reason_by_decision.get(allocation_decision)
+        if expected_decision_reason is None or decision_reason != expected_decision_reason:
+            decision_reason_matches_allocation = False
+
         try:
             profit_main = float(decision_item.get("profit_if_main_until_eta", 0.0))
             profit_assorti = float(decision_item.get("profit_if_assorti_until_eta", 0.0))
         except (TypeError, ValueError):
             non_negative_profit_metrics = False
             tie_break_hold_when_equal_profit = False
+            tie_break_applied_matches_profit_tie = False
+            near_tie_matches_profit_gap_threshold = False
+            profit_gap_consistent_with_profits = False
         else:
+            profit_gap_until_eta_expected = abs(profit_main - profit_assorti)
             if profit_main < 0 or profit_assorti < 0:
                 non_negative_profit_metrics = False
             if abs(profit_main - profit_assorti) <= 1e-9 and allocation_decision != "hold":
                 tie_break_hold_when_equal_profit = False
+
+            tie_break_applied_raw = decision_item.get("tie_break_applied")
+            tie_expected = profit_gap_until_eta_expected <= 1e-9
+            if not isinstance(tie_break_applied_raw, bool) or tie_break_applied_raw != tie_expected:
+                tie_break_applied_matches_profit_tie = False
+
+            near_tie_raw = decision_item.get("near_tie")
+            near_tie_expected = (
+                profit_gap_until_eta_expected <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+            )
+            if not isinstance(near_tie_raw, bool) or near_tie_raw != near_tie_expected:
+                near_tie_matches_profit_gap_threshold = False
+
+            try:
+                profit_gap_reported = float(decision_item.get("profit_gap_until_eta"))
+            except (TypeError, ValueError):
+                profit_gap_consistent_with_profits = False
+            else:
+                if abs(profit_gap_reported - profit_gap_until_eta_expected) > 1e-4:
+                    profit_gap_consistent_with_profits = False
 
         try:
             gmroi_main = float(decision_item.get("gmroi_main", 0.0))
             gmroi_assorti = float(decision_item.get("gmroi_assorti", 0.0))
         except (TypeError, ValueError):
             non_negative_gmroi_metrics = False
+            gmroi_gap_consistent_with_gmroi = False
         else:
             if gmroi_main < 0 or gmroi_assorti < 0:
                 non_negative_gmroi_metrics = False
+
+            gmroi_gap_expected = abs(gmroi_main - gmroi_assorti)
+            try:
+                gmroi_gap_reported = float(decision_item.get("gmroi_gap"))
+            except (TypeError, ValueError):
+                gmroi_gap_consistent_with_gmroi = False
+            else:
+                if abs(gmroi_gap_reported - gmroi_gap_expected) > 1e-4:
+                    gmroi_gap_consistent_with_gmroi = False
+
+        try:
+            capital_locked = float(decision_item.get("capital_locked"))
+        except (TypeError, ValueError):
+            capital_locked_metric_valid = False
+        else:
+            if capital_locked < 0:
+                capital_locked_metric_valid = False
 
         try:
             eta_days = int(decision_item.get("eta_days", 0))
@@ -1135,6 +1193,12 @@ def _build_layer2_contract_summary(
         "non_negative_gmroi_metrics": non_negative_gmroi_metrics,
         "eta_days_positive": eta_days_positive,
         "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_profit,
+        "decision_reason_matches_allocation": decision_reason_matches_allocation,
+        "tie_break_applied_matches_profit_tie": tie_break_applied_matches_profit_tie,
+        "near_tie_matches_profit_gap_threshold": near_tie_matches_profit_gap_threshold,
+        "profit_gap_consistent_with_profits": profit_gap_consistent_with_profits,
+        "gmroi_gap_consistent_with_gmroi": gmroi_gap_consistent_with_gmroi,
+        "capital_locked_metric_valid": capital_locked_metric_valid,
     }
     return {
         "version": LAYER2_CONTRACT_VERSION,

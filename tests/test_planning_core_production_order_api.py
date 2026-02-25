@@ -206,9 +206,15 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
             "eta_days": 1,
             "profit_if_main_until_eta": 0.8,
             "profit_if_assorti_until_eta": 0.8,
+            "profit_gap_until_eta": 0.3,
+            "capital_locked": -1.0,
             "gmroi_main": 0.1,
             "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.2,
             "allocation_decision": "main",
+            "decision_reason": "profit_main_gt_assorti",
+            "tie_break_applied": False,
+            "near_tie": False,
         },
         {
             "color_id": 10,
@@ -216,9 +222,15 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
             "eta_days": 0,
             "profit_if_main_until_eta": -0.1,
             "profit_if_assorti_until_eta": 0.2,
+            "profit_gap_until_eta": 0.1,
+            "capital_locked": "invalid",
             "gmroi_main": -0.3,
             "gmroi_assorti": 0.1,
+            "gmroi_gap": "invalid",
             "allocation_decision": "invalid",
+            "decision_reason": "profit_tie_hold",
+            "tie_break_applied": "yes",
+            "near_tie": "yes",
         },
     ]
     summary = {"main": 0, "assorti": 0, "hold": 1}
@@ -242,6 +254,12 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "non_negative_gmroi_metrics": False,
         "eta_days_positive": False,
         "tie_break_hold_when_equal_profit": False,
+        "decision_reason_matches_allocation": False,
+        "tie_break_applied_matches_profit_tie": False,
+        "near_tie_matches_profit_gap_threshold": False,
+        "profit_gap_consistent_with_profits": False,
+        "gmroi_gap_consistent_with_gmroi": False,
+        "capital_locked_metric_valid": False,
     }
 
 
@@ -1252,6 +1270,12 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "non_negative_gmroi_metrics": True,
             "eta_days_positive": True,
             "tie_break_hold_when_equal_profit": True,
+            "decision_reason_matches_allocation": True,
+            "tie_break_applied_matches_profit_tie": True,
+            "near_tie_matches_profit_gap_threshold": True,
+            "profit_gap_consistent_with_profits": True,
+            "gmroi_gap_consistent_with_gmroi": True,
+            "capital_locked_metric_valid": True,
         },
     }
 

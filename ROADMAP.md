@@ -36,7 +36,7 @@
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
 - Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
-- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, decision validity, tie-break invariants) and projected in compact explainability mode.
+- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, decision validity, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, capital metric sanity) and projected in compact explainability mode.
 - No hard-coded "critical SKU" classifier as primary allocator.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
