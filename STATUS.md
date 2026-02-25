@@ -70,17 +70,17 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `production_order_layer3_overstock_dampen_max`
   - `production_order_layer5_unavoidable_stockout_risk_threshold`
   - `production_order_layer5_accelerate_production_risk_threshold`
-  - Global planning settings persistence added:
-    - `default_production_order_size_weight_settings`
-    - `default_production_order_elastic_bindings`
-    - `default_production_order_in_flight_supply_defaults`
-    - `default_production_order_assorti_bundle_type_ids`
-    - `default_production_order_freshness_sales_stale_after_days`
-    - `default_production_order_freshness_stock_stale_after_days`
-    - `default_production_order_layer3_stockout_boost_max`
-    - `default_production_order_layer3_overstock_dampen_max`
-    - `default_production_order_layer5_unavoidable_stockout_risk_threshold`
-    - `default_production_order_layer5_accelerate_production_risk_threshold`
+- Global planning settings persistence added:
+  - `default_production_order_size_weight_settings`
+  - `default_production_order_elastic_bindings`
+  - `default_production_order_in_flight_supply_defaults`
+  - `default_production_order_assorti_bundle_type_ids`
+  - `default_production_order_freshness_sales_stale_after_days`
+  - `default_production_order_freshness_stock_stale_after_days`
+  - `default_production_order_layer3_stockout_boost_max`
+  - `default_production_order_layer3_overstock_dampen_max`
+  - `default_production_order_layer5_unavoidable_stockout_risk_threshold`
+  - `default_production_order_layer5_accelerate_production_risk_threshold`
 - Tests added for production-order endpoint:
   - `tests/test_planning_core_production_order_api.py`
 - Tests added for production-order admin settings:
