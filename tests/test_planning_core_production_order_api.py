@@ -1721,6 +1721,55 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     }
 
 
+def test_production_order_proposal_layer5_signals_do_not_override_recommendation_action(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    base_payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    base_payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    base_payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    base_payload["overrides"]["allow_order_with_buffer"] = False
+
+    low_threshold_payload = deepcopy(base_payload)
+    low_threshold_payload["overrides"]["layer5_unavoidable_stockout_risk_threshold"] = 0.0
+    low_threshold_payload["overrides"]["layer5_accelerate_production_risk_threshold"] = 0.0
+
+    high_threshold_payload = deepcopy(base_payload)
+    high_threshold_payload["overrides"]["layer5_unavoidable_stockout_risk_threshold"] = 1.0
+    high_threshold_payload["overrides"]["layer5_accelerate_production_risk_threshold"] = 1.0
+
+    low_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=low_threshold_payload,
+    )
+    assert low_response.status_code == 200, low_response.text
+
+    high_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=high_threshold_payload,
+    )
+    assert high_response.status_code == 200, high_response.text
+
+    low_body = low_response.json()
+    high_body = high_response.json()
+
+    assert _business_projection(low_body) == _business_projection(high_body)
+    assert low_body["recommendation"]["action"] == "order_minimum_only"
+    assert high_body["recommendation"]["action"] == "order_minimum_only"
+
+    low_layer5 = low_body["explanation"]["meta"]["layer_5_intervention"]
+    high_layer5 = high_body["explanation"]["meta"]["layer_5_intervention"]
+
+    assert low_layer5["signals"] == ["accelerate_production"]
+    assert low_layer5["reason"] == "no_effective_in_flight_and_high_stockout_risk"
+    assert high_layer5["signals"] == []
+    assert high_layer5["reason"] == "none"
+
+
 def test_production_order_proposal_layer5_threshold_order_is_clamped_when_admin_invalid(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
