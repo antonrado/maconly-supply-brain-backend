@@ -62,6 +62,30 @@ LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "assorti": 0.75,
     "hold": 0.35,
 }
+LAYER3_CALIBRATION_METHOD = "risk_weighted_factor_clamp"
+LAYER3_STOCKOUT_BOOST_MAX = 0.30
+LAYER3_OVERSTOCK_DAMPEN_MAX = 0.40
+LAYER3_STOCKOUT_WEIGHT_BY_DECISION: dict[str, float] = {
+    "main": 1.0,
+    "assorti": 0.7,
+    "hold": 0.15,
+}
+LAYER3_OVERSTOCK_WEIGHT_BY_DECISION: dict[str, float] = {
+    "main": 0.35,
+    "assorti": 0.6,
+    "hold": 1.0,
+}
+LAYER3_FACTOR_BOUNDS: dict[str, tuple[float, float]] = {
+    "main": (0.65, 1.25),
+    "assorti": (0.30, 0.95),
+    "hold": (0.10, 0.60),
+}
+LAYER4_SCENARIO_ORDER: tuple[str, ...] = (
+    "Conservative",
+    "Balanced",
+    "Aggressive",
+)
+LAYER4_CONTRACT_VERSION = "v1_alpha"
 LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
     ("Conservative", 0.80),
     ("Balanced", 1.00),
@@ -428,11 +452,14 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
             "method": layer3_raw.get("method"),
             "factors": layer3_raw.get("factors", {}),
             "qty_before": layer3_raw.get("qty_before", 0),
+            "qty_after_base": layer3_raw.get("qty_after_base", 0),
             "qty_after": layer3_raw.get("qty_after", 0),
+            "qty_delta_vs_base": layer3_raw.get("qty_delta_vs_base", 0),
             "adjusted_lines": layer3_raw.get("adjusted_lines", 0),
             "main_lines": layer3_raw.get("main_lines", 0),
             "assorti_lines": layer3_raw.get("assorti_lines", 0),
             "hold_lines": layer3_raw.get("hold_lines", 0),
+            "calibration": layer3_raw.get("calibration", {}),
         }
 
     layer4_raw = meta.get("layer_4_scenarios")
@@ -456,6 +483,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
         compact_meta["layer_4_scenarios"] = {
             "method": layer4_raw.get("method"),
             "factors": layer4_raw.get("factors", []),
+            "contract": layer4_raw.get("contract", {}),
             "scenarios": scenarios_compact,
         }
 
@@ -785,7 +813,43 @@ def _apply_layer3_purchase_shaping(
     *,
     line_qty: dict[tuple[int, int], int],
     layer2_allocation_decisions: list[dict[str, int | float | str]],
-) -> tuple[dict[tuple[int, int], str], dict[str, int]]:
+    layer1_stock_health_metrics: list[dict[str, int | float | None]],
+) -> tuple[dict[tuple[int, int], str], dict[str, int | float | dict[str, object] | str]]:
+    def _bounded_risk(value: object) -> float:
+        try:
+            risk = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(min(risk, 1.0), 0.0)
+
+    def _calibrated_factor(decision_text: str, stockout_risk: float, overstock_risk: float) -> float:
+        base_factor = LAYER3_PURCHASE_FACTOR_BY_DECISION[decision_text]
+        stockout_weight = LAYER3_STOCKOUT_WEIGHT_BY_DECISION.get(decision_text, 1.0)
+        overstock_weight = LAYER3_OVERSTOCK_WEIGHT_BY_DECISION.get(decision_text, 1.0)
+
+        calibrated = (
+            base_factor
+            + (stockout_risk * LAYER3_STOCKOUT_BOOST_MAX * stockout_weight)
+            - (overstock_risk * LAYER3_OVERSTOCK_DAMPEN_MAX * overstock_weight)
+        )
+
+        min_factor, max_factor = LAYER3_FACTOR_BOUNDS[decision_text]
+        return max(min(calibrated, max_factor), min_factor)
+
+    stock_health_by_line: dict[tuple[int, int], tuple[float, float]] = {}
+    for metric in layer1_stock_health_metrics:
+        color_id_raw = metric.get("color_id")
+        size_id_raw = metric.get("size_id")
+        try:
+            line_key = (int(color_id_raw), int(size_id_raw))
+        except (TypeError, ValueError):
+            continue
+
+        stock_health_by_line[line_key] = (
+            _bounded_risk(metric.get("stockout_risk")),
+            _bounded_risk(metric.get("overstock_risk")),
+        )
+
     decision_by_line: dict[tuple[int, int], str] = {}
 
     for decision in layer2_allocation_decisions:
@@ -802,12 +866,20 @@ def _apply_layer3_purchase_shaping(
         decision_by_line[line_key] = decision_text
 
     qty_before = sum(max(int(qty), 0) for qty in line_qty.values())
+    qty_after_base = 0
     adjusted_lines = 0
     decision_line_counts = {
         "main": 0,
         "assorti": 0,
         "hold": 0,
     }
+    calibration_up_lines = 0
+    calibration_down_lines = 0
+    risk_lines_covered = 0
+    risk_lines_missing = 0
+    calibrated_factor_sum = 0.0
+    calibrated_factor_min: float | None = None
+    calibrated_factor_max: float | None = None
 
     for line_key in sorted(line_qty.keys()):
         current_qty = max(int(line_qty.get(line_key, 0)), 0)
@@ -819,11 +891,41 @@ def _apply_layer3_purchase_shaping(
             decision_text = "main"
 
         decision_line_counts[decision_text] += 1
-        factor = LAYER3_PURCHASE_FACTOR_BY_DECISION[decision_text]
+
+        base_factor = LAYER3_PURCHASE_FACTOR_BY_DECISION[decision_text]
+        base_shaped_qty = floor(float(current_qty) * base_factor)
+        if decision_text == "main" and current_qty > 0 and base_shaped_qty <= 0:
+            base_shaped_qty = 1
+        qty_after_base += max(int(base_shaped_qty), 0)
+
+        stock_health = stock_health_by_line.get(line_key)
+        if stock_health is None:
+            stockout_risk = 0.0
+            overstock_risk = 0.0
+            risk_lines_missing += 1
+        else:
+            stockout_risk, overstock_risk = stock_health
+            risk_lines_covered += 1
+
+        factor = _calibrated_factor(
+            decision_text=decision_text,
+            stockout_risk=stockout_risk,
+            overstock_risk=overstock_risk,
+        )
+
+        calibrated_factor_sum += factor
+        calibrated_factor_min = factor if calibrated_factor_min is None else min(calibrated_factor_min, factor)
+        calibrated_factor_max = factor if calibrated_factor_max is None else max(calibrated_factor_max, factor)
+
         shaped_qty = floor(float(current_qty) * factor)
         if decision_text == "main" and current_qty > 0 and shaped_qty <= 0:
             shaped_qty = 1
         shaped_qty = max(int(shaped_qty), 0)
+
+        if shaped_qty > base_shaped_qty:
+            calibration_up_lines += 1
+        elif shaped_qty < base_shaped_qty:
+            calibration_down_lines += 1
 
         if shaped_qty != current_qty:
             adjusted_lines += 1
@@ -831,16 +933,54 @@ def _apply_layer3_purchase_shaping(
         line_qty[line_key] = shaped_qty
 
     qty_after = sum(max(int(qty), 0) for qty in line_qty.values())
+    calibrated_lines = sum(decision_line_counts.values())
+    factor_bounds = {
+        decision_text: {
+            "min": bounds[0],
+            "max": bounds[1],
+        }
+        for decision_text, bounds in LAYER3_FACTOR_BOUNDS.items()
+    }
 
     return (
         decision_by_line,
         {
             "qty_before": qty_before,
+            "qty_after_base": qty_after_base,
             "qty_after": qty_after,
+            "qty_delta_vs_base": qty_after - qty_after_base,
             "adjusted_lines": adjusted_lines,
             "main_lines": decision_line_counts["main"],
             "assorti_lines": decision_line_counts["assorti"],
             "hold_lines": decision_line_counts["hold"],
+            "calibration_up_lines": calibration_up_lines,
+            "calibration_down_lines": calibration_down_lines,
+            "calibration": {
+                "method": LAYER3_CALIBRATION_METHOD,
+                "stockout_boost_max": LAYER3_STOCKOUT_BOOST_MAX,
+                "overstock_dampen_max": LAYER3_OVERSTOCK_DAMPEN_MAX,
+                "stockout_weight_by_decision": dict(LAYER3_STOCKOUT_WEIGHT_BY_DECISION),
+                "overstock_weight_by_decision": dict(LAYER3_OVERSTOCK_WEIGHT_BY_DECISION),
+                "factor_bounds": factor_bounds,
+                "risk_lines_covered": risk_lines_covered,
+                "risk_lines_missing": risk_lines_missing,
+                "up_lines": calibration_up_lines,
+                "down_lines": calibration_down_lines,
+                "factor_summary": {
+                    "avg": round(
+                        calibrated_factor_sum / float(calibrated_lines),
+                        4,
+                    )
+                    if calibrated_lines > 0
+                    else 0.0,
+                    "min": round(calibrated_factor_min, 4)
+                    if calibrated_factor_min is not None
+                    else 0.0,
+                    "max": round(calibrated_factor_max, 4)
+                    if calibrated_factor_max is not None
+                    else 0.0,
+                },
+            },
         },
     )
 
@@ -915,6 +1055,63 @@ def _build_layer4_scenarios(
         )
 
     return scenarios
+
+
+def _build_layer4_contract_summary(
+    layer4_scenarios: list[dict[str, str | int | float]],
+) -> dict[str, str | bool | list[str] | dict[str, bool]]:
+    scenario_order_actual = [
+        str(item.get("scenario", ""))
+        for item in layer4_scenarios
+    ]
+    scenario_order_expected = list(LAYER4_SCENARIO_ORDER)
+    order_matches_expected = scenario_order_actual == scenario_order_expected
+
+    capitals = [
+        float(item.get("total_capital_required", 0.0))
+        for item in layer4_scenarios
+    ]
+    stockout_risks = [
+        float(item.get("stockout_risk_proxy", 0.0))
+        for item in layer4_scenarios
+    ]
+    turnover_values = [
+        float(item.get("expected_turnover_proxy", 0.0))
+        for item in layer4_scenarios
+    ]
+    purchase_units = [
+        int(item.get("purchase_units", 0))
+        for item in layer4_scenarios
+    ]
+
+    checks = {
+        "capital_non_decreasing": all(
+            current >= previous
+            for previous, current in zip(capitals, capitals[1:])
+        ),
+        "stockout_risk_non_increasing": all(
+            current <= previous
+            for previous, current in zip(stockout_risks, stockout_risks[1:])
+        ),
+        "turnover_non_increasing": all(
+            current <= previous
+            for previous, current in zip(turnover_values, turnover_values[1:])
+        ),
+        "purchase_units_non_decreasing": all(
+            current >= previous
+            for previous, current in zip(purchase_units, purchase_units[1:])
+        ),
+    }
+
+    contract_ok = order_matches_expected and all(checks.values())
+    return {
+        "version": LAYER4_CONTRACT_VERSION,
+        "status": "ok" if contract_ok else "violated",
+        "order_matches_expected": order_matches_expected,
+        "scenario_order_expected": scenario_order_expected,
+        "scenario_order_actual": scenario_order_actual,
+        "checks": checks,
+    }
 
 
 def _build_layer5_intervention_signals(
@@ -2117,6 +2314,7 @@ def build_production_order_proposal(
     layer3_decision_by_line, layer3_purchase_shaping = _apply_layer3_purchase_shaping(
         line_qty=line_qty,
         layer2_allocation_decisions=layer2_allocation_decisions,
+        layer1_stock_health_metrics=layer1_stock_health_metrics,
     )
 
     color_totals: dict[int, int] = defaultdict(int)
@@ -2311,6 +2509,7 @@ def build_production_order_proposal(
         expected_horizon_sales=expected_horizon_sales,
         layer3_purchase_shaping=layer3_purchase_shaping,
     )
+    layer4_contract = _build_layer4_contract_summary(layer4_scenarios)
     layer5_intervention = _build_layer5_intervention_signals(
         risk_level=risk_level,
         layer4_scenarios=layer4_scenarios,
@@ -2421,8 +2620,10 @@ def build_production_order_proposal(
             (
                 "Layer 3 purchase shaping: method=allocation_decision_factors, "
                 f"qty_before={layer3_purchase_shaping['qty_before']}, "
+                f"qty_after_base={layer3_purchase_shaping['qty_after_base']}, "
                 f"qty_after={layer3_purchase_shaping['qty_after']}, "
                 f"adjusted_lines={layer3_purchase_shaping['adjusted_lines']}, "
+                f"calibration_delta_vs_base={layer3_purchase_shaping['qty_delta_vs_base']}, "
                 "decision_lines="
                 f"main:{layer3_purchase_shaping['main_lines']}|"
                 f"assorti:{layer3_purchase_shaping['assorti_lines']}|"
@@ -2433,6 +2634,13 @@ def build_production_order_proposal(
                 f"Conservative(capital={layer4_scenarios[0]['total_capital_required']},risk={layer4_scenarios[0]['stockout_risk_proxy']}), "
                 f"Balanced(capital={layer4_scenarios[1]['total_capital_required']},risk={layer4_scenarios[1]['stockout_risk_proxy']}), "
                 f"Aggressive(capital={layer4_scenarios[2]['total_capital_required']},risk={layer4_scenarios[2]['stockout_risk_proxy']})."
+            ),
+            (
+                "Layer 4 contract: "
+                f"version={layer4_contract['version']}, "
+                f"status={layer4_contract['status']}, "
+                f"order_matches_expected={layer4_contract['order_matches_expected']}, "
+                f"checks={layer4_contract['checks']}."
             ),
             (
                 "Layer 5 intervention: "
@@ -2522,6 +2730,7 @@ def build_production_order_proposal(
             "layer_4_scenarios": {
                 "method": "deterministic_factor_scenarios",
                 "factors": layer4_scenario_factor_items,
+                "contract": layer4_contract,
                 "scenarios": layer4_scenarios,
             },
             "layer_5_intervention": layer5_intervention,

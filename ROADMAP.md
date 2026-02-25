@@ -37,8 +37,8 @@
 - No hard-coded "critical SKU" classifier as primary allocator.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
-- Allocation-driven purchase shaping is wired: Layer 2 decisions influence recommendation quantities via deterministic factors.
-- Complete deterministic purchase recommendation math on top of Layer 1/2 outputs.
+- Allocation-driven purchase shaping now includes deterministic risk-weighted calibration on top of Layer 2 decisions.
+- Stabilize Layer 3 calibration coefficients/bounds and lock regression coverage.
 - Preserve deterministic math and full explainability.
 
 ### 2.4 Layer 4 - Scenario output (in progress)
@@ -71,7 +71,7 @@
 
 ## Immediate high-leverage follow-ups
 1. Complete Layer 1 metric contract and lock regression tests.
-2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
+2. Stabilize Layer 3 deterministic calibration coefficients/bounds and lock regression coverage.
 3. Finalize Layer 4 scenario contract and stabilize regression coverage.
 4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
 5. Stabilize explainability `compact|full` payload contract and lock regression coverage.

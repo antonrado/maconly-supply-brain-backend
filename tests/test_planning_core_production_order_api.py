@@ -16,6 +16,7 @@ from app.services.planning_production_order import (
     LAYER4_SCENARIO_FACTORS,
     LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    _apply_layer3_purchase_shaping,
     _build_layer2_allocation_decisions,
     _build_layer5_intervention_signals,
 )
@@ -856,7 +857,15 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert layer3["main_lines"] == 4
     assert layer3["assorti_lines"] == 0
     assert layer3["hold_lines"] == 0
-    assert layer3["qty_before"] >= layer3["qty_after"] >= 0
+    assert layer3["qty_before"] >= layer3["qty_after_base"] >= 0
+    assert layer3["qty_after"] >= 0
+    assert layer3["qty_delta_vs_base"] == layer3["qty_after"] - layer3["qty_after_base"]
+    assert layer3["calibration"]["stockout_boost_max"] == 0.3
+    assert layer3["calibration"]["overstock_dampen_max"] == 0.4
+    assert layer3["calibration"]["method"] == "risk_weighted_factor_clamp"
+    assert layer3["calibration"]["risk_lines_covered"] + layer3["calibration"]["risk_lines_missing"] == (
+        layer3["main_lines"] + layer3["assorti_lines"] + layer3["hold_lines"]
+    )
 
     assert layer4["method"] == "deterministic_factor_scenarios"
     assert len(layer4["scenarios"]) == 3
@@ -872,6 +881,25 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         }
         for scenario, factor in LAYER4_SCENARIO_FACTORS
     ]
+    assert layer4["contract"]["version"] == "v1_alpha"
+    assert layer4["contract"]["status"] == "ok"
+    assert layer4["contract"]["order_matches_expected"] is True
+    assert layer4["contract"]["scenario_order_expected"] == [
+        "Conservative",
+        "Balanced",
+        "Aggressive",
+    ]
+    assert layer4["contract"]["scenario_order_actual"] == [
+        "Conservative",
+        "Balanced",
+        "Aggressive",
+    ]
+    assert layer4["contract"]["checks"] == {
+        "capital_non_decreasing": True,
+        "stockout_risk_non_increasing": True,
+        "turnover_non_increasing": True,
+        "purchase_units_non_decreasing": True,
+    }
 
     conservative = layer4["scenarios"][0]
     balanced = layer4["scenarios"][1]
@@ -929,6 +957,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         (step for step in body["explanation"]["steps"] if "Layer 4 scenarios" in step),
         "",
     )
+    layer4_contract_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 4 contract" in step),
+        "",
+    )
     layer5_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 5 intervention" in step),
         "",
@@ -944,6 +976,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "Conservative(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
+    assert "status=ok" in layer4_contract_step
+    assert "order_matches_expected=True" in layer4_contract_step
     assert "unavoidable_stockout=" in layer5_step
     assert "signals=" in layer5_step
 
@@ -1146,6 +1180,90 @@ def test_production_order_proposal_assorti_classification_uses_global_fallback_w
             "source": ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
         }
     ]
+
+
+def test_layer3_purchase_shaping_calibration_boosts_and_dampens_by_risk():
+    line_qty = {
+        (10, 1): 100,
+        (10, 2): 100,
+        (10, 3): 100,
+    }
+    layer2_decisions = [
+        {
+            "color_id": 10,
+            "size_id": 1,
+            "allocation_decision": "main",
+        },
+        {
+            "color_id": 10,
+            "size_id": 2,
+            "allocation_decision": "assorti",
+        },
+        {
+            "color_id": 10,
+            "size_id": 3,
+            "allocation_decision": "hold",
+        },
+    ]
+    layer1_metrics = [
+        {
+            "color_id": 10,
+            "size_id": 1,
+            "stockout_risk": 1.0,
+            "overstock_risk": 0.0,
+        },
+        {
+            "color_id": 10,
+            "size_id": 2,
+            "stockout_risk": 0.0,
+            "overstock_risk": 1.0,
+        },
+        {
+            "color_id": 10,
+            "size_id": 3,
+            "stockout_risk": 0.0,
+            "overstock_risk": 1.0,
+        },
+    ]
+
+    decision_by_line, shaping = _apply_layer3_purchase_shaping(
+        line_qty=line_qty,
+        layer2_allocation_decisions=layer2_decisions,
+        layer1_stock_health_metrics=layer1_metrics,
+    )
+
+    assert decision_by_line == {
+        (10, 1): "main",
+        (10, 2): "assorti",
+        (10, 3): "hold",
+    }
+    assert line_qty == {
+        (10, 1): 125,
+        (10, 2): 51,
+        (10, 3): 10,
+    }
+
+    assert shaping["qty_before"] == 300
+    assert shaping["qty_after_base"] == 210
+    assert shaping["qty_after"] == 186
+    assert shaping["qty_delta_vs_base"] == -24
+    assert shaping["main_lines"] == 1
+    assert shaping["assorti_lines"] == 1
+    assert shaping["hold_lines"] == 1
+    assert shaping["calibration_up_lines"] == 1
+    assert shaping["calibration_down_lines"] == 2
+
+    calibration = shaping["calibration"]
+    assert calibration["method"] == "risk_weighted_factor_clamp"
+    assert calibration["risk_lines_covered"] == 3
+    assert calibration["risk_lines_missing"] == 0
+    assert calibration["up_lines"] == 1
+    assert calibration["down_lines"] == 2
+    assert calibration["factor_summary"] == {
+        "avg": 0.62,
+        "min": 0.1,
+        "max": 1.25,
+    }
 
 
 def test_layer5_intervention_signals_accelerate_when_no_in_flight():
