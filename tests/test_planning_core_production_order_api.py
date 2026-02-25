@@ -3030,6 +3030,94 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert _business_projection(full_body) == _business_projection(compact_body)
 
 
+@pytest.mark.parametrize(
+    ("profile_name", "sales_qty", "stock_qty"),
+    [
+        pytest.param("stockout", 600, 10, id="stockout"),
+        pytest.param("balanced", 240, 120, id="balanced"),
+        pytest.param("overstock", 60, 1500, id="overstock"),
+    ],
+)
+def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_output_across_profiles(
+    client,
+    db_session,
+    profile_name,
+    sales_qty,
+    stock_qty,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+    wb_sku = f"WB-PO-BT1-COMPACT-PROFILE-{profile_name.upper()}"
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku=wb_sku,
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku=wb_sku,
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=sales_qty,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku=wb_sku,
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=stock_qty,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    base_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    full_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=base_payload,
+    )
+    assert full_response.status_code == 200, full_response.text
+
+    compact_payload = deepcopy(base_payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    full_body = full_response.json()
+    compact_body = compact_response.json()
+    assert _business_projection(full_body) == _business_projection(compact_body)
+
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
+    assert compact_layer2["decision_quality"]["decision_count"] == 4
+
+    if profile_name == "overstock":
+        assert compact_body["risk_level"] == "overstock"
+
+
 def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     stock_updated_at = datetime(2026, 1, 9, tzinfo=timezone.utc)
