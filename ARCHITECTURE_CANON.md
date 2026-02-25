@@ -34,10 +34,14 @@
   3. Layer 3 - purchase recommendation derived from Layer 1+2 outputs.
   4. Layer 4 - deterministic scenarios (Conservative/Balanced/Aggressive).
   5. Layer 5 - intervention flags only (no dynamic pricing model).
+- Layer contract summaries are machine-readable and deterministic:
+  - Layer 1 contract checks risk bounds + non-negative invariants + unique color-size keys.
+  - Layer 4 contract checks scenario order and monotonic behavior.
+  - Layer 5 policy exposes threshold-driven intervention reasoning and signal thresholds.
 
 ## Production Order v1 Alpha proxy economics contract
 - Economic values in v1 alpha are explicit proxies and must not be treated as calibrated financial truth.
-- Proxy set includes: margin proxies (main/assorti), unit capital proxy, Layer 3 shaping factors, Layer 4 scenario factors, Layer 5 intervention threshold.
+- Proxy set includes: margin proxies (main/assorti), unit capital proxy, Layer 1 stockout threshold, Layer 3 shaping factors and calibration bounds/weights, Layer 4 scenario factors + contract version, Layer 5 intervention thresholds.
 - Proposal responses must expose effective proxy values and value source through machine-readable meta (currently source=`code_default_constants`).
 - Any migration from proxy defaults to request/admin/global settings must preserve determinism and source tracing.
 
@@ -56,10 +60,11 @@
 - Design before implementation.
 - Layer-by-layer rollout with no scope creep.
 
-## Explainability payload size control (planned)
-- Introduce explainability modes: `full` and `compact`.
-- `compact` mode reduces payload size (summary + compact meta) without changing decision math.
+## Explainability payload size control (active)
+- Explainability modes `full` and `compact` are supported for direct and from-WB production-order endpoints.
+- `compact` mode reduces payload size (summary + compact meta) without changing deterministic decision math.
 - `full` remains default for audit/deep diagnostics.
+- Regression coverage includes compact/full parity for deterministic business outputs.
 
 ## Verification philosophy
 - Every substantial task should include command-level verification (PowerShell-safe).
