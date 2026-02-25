@@ -2244,8 +2244,16 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
+    assert "decisions" not in meta["layer_2_allocation"]
+    assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["layer_3_purchase_shaping"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
+    assert meta["layer_5_intervention"]["contract"]["status"] == "ok"
+    assert meta["layer_5_intervention"]["signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_3_calibration"]["method"] == "risk_weighted_factor_clamp"

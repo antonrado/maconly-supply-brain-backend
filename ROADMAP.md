@@ -60,6 +60,7 @@
 ### 2.6 Explainability payload controls (in progress)
 - Response explainability modes are now supported: `full` (default) and `compact` (summary + compact meta) for production-order direct/from-WB endpoints.
 - Compact mode preserves deterministic planner outputs and trims explainability payload size (steps + heavy meta arrays).
+- Compact-mode regressions now explicitly assert Layer 1-5 contract blocks are preserved for both direct and from-WB flows.
 - Stabilize/lock compact-mode contract with additional regression coverage as Layer 1-5 semantics finalize.
 
 ## v1 Stable Alpha boundaries (strict)

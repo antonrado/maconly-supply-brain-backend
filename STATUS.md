@@ -45,7 +45,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Admin settings API now supports Layer 3/5 calibration thresholds with validation and persistence; request overrides support same thresholds with precedence and validation.
   - Production-order explanation now exposes machine-readable `explanation.meta` alongside textual `steps`; from-WB adapter writes a dedicated `meta.from_wb` block (as_of trace, sales window bounds, sales/stock snapshots, freshness snapshot) while core planner writes structured source/economic-buffer/elastic/in-flight details.
   - Production-order direct/from-WB now supports explainability payload modes: `full` (default) and `compact`; compact mode preserves deterministic outputs while trimming heavy explanation arrays/maps and adds explicit `explanation.meta.explainability` mode tracing.
-  - Regression coverage now includes compact/full deterministic parity checks for direct and from-WB proposal flows and ensures compact mode preserves key contract blocks (`layer_1`, `layer_2`, `layer_3`, `layer_4`, `layer_5`, `alpha_proxy_economics`).
+  - Regression coverage now includes compact/full deterministic parity checks for direct and from-WB proposal flows and explicitly asserts compact mode preserves key contract blocks (`layer_1`, `layer_2`, `layer_3`, `layer_4`, `layer_5`, `alpha_proxy_economics`).
   - Explicit release-gate checklist published: `PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`.
   - `from-wb` now clamps future `as_of_date` requests to latest available WB sales date to prevent drifted/empty future windows.
   - `from-wb` validates requested `bundle_type_ids` against `article_wb_mapping` and returns 400 on missing mappings.
