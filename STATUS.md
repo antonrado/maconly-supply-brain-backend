@@ -39,6 +39,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Core production-order Layer 5 now emits deterministic intervention flags for unavoidable stockout (`accelerate_production` / `increase_price_to_slow_velocity`) via `explanation.meta.layer_5_intervention`.
   - Core production-order now exposes `explanation.meta.alpha_proxy_economics` with effective alpha proxy values and source tracing (`code_default_constants`) for margin/capital/scenario/intervention defaults.
   - Production-order explanation now exposes machine-readable `explanation.meta` alongside textual `steps`; from-WB adapter writes a dedicated `meta.from_wb` block (as_of trace, sales window bounds, sales/stock snapshots, freshness snapshot) while core planner writes structured source/economic-buffer/elastic/in-flight details.
+  - Production-order direct/from-WB now supports explainability payload modes: `full` (default) and `compact`; compact mode preserves deterministic outputs while trimming heavy explanation arrays/maps and adds explicit `explanation.meta.explainability` mode tracing.
   - `from-wb` now clamps future `as_of_date` requests to latest available WB sales date to prevent drifted/empty future windows.
   - `from-wb` validates requested `bundle_type_ids` against `article_wb_mapping` and returns 400 on missing mappings.
   - In-flight supply now uses ETA/stage-sensitive effective contribution (not binary include/exclude), and explanation reports raw/effective in-flight qty.

@@ -51,10 +51,10 @@
 - Current signal set: `accelerate_production` / `increase_price_to_slow_velocity`.
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
-### 2.6 Explainability payload controls (planned)
-- Introduce response explainability modes: `full` (current default) and `compact` (summary + compact meta).
-- Keep deterministic behavior identical across modes; mode changes payload size only.
-- Rollout after Layer 1-5 semantics and proxy contracts are stabilized.
+### 2.6 Explainability payload controls (in progress)
+- Response explainability modes are now supported: `full` (default) and `compact` (summary + compact meta) for production-order direct/from-WB endpoints.
+- Compact mode preserves deterministic planner outputs and trims explainability payload size (steps + heavy meta arrays).
+- Stabilize/lock compact-mode contract with additional regression coverage as Layer 1-5 semantics finalize.
 
 ## v1 Stable Alpha boundaries (strict)
 - Deterministic, explainable, test-covered.
@@ -74,7 +74,7 @@
 2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
 3. Finalize Layer 4 scenario contract and stabilize regression coverage.
 4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
-5. Define/implement explainability `compact|full` payload mode contract.
+5. Stabilize explainability `compact|full` payload contract and lock regression coverage.
 6. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
 7. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
 
