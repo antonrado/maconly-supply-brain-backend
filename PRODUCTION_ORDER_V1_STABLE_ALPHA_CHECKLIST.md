@@ -28,6 +28,12 @@
 - [ ] Tie-break is `hold`.
 - [ ] GMROI is diagnostic-only.
 - [ ] `explanation.meta.layer_2_allocation.summary` and `decisions` are present in full mode.
+- [ ] Layer 2 contract block exists in `explanation.meta.layer_2_allocation.contract` with status `ok` for valid flows.
+- [ ] Contract checks include at least:
+  - [ ] decision reason mapping matches allocation decision
+  - [ ] tie/near-tie flags match profit-gap math
+  - [ ] profit-gap and GMROI-gap fields are internally consistent
+  - [ ] capital-locked metric is valid (non-negative numeric)
 
 ## 5) Layer 3 contract (purchase shaping)
 - [ ] Layer 3 applies deterministic base factors by decision (`main|assorti|hold`).

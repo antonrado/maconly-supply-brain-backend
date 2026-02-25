@@ -549,6 +549,17 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
 
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
+    assert compact_layer2["decision_quality"]["decision_count"] == 4
+    compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
+    assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
+
 
 @pytest.mark.parametrize(
     ("profile_name", "daily_sales", "bundle_stock_total"),
@@ -2900,6 +2911,14 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "avg_profit_gap_until_eta=" in layer2_step
     assert "capital_locked_total=" in layer2_step
 
+    layer2_contract_checks = body["explanation"]["meta"]["layer_2_allocation"]["contract"]["checks"]
+    assert layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert layer2_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert layer2_contract_checks["capital_locked_metric_valid"] is True
+
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     assert from_wb_meta["observation_window_days"] == 30
     assert from_wb_meta["freshness_mode"] == "warn"
@@ -3096,6 +3115,17 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     full_body = full_response.json()
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
+
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
+    assert compact_layer2["decision_quality"]["decision_count"] == 4
+    compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
+    assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
 
 @pytest.mark.parametrize(
