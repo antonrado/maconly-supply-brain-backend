@@ -478,6 +478,12 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert any("Layer 2 allocation" in step for step in steps)
     assert any("Layer 5 intervention" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
+    layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
+    assert "decision_gate=profit_until_eta" in layer2_step
+    assert "reason_counts={" in layer2_step
+    assert "avg_profit_gap_until_eta=" in layer2_step
+    assert "capital_locked_total=" in layer2_step
+    assert "contract_status=ok" in layer2_step
 
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
@@ -549,6 +555,16 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
 
+    compact_layer2_step = next(
+        (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
+    assert "decision_gate=profit_until_eta" in compact_layer2_step
+    assert "reason_counts={" in compact_layer2_step
+    assert "avg_profit_gap_until_eta=" in compact_layer2_step
+    assert "capital_locked_total=" in compact_layer2_step
+    assert "contract_status=ok" in compact_layer2_step
+
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
@@ -617,6 +633,16 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     full_body = full_response.json()
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
+
+    compact_layer2_step = next(
+        (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
+    assert "decision_gate=profit_until_eta" in compact_layer2_step
+    assert "reason_counts={" in compact_layer2_step
+    assert "avg_profit_gap_until_eta=" in compact_layer2_step
+    assert "capital_locked_total=" in compact_layer2_step
+    assert "contract_status=ok" in compact_layer2_step
 
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
@@ -2998,6 +3024,12 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert any("WB ingestion adapter" in step for step in steps)
     assert any("Layer 2 allocation" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
+    layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
+    assert "decision_gate=profit_until_eta" in layer2_step
+    assert "reason_counts={" in layer2_step
+    assert "avg_profit_gap_until_eta=" in layer2_step
+    assert "capital_locked_total=" in layer2_step
+    assert "contract_status=ok" in layer2_step
 
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
@@ -3116,6 +3148,16 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
 
+    compact_layer2_step = next(
+        (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
+    assert "decision_gate=profit_until_eta" in compact_layer2_step
+    assert "reason_counts={" in compact_layer2_step
+    assert "avg_profit_gap_until_eta=" in compact_layer2_step
+    assert "capital_locked_total=" in compact_layer2_step
+    assert "contract_status=ok" in compact_layer2_step
+
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
@@ -3207,6 +3249,16 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     full_body = full_response.json()
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
+
+    compact_layer2_step = next(
+        (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
+    assert "decision_gate=profit_until_eta" in compact_layer2_step
+    assert "reason_counts={" in compact_layer2_step
+    assert "avg_profit_gap_until_eta=" in compact_layer2_step
+    assert "capital_locked_total=" in compact_layer2_step
+    assert "contract_status=ok" in compact_layer2_step
 
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
