@@ -27,6 +27,7 @@
 
 ### 2.1 Layer 1 - Stock health metrics foundation (in progress)
 - Per-SKU deterministic metrics: velocity (main/assorti), coverage, stock, in-flight, ETA, margin proxy, capital proxy, stockout/overstock risk.
+- Assorti classification now uses explicit `bundle_type.is_assorti` source with traceable meta output (no runtime keyword parsing).
 - Expose machine-readable metrics in explanation meta.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
@@ -69,7 +70,7 @@
 - Layer-by-layer delivery, no scope creep.
 
 ## Immediate high-leverage follow-ups
-1. Replace keyword-based assorti detection with explicit classification source (bundle-type field or admin mapping) + source tracing.
+1. Extend assorti classification with admin/global mapping fallback (while keeping `bundle_type.is_assorti` as primary source).
 2. Complete Layer 1 metric contract and lock regression tests.
 3. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
 4. Finalize Layer 4 scenario contract and stabilize regression coverage.

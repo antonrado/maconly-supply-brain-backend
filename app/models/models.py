@@ -54,6 +54,7 @@ class BundleType(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_assorti: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class BundleRecipe(Base):

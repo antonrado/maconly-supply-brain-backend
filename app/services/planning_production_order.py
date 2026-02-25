@@ -47,6 +47,7 @@ from app.schemas.planning_production_order import (
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
 LAYER2_ALLOCATION_METHOD = "time_window_profit_proxy_with_gmroi_diagnostics"
+ASSORTI_CLASSIFICATION_SOURCE = "bundle_type.is_assorti"
 LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
@@ -313,24 +314,49 @@ def _add_units_for_color(
 def _load_assorti_bundle_type_flags(
     db: Session,
     bundle_type_ids: list[int],
-) -> dict[int, bool]:
+) -> tuple[dict[int, bool], list[dict[str, int | bool | str]]]:
     if not bundle_type_ids:
-        return {}
+        return {}, []
+
+    unique_bundle_type_ids = sorted({int(bundle_type_id) for bundle_type_id in bundle_type_ids})
 
     bundle_types = (
         db.query(BundleType)
-        .filter(BundleType.id.in_(bundle_type_ids))
+        .filter(BundleType.id.in_(unique_bundle_type_ids))
         .all()
     )
 
-    result: dict[int, bool] = {bundle_type_id: False for bundle_type_id in bundle_type_ids}
-    for bundle_type in bundle_types:
-        code = (bundle_type.code or "").strip().lower()
-        name = (bundle_type.name or "").strip().lower()
-        text = f"{code} {name}"
-        result[bundle_type.id] = ("assorti" in text) or ("ассорти" in text)
+    result: dict[int, bool] = {
+        bundle_type_id: False
+        for bundle_type_id in unique_bundle_type_ids
+    }
+    traces: list[dict[str, int | bool | str]] = []
+    loaded_ids: set[int] = set()
 
-    return result
+    for bundle_type in sorted(bundle_types, key=lambda item: item.id):
+        is_assorti = bool(bundle_type.is_assorti)
+        result[bundle_type.id] = is_assorti
+        loaded_ids.add(bundle_type.id)
+        traces.append(
+            {
+                "bundle_type_id": int(bundle_type.id),
+                "is_assorti": is_assorti,
+                "source": ASSORTI_CLASSIFICATION_SOURCE,
+            }
+        )
+
+    for bundle_type_id in unique_bundle_type_ids:
+        if bundle_type_id in loaded_ids:
+            continue
+        traces.append(
+            {
+                "bundle_type_id": int(bundle_type_id),
+                "is_assorti": False,
+                "source": "bundle_type_missing_default_main",
+            }
+        )
+
+    return result, traces
 
 
 def _build_layer1_stock_health_metrics(
@@ -1706,9 +1732,18 @@ def build_production_order_proposal(
     available_bundles_for_cover = ready_bundle_stock_total + competition_raw_bundle_stock
     reorder_point_days = settings.lead_time_days_total + settings.safety_stock_days
 
-    assorti_by_bundle_type = _load_assorti_bundle_type_flags(
+    assorti_by_bundle_type, assorti_classification_by_bundle_type = _load_assorti_bundle_type_flags(
         db=db,
         bundle_type_ids=bundle_type_ids,
+    )
+    assorti_bundle_type_count = sum(
+        1
+        for item in assorti_classification_by_bundle_type
+        if bool(item.get("is_assorti"))
+    )
+    main_bundle_type_count = max(
+        len(assorti_classification_by_bundle_type) - assorti_bundle_type_count,
+        0,
     )
     layer1_stock_health_metrics = _build_layer1_stock_health_metrics(
         bundle_type_ids=bundle_type_ids,
@@ -2090,6 +2125,12 @@ def build_production_order_proposal(
                 f"in_flight={in_flight_source}, bundle_stock={bundle_stock_source}."
             ),
             (
+                "Assorti classification: "
+                f"source={ASSORTI_CLASSIFICATION_SOURCE}, "
+                f"assorti_bundle_types={assorti_bundle_type_count}, "
+                f"main_bundle_types={main_bundle_type_count}."
+            ),
+            (
                 f"Layer 1 stock health: sku_count={len(layer1_stock_health_metrics)}, "
                 f"avg_coverage_days={layer1_avg_coverage_days}, "
                 f"high_stockout_risk_skus={layer1_high_stockout_risk_count}."
@@ -2165,6 +2206,14 @@ def build_production_order_proposal(
                     "sku_count": len(layer1_stock_health_metrics),
                     "avg_coverage_days": layer1_avg_coverage_days,
                     "high_stockout_risk_skus": layer1_high_stockout_risk_count,
+                },
+                "assorti_classification": {
+                    "source": ASSORTI_CLASSIFICATION_SOURCE,
+                    "summary": {
+                        "assorti_bundle_types": assorti_bundle_type_count,
+                        "main_bundle_types": main_bundle_type_count,
+                    },
+                    "bundle_types": assorti_classification_by_bundle_type,
                 },
                 "proxies": {
                     "main_margin": LAYER2_MAIN_MARGIN_PROXY,

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.core.db import get_db
 from app.main import app
 from app.services.planning_production_order import (
+    ASSORTI_CLASSIFICATION_SOURCE,
     LAYER2_ALLOCATION_METHOD,
     LAYER4_SCENARIO_FACTORS,
     LAYER_PROXY_VALUE_SOURCE,
@@ -792,6 +793,18 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "assorti_margin": 0.85,
         "unit_capital": 1.0,
     }
+    assert layer1["assorti_classification"]["source"] == ASSORTI_CLASSIFICATION_SOURCE
+    assert layer1["assorti_classification"]["summary"] == {
+        "assorti_bundle_types": 0,
+        "main_bundle_types": 1,
+    }
+    assert layer1["assorti_classification"]["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": False,
+            "source": ASSORTI_CLASSIFICATION_SOURCE,
+        }
+    ]
 
     assert layer2["method"] == LAYER2_ALLOCATION_METHOD
     assert layer2["decision_gate"] == "profit_until_eta"
@@ -862,6 +875,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
         "",
     )
+    assorti_step = next(
+        (step for step in body["explanation"]["steps"] if "Assorti classification" in step),
+        "",
+    )
     layer2_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 2 allocation" in step),
         "",
@@ -879,6 +896,9 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "",
     )
     assert "sku_count=4" in layer1_step
+    assert f"source={ASSORTI_CLASSIFICATION_SOURCE}" in assorti_step
+    assert "assorti_bundle_types=0" in assorti_step
+    assert "main_bundle_types=1" in assorti_step
     assert "main=4" in layer2_step
     assert f"method={LAYER2_ALLOCATION_METHOD}" in layer2_step
     assert "decision_gate=profit_until_eta" in layer2_step
@@ -896,10 +916,14 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         )
 
 
-def test_production_order_proposal_layer3_shaping_reduces_qty_for_assorti_decision(client, db_session):
+def test_production_order_proposal_layer3_shaping_reduces_qty_for_explicit_assorti_flag(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
-    assorti_bundle_type = BundleType(code="ASSORTI-PO-BT", name="Assorti PO-BT")
+    assorti_bundle_type = BundleType(
+        code="PO-BT-MIX-EXPLICIT",
+        name="PO-BT-MIX-EXPLICIT",
+        is_assorti=True,
+    )
     db_session.add(assorti_bundle_type)
     db_session.flush()
 
@@ -961,6 +985,24 @@ def test_production_order_proposal_layer3_shaping_reduces_qty_for_assorti_decisi
     assert layer2_main["assorti"] == 0
     assert layer2_assorti["assorti"] > 0
     assert layer2_assorti["main"] == 0
+
+    assorti_classification_main = body_main["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assorti_classification_assorti = body_assorti["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification_main["summary"] == {
+        "assorti_bundle_types": 0,
+        "main_bundle_types": 1,
+    }
+    assert assorti_classification_assorti["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification_assorti["bundle_types"] == [
+        {
+            "bundle_type_id": assorti_bundle_type.id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_SOURCE,
+        }
+    ]
 
     layer3_main = body_main["explanation"]["meta"]["layer_3_purchase_shaping"]
     layer3_assorti = body_assorti["explanation"]["meta"]["layer_3_purchase_shaping"]
