@@ -524,6 +524,71 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     assert _business_projection(full_body) == _business_projection(compact_body)
 
 
+@pytest.mark.parametrize(
+    ("profile_name", "daily_sales", "bundle_stock_total"),
+    [
+        pytest.param("stockout", 20.0, 10, id="stockout"),
+        pytest.param("balanced", 8.0, 120, id="balanced"),
+        pytest.param("overstock", 2.0, 1500, id="overstock"),
+    ],
+)
+def test_production_order_proposal_compact_mode_preserves_deterministic_output_across_profiles(
+    client,
+    db_session,
+    profile_name,
+    daily_sales,
+    bundle_stock_total,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_daily_sales"] = [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "daily_sales": daily_sales,
+        }
+    ]
+    payload["bundle_stock"] = [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "wb_qty": bundle_stock_total // 2,
+            "local_qty": bundle_stock_total - (bundle_stock_total // 2),
+        }
+    ]
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload["overrides"]["allow_order_with_buffer"] = False
+
+    full_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload,
+    )
+    assert full_response.status_code == 200, full_response.text
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    full_body = full_response.json()
+    compact_body = compact_response.json()
+    assert _business_projection(full_body) == _business_projection(compact_body)
+
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
+    assert compact_layer2["decision_quality"]["decision_count"] == 4
+
+    if profile_name == "overstock":
+        assert compact_body["risk_level"] == "overstock"
+
+
 def test_production_order_proposal_skipped_when_article_excluded(client, db_session):
     seeded = _seed_article_bundle_base(db_session, include_in_planning=False)
     payload = _build_payload(
