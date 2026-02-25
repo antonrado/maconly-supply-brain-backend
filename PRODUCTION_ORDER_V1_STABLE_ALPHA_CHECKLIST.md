@@ -88,6 +88,7 @@
 ## 11) Verification gate
 - [ ] Run verification suite and confirm green:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify-live` (includes production-order live API smoke checks)
 - [ ] Regression tests include Layer 1-5 contracts + explainability compact/full coverage.
 - [ ] Decision quality case studies are documented and reviewable for external sanity check.
 - [ ] Working tree is clean after final commit.

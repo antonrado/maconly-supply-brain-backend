@@ -19,9 +19,11 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 test
 .\scripts\dev.ps1 context
 .\scripts\dev.ps1 verify
+.\scripts\dev.ps1 verify-live
 ```
 
 `po-api-smoke` validates live API connectivity for production-order routes with deterministic expected statuses:
+- Auto-syncs backend image (`docker compose up -d --build backend`) and waits for running state
 - `GET /api/v1/planning/core/health` -> `200`
 - Seeds deterministic smoke fixture data via backend container (`scripts/po_api_smoke_seed.py`)
 - `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
@@ -30,6 +32,7 @@ Use helper commands from `scripts/dev.ps1`:
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (unknown article) -> `404`
 - `POST /api/v1/planning/core/production-order/proposal` (schema-invalid payload) -> `422`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (schema-invalid payload) -> `422`
+- Also validates key response-body fragments (`"status":"ok"`, `"Article not found"`, validation field names)
 
 ## Git sanity checks
 ```powershell
@@ -144,6 +147,18 @@ What `verify` does:
    - docker backend pytest (`docker compose exec backend ...`) if backend is running.
 
 If neither host pytest nor running backend container is available, `verify` fails fast with guidance.
+
+## One-command local verification + live API gate
+
+For a full local gate that includes deterministic live API checks for production-order endpoints:
+
+```powershell
+.\scripts\dev.ps1 verify-live
+```
+
+What `verify-live` does:
+1. Runs everything in `verify` (context + compile + tests).
+2. Runs `po-api-smoke` (auto-sync backend image, seed deterministic smoke data, then assert 200/404/422 API contracts).
 
 ## Interactive rebase / COMMIT_EDITMSG swap recovery
 If Vim opens and reports a swap file for `.git/COMMIT_EDITMSG`:
