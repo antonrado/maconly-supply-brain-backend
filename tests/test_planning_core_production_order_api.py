@@ -11,6 +11,7 @@ from app.services.planning_production_order import (
     ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_SOURCE,
+    EXPLAINABILITY_MODE_COMPACT,
     LAYER2_ALLOCATION_METHOD,
     LAYER4_SCENARIO_FACTORS,
     LAYER_PROXY_VALUE_SOURCE,
@@ -198,6 +199,38 @@ def test_production_order_proposal_happy_path(client, db_session):
     assert isinstance(body["recommendation"]["lines"], list)
     assert len(body["alternatives"]) >= 2
     assert body["explanation"]["summary"]
+
+
+def test_production_order_proposal_compact_explainability_mode(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    steps = body["explanation"]["steps"]
+    assert any("Layer 1 stock health" in step for step in steps)
+    assert any("Layer 2 allocation" in step for step in steps)
+    assert any("Layer 5 intervention" in step for step in steps)
+    assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
+
+    meta = body["explanation"]["meta"]
+    assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
+    assert meta["explainability"]["steps_omitted"] >= 1
+    assert "metrics" not in meta["layer_1_stock_health"]
+    assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
+    assert "decisions" not in meta["layer_2_allocation"]
+    assert "line_keys" not in meta["elastic_uplift"]
+    assert "line_alloc" not in meta["elastic_uplift"]
 
 
 def test_production_order_proposal_skipped_when_article_excluded(client, db_session):
@@ -1416,6 +1449,80 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert from_wb_meta["freshness"]["threshold_source"] == {
         "sales": "global_default",
         "stock": "global_default",
+    }
+
+
+def test_production_order_proposal_from_wb_compact_explainability_mode(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-COMPACT",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-COMPACT",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-COMPACT",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "explainability_mode": EXPLAINABILITY_MODE_COMPACT,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    steps = body["explanation"]["steps"]
+    assert any("WB ingestion adapter" in step for step in steps)
+    assert any("Layer 2 allocation" in step for step in steps)
+    assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
+
+    meta = body["explanation"]["meta"]
+    assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
+    from_wb_meta = meta["from_wb"]
+    assert "daily_sales_by_bundle" not in from_wb_meta
+    assert "wb_stock_by_bundle" not in from_wb_meta
+    assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
+    assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
+    assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
+    assert from_wb_meta["snapshot"] == {
+        "daily_sales_bundle_count": 1,
+        "daily_sales_total": 2.0,
+        "wb_stock_bundle_count": 1,
+        "wb_stock_total": 20,
+        "wb_stock_updated_bundle_count": 1,
     }
 
 

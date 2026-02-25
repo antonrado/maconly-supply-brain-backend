@@ -51,6 +51,8 @@ ASSORTI_CLASSIFICATION_SOURCE = "bundle_type.is_assorti"
 ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE = "admin_defaults_assorti_mapping"
 ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE = "global_default_assorti_mapping"
 ASSORTI_CLASSIFICATION_MISSING_SOURCE = "bundle_type_missing_default_main"
+EXPLAINABILITY_MODE_FULL = "full"
+EXPLAINABILITY_MODE_COMPACT = "compact"
 LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
@@ -332,6 +334,216 @@ def _parse_assorti_bundle_type_ids(raw_value: str | None) -> set[int]:
         bundle_type_ids.add(bundle_type_id)
 
     return bundle_type_ids
+
+
+def _compact_explanation_steps(steps: list[str]) -> tuple[list[str], int]:
+    if not steps:
+        return [], 0
+
+    keep_tokens = (
+        "WB ingestion adapter",
+        "Спрос по наборам",
+        "Источник параметров",
+        "Assorti classification",
+        "Layer 1 stock health",
+        "Layer 2 allocation",
+        "Layer 3 purchase shaping",
+        "Layer 4 scenarios",
+        "Layer 5 intervention",
+        "Применены ограничения",
+    )
+
+    compact_steps = [
+        step
+        for step in steps
+        if any(token in step for token in keep_tokens)
+    ]
+    if not compact_steps:
+        compact_steps = steps[: min(len(steps), 6)]
+
+    compact_steps = compact_steps[:10]
+    omitted_steps = max(len(steps) - len(compact_steps), 0)
+    if omitted_steps > 0:
+        compact_steps.append(
+            f"Explainability compact mode: omitted_steps={omitted_steps}."
+        )
+
+    return compact_steps, omitted_steps
+
+
+def _sum_numeric_mapping_values(value: object) -> float:
+    if not isinstance(value, dict):
+        return 0.0
+
+    total = 0.0
+    for item in value.values():
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, int | float):
+            total += float(item)
+
+    return round(total, 4)
+
+
+def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object]:
+    compact_meta: dict[str, object] = {
+        "sources": meta.get("sources", {}),
+        "reorder_policy": meta.get("reorder_policy", {}),
+        "economic_buffer": meta.get("economic_buffer", {}),
+        "in_flight_effective": meta.get("in_flight_effective", {}),
+        "alpha_proxy_economics": meta.get("alpha_proxy_economics", {}),
+    }
+
+    layer1_raw = meta.get("layer_1_stock_health")
+    if isinstance(layer1_raw, dict):
+        assorti_raw = layer1_raw.get("assorti_classification")
+        assorti_compact: dict[str, object] = {}
+        if isinstance(assorti_raw, dict):
+            assorti_compact = {
+                "source": assorti_raw.get("source"),
+                "fallback_sources": assorti_raw.get("fallback_sources", []),
+                "source_breakdown": assorti_raw.get("source_breakdown", {}),
+                "summary": assorti_raw.get("summary", {}),
+            }
+
+        compact_meta["layer_1_stock_health"] = {
+            "summary": layer1_raw.get("summary", {}),
+            "assorti_classification": assorti_compact,
+            "proxies": layer1_raw.get("proxies", {}),
+        }
+
+    layer2_raw = meta.get("layer_2_allocation")
+    if isinstance(layer2_raw, dict):
+        compact_meta["layer_2_allocation"] = {
+            "method": layer2_raw.get("method"),
+            "summary": layer2_raw.get("summary", {}),
+            "decision_gate": layer2_raw.get("decision_gate"),
+            "tie_break": layer2_raw.get("tie_break"),
+            "gmroi_usage": layer2_raw.get("gmroi_usage"),
+        }
+
+    layer3_raw = meta.get("layer_3_purchase_shaping")
+    if isinstance(layer3_raw, dict):
+        compact_meta["layer_3_purchase_shaping"] = {
+            "method": layer3_raw.get("method"),
+            "factors": layer3_raw.get("factors", {}),
+            "qty_before": layer3_raw.get("qty_before", 0),
+            "qty_after": layer3_raw.get("qty_after", 0),
+            "adjusted_lines": layer3_raw.get("adjusted_lines", 0),
+            "main_lines": layer3_raw.get("main_lines", 0),
+            "assorti_lines": layer3_raw.get("assorti_lines", 0),
+            "hold_lines": layer3_raw.get("hold_lines", 0),
+        }
+
+    layer4_raw = meta.get("layer_4_scenarios")
+    if isinstance(layer4_raw, dict):
+        scenarios_compact: list[dict[str, object]] = []
+        scenarios_raw = layer4_raw.get("scenarios")
+        if isinstance(scenarios_raw, list):
+            for scenario in scenarios_raw:
+                if not isinstance(scenario, dict):
+                    continue
+                scenarios_compact.append(
+                    {
+                        "scenario": scenario.get("scenario"),
+                        "total_capital_required": scenario.get("total_capital_required"),
+                        "expected_turnover_proxy": scenario.get("expected_turnover_proxy"),
+                        "stockout_risk_proxy": scenario.get("stockout_risk_proxy"),
+                        "assorti_sustainability_impact": scenario.get("assorti_sustainability_impact"),
+                    }
+                )
+
+        compact_meta["layer_4_scenarios"] = {
+            "method": layer4_raw.get("method"),
+            "factors": layer4_raw.get("factors", []),
+            "scenarios": scenarios_compact,
+        }
+
+    layer5_raw = meta.get("layer_5_intervention")
+    if isinstance(layer5_raw, dict):
+        compact_meta["layer_5_intervention"] = layer5_raw
+
+    elastic_scope_raw = meta.get("elastic_scope")
+    if isinstance(elastic_scope_raw, dict):
+        compact_meta["elastic_scope"] = elastic_scope_raw
+
+    elastic_uplift_raw = meta.get("elastic_uplift")
+    if isinstance(elastic_uplift_raw, dict):
+        compact_meta["elastic_uplift"] = {
+            "delta": elastic_uplift_raw.get("delta", 0),
+            "scope": elastic_uplift_raw.get("scope", "none"),
+            "affected_lines": elastic_uplift_raw.get("affected_lines", 0),
+        }
+
+    from_wb_raw = meta.get("from_wb")
+    if isinstance(from_wb_raw, dict):
+        freshness_raw = from_wb_raw.get("freshness")
+        freshness_compact: dict[str, object] = {}
+        if isinstance(freshness_raw, dict):
+            freshness_compact = {
+                "status": freshness_raw.get("status"),
+                "sales_age_days": freshness_raw.get("sales_age_days"),
+                "stock_oldest_age_days": freshness_raw.get("stock_oldest_age_days"),
+                "threshold_days": freshness_raw.get("threshold_days"),
+                "threshold_source": freshness_raw.get("threshold_source"),
+            }
+
+        daily_sales_by_bundle = from_wb_raw.get("daily_sales_by_bundle")
+        wb_stock_by_bundle = from_wb_raw.get("wb_stock_by_bundle")
+        wb_stock_updated_at_by_bundle = from_wb_raw.get("wb_stock_updated_at_by_bundle")
+
+        compact_meta["from_wb"] = {
+            "observation_window_days": from_wb_raw.get("observation_window_days"),
+            "freshness_mode": from_wb_raw.get("freshness_mode"),
+            "requested_as_of_date": from_wb_raw.get("requested_as_of_date"),
+            "as_of_date": from_wb_raw.get("as_of_date"),
+            "as_of_source": from_wb_raw.get("as_of_source"),
+            "bundle_type_ids": from_wb_raw.get("bundle_type_ids", []),
+            "sales_window": from_wb_raw.get("sales_window"),
+            "freshness": freshness_compact,
+            "snapshot": {
+                "daily_sales_bundle_count": (
+                    len(daily_sales_by_bundle)
+                    if isinstance(daily_sales_by_bundle, dict)
+                    else 0
+                ),
+                "daily_sales_total": _sum_numeric_mapping_values(daily_sales_by_bundle),
+                "wb_stock_bundle_count": (
+                    len(wb_stock_by_bundle)
+                    if isinstance(wb_stock_by_bundle, dict)
+                    else 0
+                ),
+                "wb_stock_total": int(_sum_numeric_mapping_values(wb_stock_by_bundle)),
+                "wb_stock_updated_bundle_count": (
+                    len(wb_stock_updated_at_by_bundle)
+                    if isinstance(wb_stock_updated_at_by_bundle, dict)
+                    else 0
+                ),
+            },
+        }
+
+    return compact_meta
+
+
+def _apply_explainability_mode(
+    explanation: ProductionOrderExplanationBlock,
+    mode: str,
+) -> ProductionOrderExplanationBlock:
+    if mode != EXPLAINABILITY_MODE_COMPACT:
+        return explanation
+
+    compact_steps, omitted_steps = _compact_explanation_steps(explanation.steps)
+    compact_meta = _build_compact_explanation_meta(explanation.meta)
+    compact_meta["explainability"] = {
+        "mode": EXPLAINABILITY_MODE_COMPACT,
+        "steps_omitted": omitted_steps,
+    }
+
+    return ProductionOrderExplanationBlock(
+        summary=explanation.summary,
+        steps=compact_steps,
+        meta=compact_meta,
+    )
 
 
 def _load_assorti_bundle_type_flags(
@@ -1247,6 +1459,7 @@ def build_production_order_proposal_from_wb(
     proposal_request = ProductionOrderProposalRequest(
         article_id=request.article_id,
         planning_horizon_days=request.planning_horizon_days,
+        explainability_mode=EXPLAINABILITY_MODE_FULL,
         bundle_daily_sales=[
             BundleDemandInput(
                 bundle_type_id=bundle_type_id,
@@ -1355,6 +1568,10 @@ def build_production_order_proposal_from_wb(
             f"freshness_threshold_days=sales:{sales_stale_after_days}|stock:{stock_stale_after_days}, "
             f"freshness_threshold_source=sales:{freshness_threshold_source['sales']}|stock:{freshness_threshold_source['stock']}."
         ),
+    )
+    response.explanation = _apply_explainability_mode(
+        explanation=response.explanation,
+        mode=request.explainability_mode,
     )
     return response
 
@@ -1532,6 +1749,17 @@ def build_production_order_proposal(
     )
 
     if not settings.include_in_planning:
+        explanation = _apply_explainability_mode(
+            explanation=ProductionOrderExplanationBlock(
+                summary="Артикул исключен из планирования настройкой include_in_planning=false.",
+                steps=[
+                    "Получены настройки статьи и проверен флаг include_in_planning.",
+                    "Расчет пропущен по явному правилу исключения.",
+                ],
+            ),
+            mode=request.explainability_mode,
+        )
+
         return ProductionOrderProposalResponse(
             status="skipped",
             article_id=request.article_id,
@@ -1542,13 +1770,7 @@ def build_production_order_proposal(
             recommendation=None,
             constraints_applied=ProductionOrderConstraintsApplied(),
             alternatives=[],
-            explanation=ProductionOrderExplanationBlock(
-                summary="Артикул исключен из планирования настройкой include_in_planning=false.",
-                steps=[
-                    "Получены настройки статьи и проверен флаг include_in_planning.",
-                    "Расчет пропущен по явному правилу исключения.",
-                ],
-            ),
+            explanation=explanation,
         )
 
     bundle_type_ids = sorted({item.bundle_type_id for item in request.bundle_daily_sales})
@@ -2340,6 +2562,10 @@ def build_production_order_proposal(
                 "line_alloc": elastic_uplift_line_alloc_items,
             },
         },
+    )
+    explanation = _apply_explainability_mode(
+        explanation=explanation,
+        mode=request.explainability_mode,
     )
 
     return ProductionOrderProposalResponse(

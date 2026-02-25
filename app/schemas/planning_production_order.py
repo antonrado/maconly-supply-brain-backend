@@ -46,6 +46,7 @@ class PlanningOverridesInput(BaseModel):
 class ProductionOrderProposalRequest(BaseModel):
     article_id: int = Field(..., ge=1)
     planning_horizon_days: int = Field(90, ge=1, le=365)
+    explainability_mode: Literal["full", "compact"] = "full"
     bundle_daily_sales: list[BundleDemandInput] = Field(default_factory=list)
     bundle_stock: list[BundleStockInput] = Field(default_factory=list)
     in_flight_supply: list[InFlightSupplyInput] = Field(default_factory=list)
@@ -90,6 +91,7 @@ class ProductionOrderProposalRequest(BaseModel):
 class ProductionOrderProposalFromWbRequest(BaseModel):
     article_id: int = Field(..., ge=1)
     planning_horizon_days: int = Field(90, ge=1, le=365)
+    explainability_mode: Literal["full", "compact"] = "full"
     observation_window_days: int = Field(30, ge=1, le=365)
     as_of_date: date | None = None
     freshness_mode: Literal["warn", "strict"] = "warn"
