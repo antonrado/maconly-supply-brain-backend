@@ -122,6 +122,10 @@ class ArticlePlanningSettings(Base):
         Integer,
         nullable=True,
     )
+    production_order_assorti_bundle_type_ids: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
 
 
 class ColorPlanningSettings(Base):
@@ -252,6 +256,10 @@ class GlobalPlanningSettings(Base):
     )
     default_elastic_min_batch_qty: Mapped[int] = mapped_column(
         Integer, nullable=False, default=3000
+    )
+    default_production_order_assorti_bundle_type_ids: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
 

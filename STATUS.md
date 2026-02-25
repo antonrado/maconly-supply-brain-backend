@@ -31,7 +31,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Freshness threshold precedence for `from-wb` is now `request > admin_defaults > global_default`; admin defaults are managed via production-order settings API and persisted on article-level settings.
   - Core production-order reorder policy now applies `safety_stock_days` from planning settings (`reorder_point_days = lead_time_days_total + safety_stock_days`) and exposes this in explanation step + `explanation.meta.reorder_policy`.
   - Core production-order now emits Layer 1 deterministic stock-health metrics per SKU (`velocity_main`, `velocity_assorti`, `coverage_days`, `current_stock`, `in_flight`, `eta_days`, `gross_margin` proxy, `capital_locked` proxy, `stockout_risk`, `overstock_risk`) via `explanation.meta.layer_1_stock_health`.
-  - Assorti bundle classification moved from runtime keyword parsing to explicit `bundle_type.is_assorti` with source tracing in explanation step and `explanation.meta.layer_1_stock_health.assorti_classification`.
+  - Assorti bundle classification now uses deterministic precedence: `bundle_type.is_assorti` (primary) -> admin mapping (`article_planning_settings.production_order_assorti_bundle_type_ids`) -> global mapping (`global_planning_settings.default_production_order_assorti_bundle_type_ids`) -> main default, with source tracing in explanation step and `explanation.meta.layer_1_stock_health.assorti_classification`.
   - Core production-order now emits Layer 2 deterministic allocation comparison (`profit_if_main_until_eta` vs `profit_if_assorti_until_eta`, GMROI proxy, decision `main|assorti|hold`) via `explanation.meta.layer_2_allocation` and summary steps.
   - Layer 2 semantics are now explicit: decision gate is `profit_until_eta`, deterministic tie-break is `hold`, and GMROI is diagnostic-only (`explanation.meta.layer_2_allocation`).
   - Core production-order Layer 3 purchase shaping now deterministically applies Layer 2 decisions (`main|assorti|hold`) to candidate purchase quantities using fixed factors and exposes shaping diagnostics via `explanation.meta.layer_3_purchase_shaping`.
@@ -53,7 +53,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Planning Core production-order admin settings endpoints added:
   - `GET /api/v1/planning/core/production-order/settings/{article_id}`
   - `PUT /api/v1/planning/core/production-order/settings/{article_id}`
-  - Covers admin-managed inputs for size weights, elastic bindings (SKU/color), and in-flight defaults.
+  - Covers admin-managed inputs for size weights, elastic bindings (SKU/color), in-flight defaults, and assorti fallback mapping (`assorti_bundle_type_ids`).
 - Production-order admin settings persistence added:
   - `production_order_size_weight_settings`
   - `production_order_elastic_bindings`

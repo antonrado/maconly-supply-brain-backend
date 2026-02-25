@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.models import (
     Article,
     ArticlePlanningSettings,
+    BundleType,
     ElasticType,
     ProductionOrderElasticBinding,
     ProductionOrderInFlightDefault,
@@ -22,6 +23,39 @@ from app.schemas.planning_production_order_admin import (
     ProductionOrderInFlightDefaultInput,
     ProductionOrderSizeWeightInput,
 )
+
+
+def _parse_assorti_bundle_type_ids(raw_value: str | None) -> list[int]:
+    if raw_value is None:
+        return []
+
+    bundle_type_ids: set[int] = set()
+    for token in raw_value.split(","):
+        candidate = token.strip()
+        if not candidate:
+            continue
+        try:
+            bundle_type_id = int(candidate)
+        except ValueError:
+            continue
+        if bundle_type_id <= 0:
+            continue
+        bundle_type_ids.add(bundle_type_id)
+
+    return sorted(bundle_type_ids)
+
+
+def _serialize_assorti_bundle_type_ids(bundle_type_ids: list[int]) -> str | None:
+    normalized = sorted(
+        {
+            int(bundle_type_id)
+            for bundle_type_id in bundle_type_ids
+            if int(bundle_type_id) > 0
+        }
+    )
+    if not normalized:
+        return None
+    return ",".join(str(bundle_type_id) for bundle_type_id in normalized)
 
 
 def _require_article(db: Session, article_id: int) -> Article:
@@ -112,6 +146,27 @@ def _validate_elastic_bindings(
                         f"sku_unit_id={item.sku_unit_id} color mismatch with color_id={item.color_id}"
                     ),
                 )
+
+
+def _validate_assorti_bundle_type_ids(
+    db: Session,
+    payload: ProductionOrderAdminSettingsUpsertRequest,
+) -> None:
+    if not payload.assorti_bundle_type_ids:
+        return
+
+    existing_ids = {
+        row.id
+        for row in db.query(BundleType)
+        .filter(BundleType.id.in_(payload.assorti_bundle_type_ids))
+        .all()
+    }
+    missing_ids = sorted(set(payload.assorti_bundle_type_ids) - existing_ids)
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown assorti_bundle_type_id(s): {missing_ids}",
+        )
 
 
 def _validate_in_flight_defaults(
@@ -205,6 +260,11 @@ def get_production_order_admin_settings(
         size_weights=size_weights,
         elastic_bindings=elastic_bindings,
         in_flight_supply_defaults=in_flight_supply_defaults,
+        assorti_bundle_type_ids=(
+            _parse_assorti_bundle_type_ids(article_settings.production_order_assorti_bundle_type_ids)
+            if article_settings is not None
+            else []
+        ),
         freshness_sales_stale_after_days=(
             int(article_settings.production_order_freshness_sales_stale_after_days)
             if article_settings is not None
@@ -245,6 +305,7 @@ def upsert_production_order_admin_settings(
         payload=payload,
         sku_by_color_size=sku_by_color_size,
     )
+    _validate_assorti_bundle_type_ids(db=db, payload=payload)
 
     db.query(ProductionOrderSizeWeightSetting).filter(
         ProductionOrderSizeWeightSetting.article_id == article_id
@@ -314,6 +375,9 @@ def upsert_production_order_admin_settings(
     )
     article_settings.production_order_freshness_stock_stale_after_days = (
         payload.freshness_stock_stale_after_days
+    )
+    article_settings.production_order_assorti_bundle_type_ids = _serialize_assorti_bundle_type_ids(
+        payload.assorti_bundle_type_ids
     )
 
     db.commit()

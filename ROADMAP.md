@@ -27,7 +27,7 @@
 
 ### 2.1 Layer 1 - Stock health metrics foundation (in progress)
 - Per-SKU deterministic metrics: velocity (main/assorti), coverage, stock, in-flight, ETA, margin proxy, capital proxy, stockout/overstock risk.
-- Assorti classification now uses explicit `bundle_type.is_assorti` source with traceable meta output (no runtime keyword parsing).
+- Assorti classification now uses explicit `bundle_type.is_assorti` as primary source with deterministic admin/global fallback mapping (`admin_defaults` -> `global_default`) and traceable meta output (no runtime keyword parsing).
 - Expose machine-readable metrics in explanation meta.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
@@ -70,14 +70,13 @@
 - Layer-by-layer delivery, no scope creep.
 
 ## Immediate high-leverage follow-ups
-1. Extend assorti classification with admin/global mapping fallback (while keeping `bundle_type.is_assorti` as primary source).
-2. Complete Layer 1 metric contract and lock regression tests.
-3. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
-4. Finalize Layer 4 scenario contract and stabilize regression coverage.
-5. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
-6. Define/implement explainability `compact|full` payload mode contract.
-7. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
-8. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
+1. Complete Layer 1 metric contract and lock regression tests.
+2. Complete Layer 3 deterministic purchase math calibration on top of allocation-driven shaping.
+3. Finalize Layer 4 scenario contract and stabilize regression coverage.
+4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
+5. Define/implement explainability `compact|full` payload mode contract.
+6. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
+7. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.

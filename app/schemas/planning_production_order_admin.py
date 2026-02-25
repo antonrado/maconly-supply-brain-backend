@@ -36,6 +36,7 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
     size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
     elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
     in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    assorti_bundle_type_ids: list[int] = Field(default_factory=list)
     freshness_sales_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
     freshness_stock_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
 
@@ -66,6 +67,21 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
             seen.add(key)
         return value
 
+    @field_validator("assorti_bundle_type_ids")
+    @classmethod
+    def validate_unique_assorti_bundle_type_ids(
+        cls,
+        value: list[int],
+    ) -> list[int]:
+        seen: set[int] = set()
+        for bundle_type_id in value:
+            if bundle_type_id <= 0:
+                raise ValueError("assorti_bundle_type_ids must contain positive ids")
+            if bundle_type_id in seen:
+                raise ValueError("assorti_bundle_type_ids contains duplicate ids")
+            seen.add(bundle_type_id)
+        return value
+
     @field_validator("in_flight_supply_defaults")
     @classmethod
     def validate_unique_in_flight_defaults(
@@ -86,5 +102,6 @@ class ProductionOrderAdminSettingsResponse(BaseModel):
     size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
     elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
     in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    assorti_bundle_type_ids: list[int] = Field(default_factory=list)
     freshness_sales_stale_after_days: int | None = None
     freshness_stock_stale_after_days: int | None = None

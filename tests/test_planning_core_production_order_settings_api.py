@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
+from app.services.planning_production_order import ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE
 from app.models.models import (
     Article,
     ArticlePlanningSettings,
@@ -150,6 +151,7 @@ def test_production_order_settings_get_empty(client, db_session):
     assert body["size_weights"] == []
     assert body["elastic_bindings"] == []
     assert body["in_flight_supply_defaults"] == []
+    assert body["assorti_bundle_type_ids"] == []
     assert body["freshness_sales_stale_after_days"] is None
     assert body["freshness_stock_stale_after_days"] is None
 
@@ -184,6 +186,7 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
                 "is_active": True,
             }
         ],
+        "assorti_bundle_type_ids": [seeded["bundle_type"].id],
         "freshness_sales_stale_after_days": 14,
         "freshness_stock_stale_after_days": 9,
     }
@@ -198,6 +201,7 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
     assert len(body["size_weights"]) == 2
     assert len(body["elastic_bindings"]) == 2
     assert len(body["in_flight_supply_defaults"]) == 1
+    assert body["assorti_bundle_type_ids"] == [seeded["bundle_type"].id]
     assert body["freshness_sales_stale_after_days"] == 14
     assert body["freshness_stock_stale_after_days"] == 9
 
@@ -250,6 +254,7 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
                 "is_active": True,
             }
         ],
+        "assorti_bundle_type_ids": [seeded["bundle_type"].id],
     }
 
     save_resp = client.put(
@@ -281,3 +286,16 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
     steps = body["explanation"]["steps"]
     assert any("size_weights=admin_defaults" in step for step in steps)
     assert any("in_flight=admin_defaults" in step for step in steps)
+
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+        }
+    ]

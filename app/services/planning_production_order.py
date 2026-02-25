@@ -48,6 +48,9 @@ FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
 LAYER2_ALLOCATION_METHOD = "time_window_profit_proxy_with_gmroi_diagnostics"
 ASSORTI_CLASSIFICATION_SOURCE = "bundle_type.is_assorti"
+ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE = "admin_defaults_assorti_mapping"
+ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE = "global_default_assorti_mapping"
+ASSORTI_CLASSIFICATION_MISSING_SOURCE = "bundle_type_missing_default_main"
 LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
@@ -311,9 +314,31 @@ def _add_units_for_color(
         line_qty[key] = line_qty.get(key, 0) + qty
 
 
+def _parse_assorti_bundle_type_ids(raw_value: str | None) -> set[int]:
+    if raw_value is None:
+        return set()
+
+    bundle_type_ids: set[int] = set()
+    for token in raw_value.split(","):
+        candidate = token.strip()
+        if not candidate:
+            continue
+        try:
+            bundle_type_id = int(candidate)
+        except ValueError:
+            continue
+        if bundle_type_id <= 0:
+            continue
+        bundle_type_ids.add(bundle_type_id)
+
+    return bundle_type_ids
+
+
 def _load_assorti_bundle_type_flags(
     db: Session,
     bundle_type_ids: list[int],
+    admin_assorti_bundle_type_ids: set[int] | None = None,
+    global_assorti_bundle_type_ids: set[int] | None = None,
 ) -> tuple[dict[int, bool], list[dict[str, int | bool | str]]]:
     if not bundle_type_ids:
         return {}, []
@@ -325,34 +350,38 @@ def _load_assorti_bundle_type_flags(
         .filter(BundleType.id.in_(unique_bundle_type_ids))
         .all()
     )
+    bundle_type_by_id = {int(bundle_type.id): bundle_type for bundle_type in bundle_types}
 
-    result: dict[int, bool] = {
-        bundle_type_id: False
-        for bundle_type_id in unique_bundle_type_ids
-    }
+    admin_assorti_ids = admin_assorti_bundle_type_ids or set()
+    global_assorti_ids = global_assorti_bundle_type_ids or set()
+
+    result: dict[int, bool] = {}
     traces: list[dict[str, int | bool | str]] = []
-    loaded_ids: set[int] = set()
-
-    for bundle_type in sorted(bundle_types, key=lambda item: item.id):
-        is_assorti = bool(bundle_type.is_assorti)
-        result[bundle_type.id] = is_assorti
-        loaded_ids.add(bundle_type.id)
-        traces.append(
-            {
-                "bundle_type_id": int(bundle_type.id),
-                "is_assorti": is_assorti,
-                "source": ASSORTI_CLASSIFICATION_SOURCE,
-            }
-        )
 
     for bundle_type_id in unique_bundle_type_ids:
-        if bundle_type_id in loaded_ids:
-            continue
+        bundle_type = bundle_type_by_id.get(bundle_type_id)
+        if bundle_type is not None and bool(bundle_type.is_assorti):
+            is_assorti = True
+            source = ASSORTI_CLASSIFICATION_SOURCE
+        elif bundle_type_id in admin_assorti_ids:
+            is_assorti = True
+            source = ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE
+        elif bundle_type_id in global_assorti_ids:
+            is_assorti = True
+            source = ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE
+        elif bundle_type is not None:
+            is_assorti = False
+            source = ASSORTI_CLASSIFICATION_SOURCE
+        else:
+            is_assorti = False
+            source = ASSORTI_CLASSIFICATION_MISSING_SOURCE
+
+        result[bundle_type_id] = is_assorti
         traces.append(
             {
                 "bundle_type_id": int(bundle_type_id),
-                "is_assorti": False,
-                "source": "bundle_type_missing_default_main",
+                "is_assorti": is_assorti,
+                "source": source,
             }
         )
 
@@ -1732,9 +1761,22 @@ def build_production_order_proposal(
     available_bundles_for_cover = ready_bundle_stock_total + competition_raw_bundle_stock
     reorder_point_days = settings.lead_time_days_total + settings.safety_stock_days
 
+    admin_assorti_bundle_type_ids = _parse_assorti_bundle_type_ids(
+        article_settings.production_order_assorti_bundle_type_ids
+        if article_settings is not None
+        else None
+    )
+    global_assorti_bundle_type_ids = _parse_assorti_bundle_type_ids(
+        global_settings.default_production_order_assorti_bundle_type_ids
+        if global_settings is not None
+        else None
+    )
+
     assorti_by_bundle_type, assorti_classification_by_bundle_type = _load_assorti_bundle_type_flags(
         db=db,
         bundle_type_ids=bundle_type_ids,
+        admin_assorti_bundle_type_ids=admin_assorti_bundle_type_ids,
+        global_assorti_bundle_type_ids=global_assorti_bundle_type_ids,
     )
     assorti_bundle_type_count = sum(
         1
@@ -1745,6 +1787,15 @@ def build_production_order_proposal(
         len(assorti_classification_by_bundle_type) - assorti_bundle_type_count,
         0,
     )
+    assorti_classification_source_counts: dict[str, int] = defaultdict(int)
+    for item in assorti_classification_by_bundle_type:
+        source = str(item.get("source", "unknown"))
+        assorti_classification_source_counts[source] += 1
+    assorti_classification_source_breakdown = {
+        source: assorti_classification_source_counts[source]
+        for source in sorted(assorti_classification_source_counts)
+    }
+
     layer1_stock_health_metrics = _build_layer1_stock_health_metrics(
         bundle_type_ids=bundle_type_ids,
         demand_by_bundle=demand_by_bundle,
@@ -2127,8 +2178,11 @@ def build_production_order_proposal(
             (
                 "Assorti classification: "
                 f"source={ASSORTI_CLASSIFICATION_SOURCE}, "
+                f"fallback_admin_ids={sorted(admin_assorti_bundle_type_ids)}, "
+                f"fallback_global_ids={sorted(global_assorti_bundle_type_ids)}, "
                 f"assorti_bundle_types={assorti_bundle_type_count}, "
-                f"main_bundle_types={main_bundle_type_count}."
+                f"main_bundle_types={main_bundle_type_count}, "
+                f"source_breakdown={assorti_classification_source_breakdown}."
             ),
             (
                 f"Layer 1 stock health: sku_count={len(layer1_stock_health_metrics)}, "
@@ -2209,6 +2263,15 @@ def build_production_order_proposal(
                 },
                 "assorti_classification": {
                     "source": ASSORTI_CLASSIFICATION_SOURCE,
+                    "fallback_sources": [
+                        ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+                        ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
+                    ],
+                    "fallback_mapping": {
+                        "admin_defaults_bundle_type_ids": sorted(admin_assorti_bundle_type_ids),
+                        "global_default_bundle_type_ids": sorted(global_assorti_bundle_type_ids),
+                    },
+                    "source_breakdown": assorti_classification_source_breakdown,
                     "summary": {
                         "assorti_bundle_types": assorti_bundle_type_count,
                         "main_bundle_types": main_bundle_type_count,

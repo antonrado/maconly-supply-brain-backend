@@ -27,6 +27,7 @@
 ## Production Order v1 architecture canon
 - Production Order is a **layered, capital-aware, bundle-aware decision engine**, not a simple reorder calculator.
 - Optimization goals are balanced jointly: turnover, capital efficiency, stockout risk, bundle composition efficiency, assorti sustainability.
+- Assorti classification precedence is deterministic and traceable: `bundle_type.is_assorti` (primary) -> article admin mapping fallback -> global mapping fallback -> main default.
 - Layer sequence is strict:
   1. Layer 1 - deterministic stock-health metrics by SKU.
   2. Layer 2 - deterministic allocation comparison (`main` vs `assorti`) using time-window profit as decision gate; GMROI proxy is diagnostic-only and tie-break is `hold`.

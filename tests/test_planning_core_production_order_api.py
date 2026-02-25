@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from app.core.db import get_db
 from app.main import app
 from app.services.planning_production_order import (
+    ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+    ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_SOURCE,
     LAYER2_ALLOCATION_METHOD,
     LAYER4_SCENARIO_FACTORS,
@@ -794,6 +796,9 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "unit_capital": 1.0,
     }
     assert layer1["assorti_classification"]["source"] == ASSORTI_CLASSIFICATION_SOURCE
+    assert layer1["assorti_classification"]["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_SOURCE: 1,
+    }
     assert layer1["assorti_classification"]["summary"] == {
         "assorti_bundle_types": 0,
         "main_bundle_types": 1,
@@ -1027,6 +1032,87 @@ def test_production_order_proposal_layer3_shaping_reduces_qty_for_explicit_assor
     assert layer4_assorti[0]["assorti_sustainability_impact"] == "negative"
     assert layer4_assorti[1]["assorti_sustainability_impact"] == "neutral"
     assert layer4_assorti[2]["assorti_sustainability_impact"] == "positive"
+
+
+def test_production_order_proposal_assorti_classification_prefers_admin_fallback_over_global(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE: 1,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+        }
+    ]
+
+
+def test_production_order_proposal_assorti_classification_uses_global_fallback_when_admin_missing(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE: 1,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
+        }
+    ]
 
 
 def test_layer5_intervention_signals_accelerate_when_no_in_flight():
