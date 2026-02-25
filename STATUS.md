@@ -104,7 +104,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Local verify workflow hardening:
   - Added `pytest` and `httpx` to image dependencies so `scripts/dev.ps1 verify` no longer performs ad-hoc pip installs inside running backend containers.
   - Added backend-running wait gate after `up -d --build backend` to avoid dependency-check race when container is still starting.
-  - Added `scripts/dev.ps1 po-api-smoke` for deterministic live connectivity checks of production-order endpoints (`health=200`, schema-invalid direct/from-WB requests=`422`).
+  - Added `scripts/dev.ps1 po-api-smoke` for deterministic live connectivity checks of production-order endpoints (`health=200`, seeded direct/from-WB happy-path requests=`200`, schema-invalid direct/from-WB requests=`422`).
 - Governance baseline added:
   - CI pipeline: `.github/workflows/ci.yml`
   - Context synchronization guard in CI: `scripts/context_guard.py`

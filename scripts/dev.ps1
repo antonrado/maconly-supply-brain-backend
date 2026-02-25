@@ -178,6 +178,34 @@ switch ($Command) {
     "po-api-smoke" {
         Invoke-ApiExpectedStatus -Name "planning-core-health" -Method "GET" -Url "http://localhost:8000/api/v1/planning/core/health" -ExpectedStatus 200
 
+        $RunningServices = docker compose -f $ComposeFile ps --status running --services 2>$null
+        $BackendRunning = $LASTEXITCODE -eq 0 -and (($RunningServices | ForEach-Object { $_.Trim() }) -contains "backend")
+        if (-not $BackendRunning) {
+            Write-Host "[po-api-smoke] backend container is not running. Run '.\\scripts\\dev.ps1 up' first." -ForegroundColor Yellow
+            exit 1
+        }
+
+        $SeedOutput = docker compose -f $ComposeFile exec -T backend python scripts/po_api_smoke_seed.py
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[po-api-smoke] FAIL seed step: unable to prepare smoke dataset." -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host "[po-api-smoke] FAIL seed step: invalid seed JSON output." -ForegroundColor Red
+            Write-Host $SeedOutput
+            exit 1
+        }
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+
+        Invoke-ApiExpectedStatus -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload
+        Invoke-ApiExpectedStatus -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload
+
         $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
         Invoke-ApiExpectedStatus -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload
 

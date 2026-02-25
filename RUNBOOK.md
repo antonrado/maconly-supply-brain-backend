@@ -23,6 +23,9 @@ Use helper commands from `scripts/dev.ps1`:
 
 `po-api-smoke` validates live API connectivity for production-order routes with deterministic expected statuses:
 - `GET /api/v1/planning/core/health` -> `200`
+- Seeds deterministic smoke fixture data via backend container (`scripts/po_api_smoke_seed.py`)
+- `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
+- `POST /api/v1/planning/core/production-order/proposal/from-wb` (happy-path payload) -> `200`
 - `POST /api/v1/planning/core/production-order/proposal` (schema-invalid payload) -> `422`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (schema-invalid payload) -> `422`
 
