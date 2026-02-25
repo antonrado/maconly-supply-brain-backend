@@ -32,6 +32,12 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
   - `overstock_risk=0.1`
 
 ### Layer outputs
+- Layer 1:
+  - `velocity_main=3.0`
+  - `velocity_assorti=1.5`
+  - `stockout_risk=0.9`
+  - `overstock_risk=0.1`
+  - `capital_locked=100.0`
 - Layer 2:
   - `allocation_decision=main`
   - `profit_if_main_until_eta=20.0`
@@ -68,6 +74,12 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
   - `overstock_risk=0.4`
 
 ### Layer outputs
+- Layer 1:
+  - `velocity_main=1.0`
+  - `velocity_assorti=2.0`
+  - `stockout_risk=0.4`
+  - `overstock_risk=0.4`
+  - `capital_locked=80.0`
 - Layer 2:
   - `allocation_decision=assorti`
   - `profit_if_main_until_eta=10.0`
@@ -104,6 +116,12 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
   - `overstock_risk=0.95`
 
 ### Layer outputs
+- Layer 1:
+  - `velocity_main=1.7`
+  - `velocity_assorti=2.0`
+  - `stockout_risk=0.05`
+  - `overstock_risk=0.95`
+  - `capital_locked=120.0`
 - Layer 2:
   - `allocation_decision=hold` (profit tie)
   - `profit_if_main_until_eta=17.0`
@@ -124,4 +142,5 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
 
 ## Release-gate traceability
 - This casebook is intended to be locked by regression tests in `tests/test_planning_core_production_order_api.py`.
-- The regression should verify deterministic outputs and scenario capital deltas for all three cases.
+- Coverage includes deterministic helper snapshots (`test_decision_quality_case_studies_are_deterministic`) and full helper-chain coverage from computed Layer 1 metrics (`test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5`).
+- Regressions verify deterministic outputs, recommendation action integrity, and scenario capital deltas for all three cases.
