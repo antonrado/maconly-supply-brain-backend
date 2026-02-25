@@ -34,6 +34,7 @@
 - Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
+- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, decision validity, tie-break invariants) and projected in compact explainability mode.
 - No hard-coded "critical SKU" classifier as primary allocator.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)

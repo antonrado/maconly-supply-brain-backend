@@ -59,6 +59,7 @@ LAYER2_ASSORTI_MARGIN_PROXY = 0.85
 LAYER2_UNIT_CAPITAL_PROXY = 1.0
 LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD = 0.5
 LAYER1_CONTRACT_VERSION = "v1_alpha"
+LAYER2_CONTRACT_VERSION = "v1_alpha"
 LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "main": 1.0,
     "assorti": 0.75,
@@ -606,6 +607,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
         compact_meta["layer_2_allocation"] = {
             "method": layer2_raw.get("method"),
             "summary": layer2_raw.get("summary", {}),
+            "contract": layer2_raw.get("contract", {}),
             "decision_gate": layer2_raw.get("decision_gate"),
             "tie_break": layer2_raw.get("tie_break"),
             "gmroi_usage": layer2_raw.get("gmroi_usage"),
@@ -1031,6 +1033,97 @@ def _build_layer2_allocation_decisions(
         )
 
     return decisions, summary
+
+
+def _build_layer2_contract_summary(
+    layer2_allocation_decisions: list[dict[str, int | float | str]],
+    layer2_allocation_summary: dict[str, int],
+) -> dict[str, str | int | dict[str, bool] | dict[str, int]]:
+    expected_decisions = ("main", "assorti", "hold")
+
+    summary_expected = {
+        decision: max(int(layer2_allocation_summary.get(decision, 0)), 0)
+        for decision in expected_decisions
+    }
+    summary_actual = {decision: 0 for decision in expected_decisions}
+
+    seen_keys: set[tuple[int, int]] = set()
+    duplicates_found = False
+    unknown_decisions_found = False
+    non_negative_profit_metrics = True
+    non_negative_gmroi_metrics = True
+    eta_days_positive = True
+    tie_break_hold_when_equal_profit = True
+
+    for decision_item in layer2_allocation_decisions:
+        color_id_raw = decision_item.get("color_id")
+        size_id_raw = decision_item.get("size_id")
+        try:
+            line_key = (int(color_id_raw), int(size_id_raw))
+        except (TypeError, ValueError):
+            duplicates_found = True
+            line_key = None
+
+        if line_key is not None:
+            if line_key in seen_keys:
+                duplicates_found = True
+            seen_keys.add(line_key)
+
+        allocation_decision = str(decision_item.get("allocation_decision", "")).strip().lower()
+        if allocation_decision in summary_actual:
+            summary_actual[allocation_decision] += 1
+        else:
+            unknown_decisions_found = True
+
+        try:
+            profit_main = float(decision_item.get("profit_if_main_until_eta", 0.0))
+            profit_assorti = float(decision_item.get("profit_if_assorti_until_eta", 0.0))
+        except (TypeError, ValueError):
+            non_negative_profit_metrics = False
+            tie_break_hold_when_equal_profit = False
+        else:
+            if profit_main < 0 or profit_assorti < 0:
+                non_negative_profit_metrics = False
+            if abs(profit_main - profit_assorti) <= 1e-9 and allocation_decision != "hold":
+                tie_break_hold_when_equal_profit = False
+
+        try:
+            gmroi_main = float(decision_item.get("gmroi_main", 0.0))
+            gmroi_assorti = float(decision_item.get("gmroi_assorti", 0.0))
+        except (TypeError, ValueError):
+            non_negative_gmroi_metrics = False
+        else:
+            if gmroi_main < 0 or gmroi_assorti < 0:
+                non_negative_gmroi_metrics = False
+
+        try:
+            eta_days = int(decision_item.get("eta_days", 0))
+        except (TypeError, ValueError):
+            eta_days_positive = False
+        else:
+            if eta_days < 1:
+                eta_days_positive = False
+
+    checks = {
+        "summary_matches_decisions": summary_actual == summary_expected,
+        "summary_total_matches_decision_count": (
+            sum(summary_expected.values()) == len(layer2_allocation_decisions)
+        ),
+        "valid_decisions_only": not unknown_decisions_found,
+        "unique_color_size_pairs": not duplicates_found,
+        "non_negative_profit_metrics": non_negative_profit_metrics,
+        "non_negative_gmroi_metrics": non_negative_gmroi_metrics,
+        "eta_days_positive": eta_days_positive,
+        "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_profit,
+    }
+    return {
+        "version": LAYER2_CONTRACT_VERSION,
+        "status": "ok" if all(checks.values()) else "violated",
+        "decision_count": len(layer2_allocation_decisions),
+        "summary_expected": summary_expected,
+        "summary_actual": summary_actual,
+        "checks": checks,
+    }
 
 
 def _apply_layer3_purchase_shaping(
@@ -2478,6 +2571,10 @@ def build_production_order_proposal(
         stock_health_metrics=layer1_stock_health_metrics,
         lead_time_days_total=settings.lead_time_days_total,
     )
+    layer2_contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=layer2_allocation_decisions,
+        layer2_allocation_summary=layer2_allocation_summary,
+    )
     layer1_avg_coverage_days = (
         round(
             sum(float(item["coverage_days"]) for item in layer1_stock_health_metrics)
@@ -2872,7 +2969,8 @@ def build_production_order_proposal(
                 "decision_gate=profit_until_eta, tie_break=hold, "
                 f"main={layer2_allocation_summary['main']}, "
                 f"assorti={layer2_allocation_summary['assorti']}, "
-                f"hold={layer2_allocation_summary['hold']}."
+                f"hold={layer2_allocation_summary['hold']}, "
+                f"contract_status={layer2_contract['status']}."
             ),
             (
                 "Layer 3 purchase shaping: method=allocation_decision_factors, "
@@ -2978,6 +3076,7 @@ def build_production_order_proposal(
                 "method": LAYER2_ALLOCATION_METHOD,
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
+                "contract": layer2_contract,
                 "decision_gate": "profit_until_eta",
                 "tie_break": "hold",
                 "gmroi_usage": "diagnostic_only",

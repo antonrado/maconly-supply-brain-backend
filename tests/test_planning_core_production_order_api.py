@@ -15,6 +15,7 @@ from app.services.planning_production_order import (
     EXPLAINABILITY_MODE_COMPACT,
     LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
     LAYER2_ALLOCATION_METHOD,
+    LAYER2_CONTRACT_VERSION,
     LAYER4_SCENARIO_FACTORS,
     LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
     LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
@@ -23,6 +24,7 @@ from app.services.planning_production_order import (
     _apply_layer3_purchase_shaping,
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
+    _build_layer2_contract_summary,
     _build_layer4_contract_summary,
     _build_layer5_intervention_signals,
 )
@@ -187,6 +189,53 @@ def _build_payload(article_id: int, bundle_type_id: int, size_s_id: int, size_m_
     }
 
 
+def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismatch():
+    decisions = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 0.8,
+            "profit_if_assorti_until_eta": 0.8,
+            "gmroi_main": 0.1,
+            "gmroi_assorti": 0.1,
+            "allocation_decision": "main",
+        },
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 0,
+            "profit_if_main_until_eta": -0.1,
+            "profit_if_assorti_until_eta": 0.2,
+            "gmroi_main": -0.3,
+            "gmroi_assorti": 0.1,
+            "allocation_decision": "invalid",
+        },
+    ]
+    summary = {"main": 0, "assorti": 0, "hold": 1}
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary=summary,
+    )
+
+    assert contract["version"] == LAYER2_CONTRACT_VERSION
+    assert contract["status"] == "violated"
+    assert contract["decision_count"] == 2
+    assert contract["summary_expected"] == {"main": 0, "assorti": 0, "hold": 1}
+    assert contract["summary_actual"] == {"main": 1, "assorti": 0, "hold": 0}
+    assert contract["checks"] == {
+        "summary_matches_decisions": False,
+        "summary_total_matches_decision_count": False,
+        "valid_decisions_only": False,
+        "unique_color_size_pairs": False,
+        "non_negative_profit_metrics": False,
+        "non_negative_gmroi_metrics": False,
+        "eta_days_positive": False,
+        "tie_break_hold_when_equal_profit": False,
+    }
+
+
 def _business_projection(body: dict[str, object]) -> dict[str, object]:
     return {
         "status": body["status"],
@@ -251,6 +300,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
+    assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
     assert meta["layer_5_intervention"]["signal_thresholds"] == {
@@ -926,6 +976,23 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert layer2["gmroi_usage"] == "diagnostic_only"
     assert len(layer2["decisions"]) == 4
     assert layer2["summary"] == {"main": 4, "assorti": 0, "hold": 0}
+    assert layer2["contract"] == {
+        "version": LAYER2_CONTRACT_VERSION,
+        "status": "ok",
+        "decision_count": 4,
+        "summary_expected": {"main": 4, "assorti": 0, "hold": 0},
+        "summary_actual": {"main": 4, "assorti": 0, "hold": 0},
+        "checks": {
+            "summary_matches_decisions": True,
+            "summary_total_matches_decision_count": True,
+            "valid_decisions_only": True,
+            "unique_color_size_pairs": True,
+            "non_negative_profit_metrics": True,
+            "non_negative_gmroi_metrics": True,
+            "eta_days_positive": True,
+            "tie_break_hold_when_equal_profit": True,
+        },
+    }
 
     assert layer3["method"] == "allocation_decision_factors"
     assert layer3["factors"] == {"main": 1.0, "assorti": 0.75, "hold": 0.35}
@@ -1099,6 +1166,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert f"method={LAYER2_ALLOCATION_METHOD}" in layer2_step
     assert "decision_gate=profit_until_eta" in layer2_step
     assert "tie_break=hold" in layer2_step
+    assert "contract_status=ok" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "Conservative(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
