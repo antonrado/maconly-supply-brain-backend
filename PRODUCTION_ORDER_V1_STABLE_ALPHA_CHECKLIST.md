@@ -39,6 +39,7 @@
 - [ ] Layer 3 applies deterministic base factors by decision (`main|assorti|hold`).
 - [ ] Risk-weighted calibration is applied deterministically (stockout boost + overstock dampening + bounded factors).
 - [ ] Layer 3 shapes reorder quantities and does not replace Layer 2 allocation gate semantics.
+- [ ] Calibration override evidence confirms Layer 3 can change shaped qty/reorder units while Layer 2 allocation summary/decisions stay unchanged.
 - [ ] Layer 3 diagnostics are present in `explanation.meta.layer_3_purchase_shaping`:
   - [ ] `qty_before`, `qty_after_base`, `qty_after`, `qty_delta_vs_base`
   - [ ] calibration method, bounds, and factor summary

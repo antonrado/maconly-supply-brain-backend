@@ -1917,6 +1917,65 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     }
 
 
+def test_production_order_proposal_layer3_calibration_changes_qty_but_not_layer2_decisions(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    base_payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    base_payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    base_payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    base_payload["overrides"]["allow_order_with_buffer"] = False
+
+    low_calibration_payload = deepcopy(base_payload)
+    low_calibration_payload["overrides"]["layer3_stockout_boost_max"] = 0.0
+    low_calibration_payload["overrides"]["layer3_overstock_dampen_max"] = 0.0
+
+    high_calibration_payload = deepcopy(base_payload)
+    high_calibration_payload["overrides"]["layer3_stockout_boost_max"] = 1.0
+    high_calibration_payload["overrides"]["layer3_overstock_dampen_max"] = 0.0
+
+    low_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=low_calibration_payload,
+    )
+    assert low_response.status_code == 200, low_response.text
+
+    high_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=high_calibration_payload,
+    )
+    assert high_response.status_code == 200, high_response.text
+
+    low_body = low_response.json()
+    high_body = high_response.json()
+
+    low_layer2 = low_body["explanation"]["meta"]["layer_2_allocation"]
+    high_layer2 = high_body["explanation"]["meta"]["layer_2_allocation"]
+
+    assert low_layer2["summary"] == high_layer2["summary"]
+    assert low_layer2["decisions"] == high_layer2["decisions"]
+    assert low_layer2["contract"]["status"] == "ok"
+    assert high_layer2["contract"]["status"] == "ok"
+
+    low_layer3 = low_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    high_layer3 = high_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+
+    assert low_layer3["calibration"]["stockout_boost_max"] == 0.0
+    assert high_layer3["calibration"]["stockout_boost_max"] == 1.0
+    assert low_layer3["calibration"]["overstock_dampen_max"] == 0.0
+    assert high_layer3["calibration"]["overstock_dampen_max"] == 0.0
+
+    assert high_layer3["qty_after"] > low_layer3["qty_after"]
+    assert high_body["recommendation"]["total_units"] > low_body["recommendation"]["total_units"]
+
+
 def test_production_order_proposal_layer5_signals_do_not_override_recommendation_action(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
