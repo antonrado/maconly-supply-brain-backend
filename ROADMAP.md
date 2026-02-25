@@ -33,6 +33,7 @@
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
 - Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
+- Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
 - Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, decision validity, tie-break invariants) and projected in compact explainability mode.
 - No hard-coded "critical SKU" classifier as primary allocator.
@@ -79,7 +80,7 @@
 ## Immediate high-leverage follow-ups
 1. Publish deterministic decision-quality casebook (3 SKU cases: stockout / balanced / overstock) with input metrics, `L1->L5` outputs, reasoning trace, reorder qty, scenario comparison, and capital impact proxy.
 2. Add regression harness that locks these case-study outputs and verifies deterministic parity in `full|compact` explainability modes.
-3. Improve Layer 2 trade-off maturity within v1 deterministic boundaries (profit gate remains primary; GMROI/capital diagnostics become clearer in tie/near-tie reasoning).
+3. Build on Layer 2 decision-quality diagnostics to improve tie/near-tie trade-off readability while keeping profit gate primary (no rule-based override).
 4. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
 5. Freeze freshness/infrastructure work to bug-fix-only while decision-quality evidence is being locked.
 6. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.

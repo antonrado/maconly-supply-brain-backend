@@ -16,6 +16,7 @@ from app.services.planning_production_order import (
     LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
     LAYER2_ALLOCATION_METHOD,
     LAYER2_CONTRACT_VERSION,
+    LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
     LAYER3_CONTRACT_VERSION,
     LAYER4_SCENARIO_FACTORS,
     LAYER5_CONTRACT_VERSION,
@@ -27,6 +28,7 @@ from app.services.planning_production_order import (
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
     _build_layer2_contract_summary,
+    _build_layer2_decision_quality_summary,
     _build_layer3_contract_summary,
     _build_layer4_scenarios,
     _build_layer4_contract_summary,
@@ -242,6 +244,64 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
     }
 
 
+def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts():
+    decisions = [
+        {
+            "profit_if_main_until_eta": 2.5,
+            "profit_if_assorti_until_eta": 2.3,
+            "gmroi_main": 0.40,
+            "gmroi_assorti": 0.36,
+            "capital_locked": 10.0,
+            "decision_reason": "profit_main_gt_assorti",
+            "tie_break_applied": False,
+            "near_tie": True,
+        },
+        {
+            "profit_if_main_until_eta": 1.2,
+            "profit_if_assorti_until_eta": 1.2,
+            "gmroi_main": 0.20,
+            "gmroi_assorti": 0.20,
+            "capital_locked": 10.0,
+            "decision_reason": "profit_tie_hold",
+            "tie_break_applied": True,
+            "near_tie": True,
+        },
+        {
+            "profit_if_main_until_eta": 1.0,
+            "profit_if_assorti_until_eta": 3.0,
+            "gmroi_main": 0.10,
+            "gmroi_assorti": 0.30,
+            "capital_locked": 10.0,
+            "decision_reason": "profit_assorti_gt_main",
+            "tie_break_applied": False,
+            "near_tie": False,
+        },
+    ]
+
+    summary = _build_layer2_decision_quality_summary(
+        layer2_allocation_decisions=decisions,
+        near_tie_profit_gap_threshold=0.5,
+    )
+
+    assert summary == {
+        "profit_gate_primary": True,
+        "gmroi_usage": "diagnostic_only",
+        "near_tie_profit_gap_threshold": 0.5,
+        "decision_count": 3,
+        "tie_count": 1,
+        "near_tie_count": 2,
+        "decision_reason_counts": {
+            "profit_main_gt_assorti": 1,
+            "profit_assorti_gt_main": 1,
+            "profit_tie_hold": 1,
+        },
+        "avg_profit_gap_until_eta": 0.7333,
+        "avg_gmroi_gap": 0.08,
+        "capital_locked_total": 30.0,
+        "capital_locked_avg": 10.0,
+    }
+
+
 def test_layer3_contract_summary_marks_violated_for_invariant_breaks():
     contract = _build_layer3_contract_summary(
         {
@@ -408,6 +468,11 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is True
+    assert (
+        meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert meta["layer_3_purchase_shaping"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
@@ -418,6 +483,10 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     }
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert (
+        alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert alpha_proxy["layer_3_calibration"]["method"] == "risk_weighted_factor_clamp"
     assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
     assert alpha_proxy["layer_5_signal_thresholds"] == {
@@ -1085,6 +1154,23 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert layer2["gmroi_usage"] == "diagnostic_only"
     assert len(layer2["decisions"]) == 4
     assert layer2["summary"] == {"main": 4, "assorti": 0, "hold": 0}
+    assert layer2["decision_quality"] == {
+        "profit_gate_primary": True,
+        "gmroi_usage": "diagnostic_only",
+        "near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
+        "decision_count": 4,
+        "tie_count": 0,
+        "near_tie_count": 0,
+        "decision_reason_counts": {
+            "profit_main_gt_assorti": 4,
+            "profit_assorti_gt_main": 0,
+            "profit_tie_hold": 0,
+        },
+        "avg_profit_gap_until_eta": 10.0,
+        "avg_gmroi_gap": 1.0,
+        "capital_locked_total": 40.0,
+        "capital_locked_avg": 10.0,
+    }
     assert layer2["contract"] == {
         "version": LAYER2_CONTRACT_VERSION,
         "status": "ok",
@@ -1225,6 +1311,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert alpha_proxy["calibration_state"] == "alpha_proxy_not_calibrated"
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD
+    assert (
+        alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert alpha_proxy["margin_proxy"] == {"main": 1.0, "assorti": 0.85}
     assert alpha_proxy["unit_capital_proxy"] == 1.0
     assert alpha_proxy["layer_3_purchase_factors"] == {
@@ -1317,6 +1407,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert f"method={LAYER2_ALLOCATION_METHOD}" in layer2_step
     assert "decision_gate=profit_until_eta" in layer2_step
     assert "tie_break=hold" in layer2_step
+    assert "near_tie=0" in layer2_step
+    assert "tie_count=0" in layer2_step
     assert "contract_status=ok" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "contract_status=ok" in layer3_step
@@ -1974,6 +2066,10 @@ def test_layer2_allocation_decision_tie_break_is_hold():
     assert len(decisions) == 1
     assert decisions[0]["profit_if_main_until_eta"] == 0.85
     assert decisions[0]["profit_if_assorti_until_eta"] == 0.85
+    assert decisions[0]["profit_gap_until_eta"] == 0.0
+    assert decisions[0]["decision_reason"] == "profit_tie_hold"
+    assert decisions[0]["tie_break_applied"] is True
+    assert decisions[0]["near_tie"] is True
     assert decisions[0]["allocation_decision"] == "hold"
 
 
@@ -2467,6 +2563,11 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is True
+    assert (
+        meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert meta["layer_3_purchase_shaping"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
@@ -2477,6 +2578,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     }
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert (
+        alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert alpha_proxy["layer_3_calibration"]["method"] == "risk_weighted_factor_clamp"
     assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
     assert alpha_proxy["layer_5_signal_thresholds"] == {

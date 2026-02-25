@@ -57,6 +57,7 @@ LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
 LAYER2_UNIT_CAPITAL_PROXY = 1.0
+LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = 1.0
 LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD = 0.5
 LAYER1_CONTRACT_VERSION = "v1_alpha"
 LAYER2_CONTRACT_VERSION = "v1_alpha"
@@ -610,6 +611,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
             "method": layer2_raw.get("method"),
             "summary": layer2_raw.get("summary", {}),
             "contract": layer2_raw.get("contract", {}),
+            "decision_quality": layer2_raw.get("decision_quality", {}),
             "decision_gate": layer2_raw.get("decision_gate"),
             "tie_break": layer2_raw.get("tie_break"),
             "gmroi_usage": layer2_raw.get("gmroi_usage"),
@@ -1013,12 +1015,21 @@ def _build_layer2_allocation_decisions(
             gmroi_main = 0.0
             gmroi_assorti = 0.0
 
+        profit_gap_until_eta = abs(profit_if_main_until_eta - profit_if_assorti_until_eta)
+        gmroi_gap = abs(gmroi_main - gmroi_assorti)
+
         if profit_if_main_until_eta > profit_if_assorti_until_eta:
             allocation_decision = "main"
+            decision_reason = "profit_main_gt_assorti"
         elif profit_if_assorti_until_eta > profit_if_main_until_eta:
             allocation_decision = "assorti"
+            decision_reason = "profit_assorti_gt_main"
         else:
             allocation_decision = "hold"
+            decision_reason = "profit_tie_hold"
+
+        tie_break_applied = profit_gap_until_eta <= 1e-9
+        near_tie = profit_gap_until_eta <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
 
         summary[allocation_decision] += 1
 
@@ -1029,9 +1040,15 @@ def _build_layer2_allocation_decisions(
                 "eta_days": horizon_days,
                 "profit_if_main_until_eta": round(profit_if_main_until_eta, 4),
                 "profit_if_assorti_until_eta": round(profit_if_assorti_until_eta, 4),
+                "profit_gap_until_eta": round(profit_gap_until_eta, 4),
+                "capital_locked": round(capital_locked, 4),
                 "gmroi_main": round(gmroi_main, 4),
                 "gmroi_assorti": round(gmroi_assorti, 4),
+                "gmroi_gap": round(gmroi_gap, 4),
                 "allocation_decision": allocation_decision,
+                "decision_reason": decision_reason,
+                "tie_break_applied": tie_break_applied,
+                "near_tie": near_tie,
             }
         )
 
@@ -1126,6 +1143,86 @@ def _build_layer2_contract_summary(
         "summary_expected": summary_expected,
         "summary_actual": summary_actual,
         "checks": checks,
+    }
+
+
+def _build_layer2_decision_quality_summary(
+    layer2_allocation_decisions: list[dict[str, int | float | str]],
+    near_tie_profit_gap_threshold: float = LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
+) -> dict[str, bool | int | float | str | dict[str, int]]:
+    tie_count = 0
+    near_tie_count = 0
+    total_profit_gap = 0.0
+    total_gmroi_gap = 0.0
+    total_capital_locked = 0.0
+
+    decision_reason_counts = {
+        "profit_main_gt_assorti": 0,
+        "profit_assorti_gt_main": 0,
+        "profit_tie_hold": 0,
+    }
+
+    for decision_item in layer2_allocation_decisions:
+        try:
+            profit_main = float(decision_item.get("profit_if_main_until_eta", 0.0))
+            profit_assorti = float(decision_item.get("profit_if_assorti_until_eta", 0.0))
+        except (TypeError, ValueError):
+            profit_main = 0.0
+            profit_assorti = 0.0
+
+        try:
+            gmroi_main = float(decision_item.get("gmroi_main", 0.0))
+            gmroi_assorti = float(decision_item.get("gmroi_assorti", 0.0))
+        except (TypeError, ValueError):
+            gmroi_main = 0.0
+            gmroi_assorti = 0.0
+
+        try:
+            capital_locked = float(decision_item.get("capital_locked", 0.0))
+        except (TypeError, ValueError):
+            capital_locked = 0.0
+
+        profit_gap = abs(profit_main - profit_assorti)
+        gmroi_gap = abs(gmroi_main - gmroi_assorti)
+        total_profit_gap += profit_gap
+        total_gmroi_gap += gmroi_gap
+        total_capital_locked += max(capital_locked, 0.0)
+
+        tie_break_applied_raw = decision_item.get("tie_break_applied")
+        tie_break_applied = (
+            tie_break_applied_raw
+            if isinstance(tie_break_applied_raw, bool)
+            else profit_gap <= 1e-9
+        )
+        near_tie_raw = decision_item.get("near_tie")
+        near_tie = (
+            near_tie_raw
+            if isinstance(near_tie_raw, bool)
+            else profit_gap <= near_tie_profit_gap_threshold
+        )
+        if tie_break_applied:
+            tie_count += 1
+        if near_tie:
+            near_tie_count += 1
+
+        decision_reason = str(decision_item.get("decision_reason", "")).strip()
+        if decision_reason in decision_reason_counts:
+            decision_reason_counts[decision_reason] += 1
+
+    decision_count = len(layer2_allocation_decisions)
+    divisor = max(decision_count, 1)
+    return {
+        "profit_gate_primary": True,
+        "gmroi_usage": "diagnostic_only",
+        "near_tie_profit_gap_threshold": round(float(near_tie_profit_gap_threshold), 4),
+        "decision_count": decision_count,
+        "tie_count": tie_count,
+        "near_tie_count": near_tie_count,
+        "decision_reason_counts": decision_reason_counts,
+        "avg_profit_gap_until_eta": round(total_profit_gap / float(divisor), 4),
+        "avg_gmroi_gap": round(total_gmroi_gap / float(divisor), 4),
+        "capital_locked_total": round(total_capital_locked, 4),
+        "capital_locked_avg": round(total_capital_locked / float(divisor), 4),
     }
 
 
@@ -2795,6 +2892,9 @@ def build_production_order_proposal(
         layer2_allocation_decisions=layer2_allocation_decisions,
         layer2_allocation_summary=layer2_allocation_summary,
     )
+    layer2_decision_quality = _build_layer2_decision_quality_summary(
+        layer2_allocation_decisions=layer2_allocation_decisions,
+    )
     layer1_avg_coverage_days = (
         round(
             sum(float(item["coverage_days"]) for item in layer1_stock_health_metrics)
@@ -3204,6 +3304,8 @@ def build_production_order_proposal(
                 f"main={layer2_allocation_summary['main']}, "
                 f"assorti={layer2_allocation_summary['assorti']}, "
                 f"hold={layer2_allocation_summary['hold']}, "
+                f"near_tie={layer2_decision_quality['near_tie_count']}, "
+                f"tie_count={layer2_decision_quality['tie_count']}, "
                 f"contract_status={layer2_contract['status']}."
             ),
             (
@@ -3313,6 +3415,7 @@ def build_production_order_proposal(
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
                 "contract": layer2_contract,
+                "decision_quality": layer2_decision_quality,
                 "decision_gate": "profit_until_eta",
                 "tie_break": "hold",
                 "gmroi_usage": "diagnostic_only",
@@ -3335,6 +3438,7 @@ def build_production_order_proposal(
                 "calibration_state": "alpha_proxy_not_calibrated",
                 "layer_1_high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
                 "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD,
+                "layer_2_near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
                 "margin_proxy": {
                     "main": LAYER2_MAIN_MARGIN_PROXY,
                     "assorti": LAYER2_ASSORTI_MARGIN_PROXY,
