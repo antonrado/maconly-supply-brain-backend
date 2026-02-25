@@ -263,6 +263,58 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
     }
 
 
+def test_layer2_allocation_rounding_boundary_stays_contract_consistent():
+    metrics = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "current_stock": 10,
+            "in_flight": 0,
+            "velocity_main": 1.00004,
+            "velocity_assorti": 1.1764705882352942,
+            "capital_locked": 10.0,
+            "stockout_risk": 0.0,
+            "overstock_risk": 0.0,
+        }
+    ]
+
+    decisions, summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=metrics,
+        lead_time_days_total=30,
+    )
+
+    assert summary == {"main": 0, "assorti": 0, "hold": 1}
+    assert decisions == [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 1.0,
+            "profit_if_assorti_until_eta": 1.0,
+            "profit_gap_until_eta": 0.0,
+            "capital_locked": 10.0,
+            "gmroi_main": 0.1,
+            "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.0,
+            "allocation_decision": "hold",
+            "decision_reason": "profit_tie_hold",
+            "tie_break_applied": True,
+            "near_tie": True,
+        }
+    ]
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary=summary,
+    )
+
+    assert contract["status"] == "ok"
+    assert contract["checks"]["tie_break_hold_when_equal_profit"] is True
+    assert contract["checks"]["tie_break_applied_matches_profit_tie"] is True
+    assert contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
+
+
 def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts():
     decisions = [
         {

@@ -1004,19 +1004,27 @@ def _build_layer2_allocation_decisions(
         units_main_until_eta = min(float(available_units), velocity_main * float(horizon_days))
         units_assorti_until_eta = min(float(available_units), velocity_assorti * float(horizon_days))
 
-        profit_if_main_until_eta = units_main_until_eta * LAYER2_MAIN_MARGIN_PROXY
-        profit_if_assorti_until_eta = units_assorti_until_eta * LAYER2_ASSORTI_MARGIN_PROXY
+        profit_if_main_until_eta_raw = units_main_until_eta * LAYER2_MAIN_MARGIN_PROXY
+        profit_if_assorti_until_eta_raw = units_assorti_until_eta * LAYER2_ASSORTI_MARGIN_PROXY
 
         capital_locked = max(float(metric.get("capital_locked", 0.0)), 0.0)
         if capital_locked > 0:
-            gmroi_main = profit_if_main_until_eta / capital_locked
-            gmroi_assorti = profit_if_assorti_until_eta / capital_locked
+            gmroi_main_raw = profit_if_main_until_eta_raw / capital_locked
+            gmroi_assorti_raw = profit_if_assorti_until_eta_raw / capital_locked
         else:
-            gmroi_main = 0.0
-            gmroi_assorti = 0.0
+            gmroi_main_raw = 0.0
+            gmroi_assorti_raw = 0.0
 
-        profit_gap_until_eta = abs(profit_if_main_until_eta - profit_if_assorti_until_eta)
-        gmroi_gap = abs(gmroi_main - gmroi_assorti)
+        profit_if_main_until_eta = round(profit_if_main_until_eta_raw, 4)
+        profit_if_assorti_until_eta = round(profit_if_assorti_until_eta_raw, 4)
+        gmroi_main = round(gmroi_main_raw, 4)
+        gmroi_assorti = round(gmroi_assorti_raw, 4)
+
+        profit_gap_until_eta = round(
+            abs(profit_if_main_until_eta - profit_if_assorti_until_eta),
+            4,
+        )
+        gmroi_gap = round(abs(gmroi_main - gmroi_assorti), 4)
 
         if profit_if_main_until_eta > profit_if_assorti_until_eta:
             allocation_decision = "main"
@@ -1038,13 +1046,13 @@ def _build_layer2_allocation_decisions(
                 "color_id": int(metric["color_id"]),
                 "size_id": int(metric["size_id"]),
                 "eta_days": horizon_days,
-                "profit_if_main_until_eta": round(profit_if_main_until_eta, 4),
-                "profit_if_assorti_until_eta": round(profit_if_assorti_until_eta, 4),
-                "profit_gap_until_eta": round(profit_gap_until_eta, 4),
+                "profit_if_main_until_eta": profit_if_main_until_eta,
+                "profit_if_assorti_until_eta": profit_if_assorti_until_eta,
+                "profit_gap_until_eta": profit_gap_until_eta,
                 "capital_locked": round(capital_locked, 4),
-                "gmroi_main": round(gmroi_main, 4),
-                "gmroi_assorti": round(gmroi_assorti, 4),
-                "gmroi_gap": round(gmroi_gap, 4),
+                "gmroi_main": gmroi_main,
+                "gmroi_assorti": gmroi_assorti,
+                "gmroi_gap": gmroi_gap,
                 "allocation_decision": allocation_decision,
                 "decision_reason": decision_reason,
                 "tie_break_applied": tie_break_applied,
