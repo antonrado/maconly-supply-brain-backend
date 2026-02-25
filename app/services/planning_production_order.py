@@ -2320,6 +2320,10 @@ def build_production_order_proposal_from_wb(
     db: Session,
     request: ProductionOrderProposalFromWbRequest,
 ) -> ProductionOrderProposalResponse:
+    article = db.query(Article).filter(Article.id == request.article_id).first()
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+
     bundle_type_ids = _resolve_bundle_type_ids_for_from_wb(
         db=db,
         article_id=request.article_id,

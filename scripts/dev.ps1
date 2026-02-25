@@ -206,6 +206,12 @@ switch ($Command) {
         Invoke-ApiExpectedStatus -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload
         Invoke-ApiExpectedStatus -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload
 
+        $UnknownArticleDirectPayload = '{"article_id":999999999,"planning_horizon_days":90,"bundle_daily_sales":[{"bundle_type_id":1,"daily_sales":1.0}],"bundle_stock":[{"bundle_type_id":1,"wb_qty":0,"local_qty":0}],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatus -Name "production-order-direct-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 404 -JsonBody $UnknownArticleDirectPayload
+
+        $UnknownArticleFromWbPayload = '{"article_id":999999999,"planning_horizon_days":90,"observation_window_days":30,"bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatus -Name "production-order-from-wb-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 404 -JsonBody $UnknownArticleFromWbPayload
+
         $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
         Invoke-ApiExpectedStatus -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload
 

@@ -26,6 +26,8 @@ Use helper commands from `scripts/dev.ps1`:
 - Seeds deterministic smoke fixture data via backend container (`scripts/po_api_smoke_seed.py`)
 - `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (happy-path payload) -> `200`
+- `POST /api/v1/planning/core/production-order/proposal` (unknown article) -> `404`
+- `POST /api/v1/planning/core/production-order/proposal/from-wb` (unknown article) -> `404`
 - `POST /api/v1/planning/core/production-order/proposal` (schema-invalid payload) -> `422`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (schema-invalid payload) -> `422`
 

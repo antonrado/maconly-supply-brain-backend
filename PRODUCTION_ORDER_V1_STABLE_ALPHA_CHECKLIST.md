@@ -8,6 +8,7 @@
 - [ ] `POST /api/v1/planning/core/production-order/proposal` returns stable structured response.
 - [ ] `POST /api/v1/planning/core/production-order/proposal/from-wb` returns stable structured response.
 - [ ] Request validation rejects malformed payloads with deterministic 4xx errors.
+- [ ] Unknown `article_id` is rejected deterministically with `404 Article not found` for both direct and from-WB endpoints.
 - [ ] Live connectivity smoke check passes via `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 po-api-smoke` (health `200`, seeded direct/from-WB happy-path requests `200`, schema validations `422`).
 
 ## 3) Layer 1 contract (stock health)

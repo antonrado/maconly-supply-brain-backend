@@ -4135,6 +4135,49 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
     )
 
 
+def test_production_order_proposal_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json={
+            "article_id": 999999999,
+            "planning_horizon_days": 90,
+            "bundle_daily_sales": [
+                {
+                    "bundle_type_id": 1,
+                    "daily_sales": 1.0,
+                }
+            ],
+            "bundle_stock": [
+                {
+                    "bundle_type_id": 1,
+                    "wb_qty": 0,
+                    "local_qty": 0,
+                }
+            ],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Article not found"
+
+
+def test_production_order_proposal_from_wb_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": 999999999,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [1],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "Article not found"
+
+
 def test_production_order_proposal_from_wb_validation_error_invalid_freshness_mode(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal/from-wb",
