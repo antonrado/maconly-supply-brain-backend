@@ -77,13 +77,12 @@
 - Layer-by-layer delivery, no scope creep.
 
 ## Immediate high-leverage follow-ups
-1. Stabilize Layer 1 metric contract and lock regression tests.
-2. Stabilize Layer 3 deterministic calibration coefficients/bounds and lock regression coverage.
-3. Finalize Layer 4 scenario contract and stabilize regression coverage.
-4. Stabilize Layer 5 intervention threshold policy/rules and lock regression coverage.
-5. Stabilize explainability `compact|full` payload contract and lock regression coverage.
-6. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
-7. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
+1. Publish deterministic decision-quality casebook (3 SKU cases: stockout / balanced / overstock) with input metrics, `L1->L5` outputs, reasoning trace, reorder qty, scenario comparison, and capital impact proxy.
+2. Add regression harness that locks these case-study outputs and verifies deterministic parity in `full|compact` explainability modes.
+3. Improve Layer 2 trade-off maturity within v1 deterministic boundaries (profit gate remains primary; GMROI/capital diagnostics become clearer in tie/near-tie reasoning).
+4. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
+5. Freeze freshness/infrastructure work to bug-fix-only while decision-quality evidence is being locked.
+6. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.

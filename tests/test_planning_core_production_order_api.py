@@ -28,9 +28,11 @@ from app.services.planning_production_order import (
     _build_layer2_allocation_decisions,
     _build_layer2_contract_summary,
     _build_layer3_contract_summary,
+    _build_layer4_scenarios,
     _build_layer4_contract_summary,
     _build_layer5_contract_summary,
     _build_layer5_intervention_signals,
+    _choose_action,
 )
 from app.models.models import (
     Article,
@@ -1973,6 +1975,225 @@ def test_layer2_allocation_decision_tie_break_is_hold():
     assert decisions[0]["profit_if_main_until_eta"] == 0.85
     assert decisions[0]["profit_if_assorti_until_eta"] == 0.85
     assert decisions[0]["allocation_decision"] == "hold"
+
+
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "stock_metric",
+        "base_line_qty",
+        "available_bundles_for_cover",
+        "total_daily_sales",
+        "reorder_point_days",
+        "risk_level",
+        "in_flight_effective_qty_total",
+        "expected",
+    ),
+    [
+        pytest.param(
+            "stockout_risk_case",
+            {
+                "color_id": 10,
+                "size_id": 1,
+                "eta_days": 10,
+                "current_stock": 20,
+                "in_flight": 0,
+                "velocity_main": 3.0,
+                "velocity_assorti": 1.5,
+                "capital_locked": 100.0,
+                "stockout_risk": 0.9,
+                "overstock_risk": 0.1,
+            },
+            120,
+            20,
+            8.0,
+            40,
+            "critical",
+            0,
+            {
+                "layer2_decision": "main",
+                "layer2_summary": {"main": 1, "assorti": 0, "hold": 0},
+                "layer3_qty_after": 150,
+                "layer3_qty_delta_vs_base": 30,
+                "reorder_qty": 150,
+                "layer4_purchase_units": [120, 150, 180],
+                "layer4_capital": [120.0, 150.0, 180.0],
+                "capital_delta_aggressive_vs_conservative": 60.0,
+                "layer5_signals": ["accelerate_production"],
+                "layer5_reason": "no_effective_in_flight_and_high_stockout_risk",
+                "action": "order_minimum_only",
+            },
+            id="stockout",
+        ),
+        pytest.param(
+            "balanced_case",
+            {
+                "color_id": 10,
+                "size_id": 1,
+                "eta_days": 10,
+                "current_stock": 30,
+                "in_flight": 10,
+                "velocity_main": 1.0,
+                "velocity_assorti": 2.0,
+                "capital_locked": 80.0,
+                "stockout_risk": 0.4,
+                "overstock_risk": 0.4,
+            },
+            100,
+            180,
+            5.0,
+            40,
+            "warning",
+            20,
+            {
+                "layer2_decision": "assorti",
+                "layer2_summary": {"main": 0, "assorti": 1, "hold": 0},
+                "layer3_qty_after": 73,
+                "layer3_qty_delta_vs_base": -2,
+                "reorder_qty": 73,
+                "layer4_purchase_units": [59, 73, 88],
+                "layer4_capital": [59.0, 73.0, 88.0],
+                "capital_delta_aggressive_vs_conservative": 29.0,
+                "layer5_signals": [],
+                "layer5_reason": "none",
+                "action": "order_minimum_only",
+            },
+            id="balanced",
+        ),
+        pytest.param(
+            "overstock_case",
+            {
+                "color_id": 10,
+                "size_id": 1,
+                "eta_days": 10,
+                "current_stock": 200,
+                "in_flight": 50,
+                "velocity_main": 1.7,
+                "velocity_assorti": 2.0,
+                "capital_locked": 120.0,
+                "stockout_risk": 0.05,
+                "overstock_risk": 0.95,
+            },
+            40,
+            1000,
+            4.0,
+            40,
+            "overstock",
+            40,
+            {
+                "layer2_decision": "hold",
+                "layer2_summary": {"main": 0, "assorti": 0, "hold": 1},
+                "layer3_qty_after": 4,
+                "layer3_qty_delta_vs_base": -10,
+                "reorder_qty": 4,
+                "layer4_purchase_units": [4, 4, 5],
+                "layer4_capital": [4.0, 4.0, 5.0],
+                "capital_delta_aggressive_vs_conservative": 1.0,
+                "layer5_signals": [],
+                "layer5_reason": "none",
+                "action": "wait",
+            },
+            id="overstock",
+        ),
+    ],
+)
+def test_decision_quality_case_studies_are_deterministic(
+    case_name,
+    stock_metric,
+    base_line_qty,
+    available_bundles_for_cover,
+    total_daily_sales,
+    reorder_point_days,
+    risk_level,
+    in_flight_effective_qty_total,
+    expected,
+):
+    stock_health_metrics = [stock_metric]
+
+    layer2_decisions, layer2_summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=stock_health_metrics,
+        lead_time_days_total=30,
+    )
+
+    assert len(layer2_decisions) == 1
+    layer2 = layer2_decisions[0]
+    assert layer2_summary == expected["layer2_summary"]
+    assert layer2["allocation_decision"] == expected["layer2_decision"]
+
+    if expected["layer2_decision"] == "main":
+        assert layer2["profit_if_main_until_eta"] > layer2["profit_if_assorti_until_eta"]
+    elif expected["layer2_decision"] == "assorti":
+        assert layer2["profit_if_assorti_until_eta"] > layer2["profit_if_main_until_eta"]
+    else:
+        assert layer2["profit_if_main_until_eta"] == layer2["profit_if_assorti_until_eta"]
+
+    line_key = (int(stock_metric["color_id"]), int(stock_metric["size_id"]))
+    line_qty = {line_key: base_line_qty}
+    layer3_decision_by_line, layer3_purchase_shaping = _apply_layer3_purchase_shaping(
+        line_qty=line_qty,
+        layer2_allocation_decisions=layer2_decisions,
+        layer1_stock_health_metrics=stock_health_metrics,
+    )
+
+    assert layer3_decision_by_line[line_key] == expected["layer2_decision"]
+    assert layer3_purchase_shaping["qty_before"] == base_line_qty
+    assert line_qty[line_key] == expected["layer3_qty_after"]
+    assert layer3_purchase_shaping["qty_after"] == expected["layer3_qty_after"]
+    assert (
+        layer3_purchase_shaping["qty_delta_vs_base"]
+        == expected["layer3_qty_delta_vs_base"]
+    )
+
+    candidate_total_units = sum(line_qty.values())
+    assert candidate_total_units == expected["reorder_qty"]
+
+    layer4_scenarios = _build_layer4_scenarios(
+        base_purchase_units=candidate_total_units,
+        available_bundles_for_cover=available_bundles_for_cover,
+        total_daily_sales=total_daily_sales,
+        reorder_point_days=reorder_point_days,
+        expected_horizon_sales=total_daily_sales * 90,
+        layer3_purchase_shaping=layer3_purchase_shaping,
+    )
+
+    assert [item["scenario"] for item in layer4_scenarios] == [
+        "Conservative",
+        "Balanced",
+        "Aggressive",
+    ]
+    assert [item["purchase_units"] for item in layer4_scenarios] == expected[
+        "layer4_purchase_units"
+    ]
+    assert [item["total_capital_required"] for item in layer4_scenarios] == expected[
+        "layer4_capital"
+    ]
+    assert (
+        float(layer4_scenarios[2]["total_capital_required"])
+        - float(layer4_scenarios[0]["total_capital_required"])
+    ) == expected["capital_delta_aggressive_vs_conservative"]
+
+    layer4_stockout_risks = [float(item["stockout_risk_proxy"]) for item in layer4_scenarios]
+    assert layer4_stockout_risks[0] >= layer4_stockout_risks[1] >= layer4_stockout_risks[2]
+
+    layer5_intervention = _build_layer5_intervention_signals(
+        risk_level=risk_level,
+        layer4_scenarios=layer4_scenarios,
+        in_flight_effective_qty_total=in_flight_effective_qty_total,
+    )
+    assert layer5_intervention["signals"] == expected["layer5_signals"]
+    assert layer5_intervention["reason"] == expected["layer5_reason"]
+
+    action = _choose_action(
+        risk_level=risk_level,
+        candidate_units=candidate_total_units,
+        allow_order_with_buffer=False,
+    )
+    assert action == expected["action"]
+
+    # Layer 5 is signal-only and must not directly force recommendation action type.
+    if case_name == "stockout_risk_case":
+        assert layer5_intervention["signals"] == ["accelerate_production"]
+        assert action == "order_minimum_only"
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):

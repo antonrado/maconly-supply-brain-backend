@@ -47,6 +47,9 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Production-order direct/from-WB now supports explainability payload modes: `full` (default) and `compact`; compact mode preserves deterministic outputs while trimming heavy explanation arrays/maps and adds explicit `explanation.meta.explainability` mode tracing.
   - Regression coverage now includes compact/full deterministic parity checks for direct and from-WB proposal flows and explicitly asserts compact mode preserves key contract blocks (`layer_1`, `layer_2`, `layer_3`, `layer_4`, `layer_5`, `alpha_proxy_economics`).
   - Explicit release-gate checklist published: `PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`.
+  - Decision-quality casebook published: `PRODUCTION_ORDER_V1_DECISION_QUALITY_CASEBOOK.md` with 3 deterministic SKU profiles (stockout/balanced/overstock), each documenting input metrics, `L1->L5` outputs, allocation reasoning, reorder quantity, scenario comparison, and capital impact proxy.
+  - Deterministic decision-quality regression harness added (`test_decision_quality_case_studies_are_deterministic`) to lock Layer 2 profit-gate behavior, Layer 3 quantity shaping, Layer 4 scenario/capital deltas, Layer 5 signal outputs, and recommendation action outcomes for the 3 canonical cases.
+  - Layer-integrity guardrails are explicit in release criteria: Layer 2 remains profit-comparison based, Layer 3 remains quantity-shaping (does not replace Layer 2 gate), and Layer 5 remains signal-only (does not enforce recommendation action).
   - `from-wb` now clamps future `as_of_date` requests to latest available WB sales date to prevent drifted/empty future windows.
   - `from-wb` validates requested `bundle_type_ids` against `article_wb_mapping` and returns 400 on missing mappings.
   - In-flight supply now uses ETA/stage-sensitive effective contribution (not binary include/exclude), and explanation reports raw/effective in-flight qty.
