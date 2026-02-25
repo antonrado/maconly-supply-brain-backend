@@ -39,6 +39,10 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
     assorti_bundle_type_ids: list[int] = Field(default_factory=list)
     freshness_sales_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
     freshness_stock_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
+    layer3_stockout_boost_max: float | None = Field(default=None, ge=0, le=1)
+    layer3_overstock_dampen_max: float | None = Field(default=None, ge=0, le=1)
+    layer5_unavoidable_stockout_risk_threshold: float | None = Field(default=None, ge=0, le=1)
+    layer5_accelerate_production_risk_threshold: float | None = Field(default=None, ge=0, le=1)
 
     @field_validator("size_weights")
     @classmethod
@@ -96,6 +100,20 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
             seen.add(key)
         return value
 
+    @model_validator(mode="after")
+    def validate_layer5_threshold_order(self) -> "ProductionOrderAdminSettingsUpsertRequest":
+        if (
+            self.layer5_unavoidable_stockout_risk_threshold is not None
+            and self.layer5_accelerate_production_risk_threshold is not None
+            and self.layer5_accelerate_production_risk_threshold
+            < self.layer5_unavoidable_stockout_risk_threshold
+        ):
+            raise ValueError(
+                "layer5_accelerate_production_risk_threshold must be greater than or equal to "
+                "layer5_unavoidable_stockout_risk_threshold"
+            )
+        return self
+
 
 class ProductionOrderAdminSettingsResponse(BaseModel):
     article_id: int
@@ -105,3 +123,7 @@ class ProductionOrderAdminSettingsResponse(BaseModel):
     assorti_bundle_type_ids: list[int] = Field(default_factory=list)
     freshness_sales_stale_after_days: int | None = None
     freshness_stock_stale_after_days: int | None = None
+    layer3_stockout_boost_max: float | None = None
+    layer3_overstock_dampen_max: float | None = None
+    layer5_unavoidable_stockout_risk_threshold: float | None = None
+    layer5_accelerate_production_risk_threshold: float | None = None

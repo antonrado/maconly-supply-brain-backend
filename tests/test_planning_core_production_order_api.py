@@ -1043,6 +1043,13 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             },
         },
     }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": LAYER_PROXY_VALUE_SOURCE,
+        "layer3_overstock_dampen_max": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_unavoidable_stockout_risk_threshold": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_accelerate_production_risk_threshold": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert alpha_proxy["layer5_threshold_order_adjusted"] is False
     assert alpha_proxy["layer_4_scenario_factors"] == layer4["factors"]
     assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
     assert (
@@ -1299,6 +1306,143 @@ def test_production_order_proposal_assorti_classification_uses_global_fallback_w
             "source": ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
         }
     ]
+
+
+def test_production_order_proposal_uses_global_layer_proxy_defaults_when_admin_and_request_missing(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_layer3_stockout_boost_max = 0.19
+    global_settings.default_production_order_layer3_overstock_dampen_max = 0.11
+    global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold = 0.29
+    global_settings.default_production_order_layer5_accelerate_production_risk_threshold = 0.39
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    alpha_proxy = response.json()["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.19
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.11
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.29
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.39,
+        "increase_price_to_slow_velocity": 0.29,
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": "global_default",
+        "layer3_overstock_dampen_max": "global_default",
+        "layer5_unavoidable_stockout_risk_threshold": "global_default",
+        "layer5_accelerate_production_risk_threshold": "global_default",
+    }
+
+
+def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_layer3_stockout_boost_max = 0.17
+    article_settings.production_order_layer3_overstock_dampen_max = 0.12
+    article_settings.production_order_layer5_unavoidable_stockout_risk_threshold = 0.26
+    article_settings.production_order_layer5_accelerate_production_risk_threshold = 0.34
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_layer3_stockout_boost_max = 0.09
+    global_settings.default_production_order_layer3_overstock_dampen_max = 0.08
+    global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold = 0.21
+    global_settings.default_production_order_layer5_accelerate_production_risk_threshold = 0.31
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload["overrides"]["layer3_stockout_boost_max"] = 0.23
+    payload["overrides"]["layer3_overstock_dampen_max"] = 0.18
+    payload["overrides"]["layer5_unavoidable_stockout_risk_threshold"] = 0.27
+    payload["overrides"]["layer5_accelerate_production_risk_threshold"] = 0.41
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.23
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.18
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.27
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.41,
+        "increase_price_to_slow_velocity": 0.27,
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": "request",
+        "layer3_overstock_dampen_max": "request",
+        "layer5_unavoidable_stockout_risk_threshold": "request",
+        "layer5_accelerate_production_risk_threshold": "request",
+    }
+
+    layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
+    assert layer3_calibration["stockout_boost_max"] == 0.23
+    assert layer3_calibration["overstock_dampen_max"] == 0.18
+    assert body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"] == 0.27
+    assert body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"] == {
+        "accelerate_production": 0.41,
+        "increase_price_to_slow_velocity": 0.27,
+    }
+
+
+def test_production_order_proposal_layer5_threshold_order_is_clamped_when_admin_invalid(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_layer5_unavoidable_stockout_risk_threshold = 0.44
+    article_settings.production_order_layer5_accelerate_production_risk_threshold = 0.21
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    alpha_proxy = response.json()["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer5_threshold_order_adjusted"] is True
+    assert alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "admin_defaults"
+    assert (
+        alpha_proxy["layer_proxy_source"]["layer5_accelerate_production_risk_threshold"]
+        == "admin_defaults|clamped_to_unavoidable"
+    )
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.44,
+        "increase_price_to_slow_velocity": 0.44,
+    }
 
 
 def test_layer3_purchase_shaping_calibration_boosts_and_dampens_by_risk():
@@ -2689,6 +2833,36 @@ def test_production_order_proposal_from_wb_validation_error_invalid_freshness_mo
             "bundle_type_ids": [1],
             "in_flight_supply": [],
             "size_weights": {},
+        },
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_production_order_proposal_validation_error_invalid_layer5_threshold_order(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 90,
+            "bundle_daily_sales": [
+                {
+                    "bundle_type_id": 1,
+                    "daily_sales": 1.0,
+                }
+            ],
+            "bundle_stock": [
+                {
+                    "bundle_type_id": 1,
+                    "wb_qty": 0,
+                    "local_qty": 0,
+                }
+            ],
+            "in_flight_supply": [],
+            "size_weights": {},
+            "overrides": {
+                "layer5_unavoidable_stockout_risk_threshold": 0.6,
+                "layer5_accelerate_production_risk_threshold": 0.2,
+            },
         },
     )
     assert response.status_code == 422, response.text

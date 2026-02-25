@@ -277,6 +277,30 @@ def get_production_order_admin_settings(
             and article_settings.production_order_freshness_stock_stale_after_days is not None
             else None
         ),
+        layer3_stockout_boost_max=(
+            float(article_settings.production_order_layer3_stockout_boost_max)
+            if article_settings is not None
+            and article_settings.production_order_layer3_stockout_boost_max is not None
+            else None
+        ),
+        layer3_overstock_dampen_max=(
+            float(article_settings.production_order_layer3_overstock_dampen_max)
+            if article_settings is not None
+            and article_settings.production_order_layer3_overstock_dampen_max is not None
+            else None
+        ),
+        layer5_unavoidable_stockout_risk_threshold=(
+            float(article_settings.production_order_layer5_unavoidable_stockout_risk_threshold)
+            if article_settings is not None
+            and article_settings.production_order_layer5_unavoidable_stockout_risk_threshold is not None
+            else None
+        ),
+        layer5_accelerate_production_risk_threshold=(
+            float(article_settings.production_order_layer5_accelerate_production_risk_threshold)
+            if article_settings is not None
+            and article_settings.production_order_layer5_accelerate_production_risk_threshold is not None
+            else None
+        ),
     )
 
 
@@ -378,6 +402,18 @@ def upsert_production_order_admin_settings(
     )
     article_settings.production_order_assorti_bundle_type_ids = _serialize_assorti_bundle_type_ids(
         payload.assorti_bundle_type_ids
+    )
+    article_settings.production_order_layer3_stockout_boost_max = (
+        payload.layer3_stockout_boost_max
+    )
+    article_settings.production_order_layer3_overstock_dampen_max = (
+        payload.layer3_overstock_dampen_max
+    )
+    article_settings.production_order_layer5_unavoidable_stockout_risk_threshold = (
+        payload.layer5_unavoidable_stockout_risk_threshold
+    )
+    article_settings.production_order_layer5_accelerate_production_risk_threshold = (
+        payload.layer5_accelerate_production_risk_threshold
     )
 
     db.commit()

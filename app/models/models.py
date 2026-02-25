@@ -126,6 +126,22 @@ class ArticlePlanningSettings(Base):
         Text,
         nullable=True,
     )
+    production_order_layer3_stockout_boost_max: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_layer3_overstock_dampen_max: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_layer5_unavoidable_stockout_risk_threshold: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_layer5_accelerate_production_risk_threshold: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
 
 
 class ColorPlanningSettings(Base):
@@ -259,6 +275,22 @@ class GlobalPlanningSettings(Base):
     )
     default_production_order_assorti_bundle_type_ids: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True,
+    )
+    default_production_order_layer3_stockout_boost_max: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_layer3_overstock_dampen_max: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_layer5_unavoidable_stockout_risk_threshold: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_layer5_accelerate_production_risk_threshold: Mapped[float | None] = mapped_column(
+        Float,
         nullable=True,
     )
 

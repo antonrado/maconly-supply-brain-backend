@@ -112,6 +112,16 @@ class _EffectiveSettings:
     allow_order_with_buffer: bool
 
 
+@dataclass
+class _EffectiveLayerProxySettings:
+    layer3_stockout_boost_max: float
+    layer3_overstock_dampen_max: float
+    layer5_unavoidable_stockout_risk_threshold: float
+    layer5_accelerate_production_risk_threshold: float
+    threshold_order_adjusted: bool
+    source: dict[str, str]
+
+
 def _ceil_to_int(value: float) -> int:
     as_int = int(value)
     if value > as_int:
@@ -317,6 +327,156 @@ def _build_effective_settings(
         fabric_min_batch_default=fabric_min_batch_default,
         elastic_min_batch_default=elastic_min_batch_default,
         allow_order_with_buffer=allow_order_with_buffer,
+    )
+
+
+def _normalize_unit_interval(value: float | None) -> float | None:
+    if value is None:
+        return None
+
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if normalized < 0.0 or normalized > 1.0:
+        return None
+
+    return normalized
+
+
+def _resolve_layer_proxy_float(
+    *,
+    request_value: float | None,
+    admin_value: float | None,
+    global_value: float | None,
+    code_default: float,
+) -> tuple[float, str]:
+    request_normalized = _normalize_unit_interval(request_value)
+    admin_normalized = _normalize_unit_interval(admin_value)
+    global_normalized = _normalize_unit_interval(global_value)
+
+    if request_normalized is not None:
+        return request_normalized, "request"
+    if admin_normalized is not None:
+        return admin_normalized, "admin_defaults"
+    if global_normalized is not None:
+        return global_normalized, "global_default"
+    return float(code_default), LAYER_PROXY_VALUE_SOURCE
+
+
+def _resolve_layer_proxy_settings(
+    *,
+    article_settings: ArticlePlanningSettings | None,
+    global_settings: GlobalPlanningSettings | None,
+    overrides: PlanningOverridesInput | None,
+) -> _EffectiveLayerProxySettings:
+    request_layer3_stockout_boost = (
+        overrides.layer3_stockout_boost_max
+        if overrides is not None
+        else None
+    )
+    request_layer3_overstock_dampen = (
+        overrides.layer3_overstock_dampen_max
+        if overrides is not None
+        else None
+    )
+    request_layer5_unavoidable_threshold = (
+        overrides.layer5_unavoidable_stockout_risk_threshold
+        if overrides is not None
+        else None
+    )
+    request_layer5_accelerate_threshold = (
+        overrides.layer5_accelerate_production_risk_threshold
+        if overrides is not None
+        else None
+    )
+
+    admin_layer3_stockout_boost = (
+        article_settings.production_order_layer3_stockout_boost_max
+        if article_settings is not None
+        else None
+    )
+    admin_layer3_overstock_dampen = (
+        article_settings.production_order_layer3_overstock_dampen_max
+        if article_settings is not None
+        else None
+    )
+    admin_layer5_unavoidable_threshold = (
+        article_settings.production_order_layer5_unavoidable_stockout_risk_threshold
+        if article_settings is not None
+        else None
+    )
+    admin_layer5_accelerate_threshold = (
+        article_settings.production_order_layer5_accelerate_production_risk_threshold
+        if article_settings is not None
+        else None
+    )
+
+    global_layer3_stockout_boost = (
+        global_settings.default_production_order_layer3_stockout_boost_max
+        if global_settings is not None
+        else None
+    )
+    global_layer3_overstock_dampen = (
+        global_settings.default_production_order_layer3_overstock_dampen_max
+        if global_settings is not None
+        else None
+    )
+    global_layer5_unavoidable_threshold = (
+        global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold
+        if global_settings is not None
+        else None
+    )
+    global_layer5_accelerate_threshold = (
+        global_settings.default_production_order_layer5_accelerate_production_risk_threshold
+        if global_settings is not None
+        else None
+    )
+
+    layer3_stockout_boost_max, layer3_stockout_source = _resolve_layer_proxy_float(
+        request_value=request_layer3_stockout_boost,
+        admin_value=admin_layer3_stockout_boost,
+        global_value=global_layer3_stockout_boost,
+        code_default=LAYER3_STOCKOUT_BOOST_MAX,
+    )
+    layer3_overstock_dampen_max, layer3_overstock_source = _resolve_layer_proxy_float(
+        request_value=request_layer3_overstock_dampen,
+        admin_value=admin_layer3_overstock_dampen,
+        global_value=global_layer3_overstock_dampen,
+        code_default=LAYER3_OVERSTOCK_DAMPEN_MAX,
+    )
+    layer5_unavoidable_threshold, layer5_unavoidable_source = _resolve_layer_proxy_float(
+        request_value=request_layer5_unavoidable_threshold,
+        admin_value=admin_layer5_unavoidable_threshold,
+        global_value=global_layer5_unavoidable_threshold,
+        code_default=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    )
+    layer5_accelerate_threshold, layer5_accelerate_source = _resolve_layer_proxy_float(
+        request_value=request_layer5_accelerate_threshold,
+        admin_value=admin_layer5_accelerate_threshold,
+        global_value=global_layer5_accelerate_threshold,
+        code_default=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+    )
+
+    threshold_order_adjusted = False
+    if layer5_accelerate_threshold < layer5_unavoidable_threshold:
+        layer5_accelerate_threshold = layer5_unavoidable_threshold
+        threshold_order_adjusted = True
+        layer5_accelerate_source = f"{layer5_accelerate_source}|clamped_to_unavoidable"
+
+    return _EffectiveLayerProxySettings(
+        layer3_stockout_boost_max=layer3_stockout_boost_max,
+        layer3_overstock_dampen_max=layer3_overstock_dampen_max,
+        layer5_unavoidable_stockout_risk_threshold=layer5_unavoidable_threshold,
+        layer5_accelerate_production_risk_threshold=layer5_accelerate_threshold,
+        threshold_order_adjusted=threshold_order_adjusted,
+        source={
+            "layer3_stockout_boost_max": layer3_stockout_source,
+            "layer3_overstock_dampen_max": layer3_overstock_source,
+            "layer5_unavoidable_stockout_risk_threshold": layer5_unavoidable_source,
+            "layer5_accelerate_production_risk_threshold": layer5_accelerate_source,
+        },
     )
 
 
@@ -878,6 +1038,8 @@ def _apply_layer3_purchase_shaping(
     line_qty: dict[tuple[int, int], int],
     layer2_allocation_decisions: list[dict[str, int | float | str]],
     layer1_stock_health_metrics: list[dict[str, int | float | None]],
+    layer3_stockout_boost_max: float = LAYER3_STOCKOUT_BOOST_MAX,
+    layer3_overstock_dampen_max: float = LAYER3_OVERSTOCK_DAMPEN_MAX,
 ) -> tuple[dict[tuple[int, int], str], dict[str, int | float | dict[str, object] | str]]:
     def _bounded_risk(value: object) -> float:
         try:
@@ -893,8 +1055,8 @@ def _apply_layer3_purchase_shaping(
 
         calibrated = (
             base_factor
-            + (stockout_risk * LAYER3_STOCKOUT_BOOST_MAX * stockout_weight)
-            - (overstock_risk * LAYER3_OVERSTOCK_DAMPEN_MAX * overstock_weight)
+            + (stockout_risk * layer3_stockout_boost_max * stockout_weight)
+            - (overstock_risk * layer3_overstock_dampen_max * overstock_weight)
         )
 
         min_factor, max_factor = LAYER3_FACTOR_BOUNDS[decision_text]
@@ -1021,8 +1183,8 @@ def _apply_layer3_purchase_shaping(
             "calibration_down_lines": calibration_down_lines,
             "calibration": {
                 "method": LAYER3_CALIBRATION_METHOD,
-                "stockout_boost_max": LAYER3_STOCKOUT_BOOST_MAX,
-                "overstock_dampen_max": LAYER3_OVERSTOCK_DAMPEN_MAX,
+                "stockout_boost_max": round(layer3_stockout_boost_max, 4),
+                "overstock_dampen_max": round(layer3_overstock_dampen_max, 4),
                 "stockout_weight_by_decision": dict(LAYER3_STOCKOUT_WEIGHT_BY_DECISION),
                 "overstock_weight_by_decision": dict(LAYER3_OVERSTOCK_WEIGHT_BY_DECISION),
                 "factor_bounds": factor_bounds,
@@ -1183,6 +1345,8 @@ def _build_layer5_intervention_signals(
     risk_level: str,
     layer4_scenarios: list[dict[str, str | int | float]],
     in_flight_effective_qty_total: int,
+    unavoidable_stockout_risk_threshold: float = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    accelerate_production_risk_threshold: float = LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
 ) -> dict[str, str | bool | float | list[str]]:
     aggressive = next(
         (
@@ -1201,7 +1365,7 @@ def _build_layer5_intervention_signals(
 
     unavoidable_stockout = (
         risk_level == "critical"
-        and aggressive_stockout_risk >= LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD
+        and aggressive_stockout_risk >= unavoidable_stockout_risk_threshold
     )
 
     signals: list[str] = []
@@ -1209,13 +1373,13 @@ def _build_layer5_intervention_signals(
 
     if unavoidable_stockout:
         if in_flight_effective_qty_total <= 0:
-            if aggressive_stockout_risk >= LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD:
+            if aggressive_stockout_risk >= accelerate_production_risk_threshold:
                 signals.append("accelerate_production")
                 reason = "no_effective_in_flight_and_high_stockout_risk"
             else:
                 signals.append("increase_price_to_slow_velocity")
                 reason = "no_effective_in_flight_but_stockout_risk_persists"
-        elif aggressive_stockout_risk >= LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD:
+        elif aggressive_stockout_risk >= accelerate_production_risk_threshold:
             signals.append("accelerate_production")
             signals.append("increase_price_to_slow_velocity")
             reason = "in_flight_present_but_severe_stockout_risk"
@@ -1230,10 +1394,10 @@ def _build_layer5_intervention_signals(
         "signals": signals,
         "reason": reason,
         "aggressive_stockout_risk_proxy": round(aggressive_stockout_risk, 4),
-        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "risk_threshold": round(unavoidable_stockout_risk_threshold, 4),
         "signal_thresholds": {
-            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
-            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+            "accelerate_production": round(accelerate_production_risk_threshold, 4),
+            "increase_price_to_slow_velocity": round(unavoidable_stockout_risk_threshold, 4),
         },
     }
 
@@ -2021,6 +2185,11 @@ def build_production_order_proposal(
         global_settings=global_settings,
         overrides=request.overrides,
     )
+    layer_proxy_settings = _resolve_layer_proxy_settings(
+        article_settings=article_settings,
+        global_settings=global_settings,
+        overrides=request.overrides,
+    )
 
     if not settings.include_in_planning:
         explanation = _apply_explainability_mode(
@@ -2393,6 +2562,8 @@ def build_production_order_proposal(
         line_qty=line_qty,
         layer2_allocation_decisions=layer2_allocation_decisions,
         layer1_stock_health_metrics=layer1_stock_health_metrics,
+        layer3_stockout_boost_max=layer_proxy_settings.layer3_stockout_boost_max,
+        layer3_overstock_dampen_max=layer_proxy_settings.layer3_overstock_dampen_max,
     )
 
     color_totals: dict[int, int] = defaultdict(int)
@@ -2592,6 +2763,12 @@ def build_production_order_proposal(
         risk_level=risk_level,
         layer4_scenarios=layer4_scenarios,
         in_flight_effective_qty_total=in_flight_effective_qty_total,
+        unavoidable_stockout_risk_threshold=(
+            layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+        ),
+        accelerate_production_risk_threshold=(
+            layer_proxy_settings.layer5_accelerate_production_risk_threshold
+        ),
     )
     action = _choose_action(
         risk_level=risk_level,
@@ -2830,8 +3007,8 @@ def build_production_order_proposal(
                 "layer_3_purchase_factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
                 "layer_3_calibration": {
                     "method": LAYER3_CALIBRATION_METHOD,
-                    "stockout_boost_max": LAYER3_STOCKOUT_BOOST_MAX,
-                    "overstock_dampen_max": LAYER3_OVERSTOCK_DAMPEN_MAX,
+                    "stockout_boost_max": layer_proxy_settings.layer3_stockout_boost_max,
+                    "overstock_dampen_max": layer_proxy_settings.layer3_overstock_dampen_max,
                     "stockout_weight_by_decision": LAYER3_STOCKOUT_WEIGHT_BY_DECISION,
                     "overstock_weight_by_decision": LAYER3_OVERSTOCK_WEIGHT_BY_DECISION,
                     "factor_bounds": {
@@ -2842,12 +3019,20 @@ def build_production_order_proposal(
                         for decision, bounds in LAYER3_FACTOR_BOUNDS.items()
                     },
                 },
+                "layer_proxy_source": layer_proxy_settings.source,
+                "layer5_threshold_order_adjusted": layer_proxy_settings.threshold_order_adjusted,
                 "layer_4_scenario_factors": layer4_scenario_factor_items,
                 "layer_4_contract_version": LAYER4_CONTRACT_VERSION,
-                "layer_5_unavoidable_stockout_risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+                "layer_5_unavoidable_stockout_risk_threshold": (
+                    layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+                ),
                 "layer_5_signal_thresholds": {
-                    "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
-                    "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+                    "accelerate_production": (
+                        layer_proxy_settings.layer5_accelerate_production_risk_threshold
+                    ),
+                    "increase_price_to_slow_velocity": (
+                        layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+                    ),
                 },
             },
             "economic_buffer": {

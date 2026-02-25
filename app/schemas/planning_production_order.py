@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class BundleDemandInput(BaseModel):
@@ -40,7 +40,26 @@ class PlanningOverridesInput(BaseModel):
     lead_time_days: LeadTimeDaysInput | None = None
     fabric_min_batch_qty_default: int | None = Field(default=None, ge=0)
     elastic_min_batch_qty_default: int | None = Field(default=None, ge=0)
+    layer3_stockout_boost_max: float | None = Field(default=None, ge=0, le=1)
+    layer3_overstock_dampen_max: float | None = Field(default=None, ge=0, le=1)
+    layer5_unavoidable_stockout_risk_threshold: float | None = Field(default=None, ge=0, le=1)
+    layer5_accelerate_production_risk_threshold: float | None = Field(default=None, ge=0, le=1)
     allow_order_with_buffer: bool = True
+
+    @model_validator(mode="after")
+    def validate_layer5_threshold_order(self) -> "PlanningOverridesInput":
+        unavoidable_threshold = self.layer5_unavoidable_stockout_risk_threshold
+        accelerate_threshold = self.layer5_accelerate_production_risk_threshold
+        if (
+            unavoidable_threshold is not None
+            and accelerate_threshold is not None
+            and accelerate_threshold < unavoidable_threshold
+        ):
+            raise ValueError(
+                "layer5_accelerate_production_risk_threshold must be greater than or equal to "
+                "layer5_unavoidable_stockout_risk_threshold"
+            )
+        return self
 
 
 class ProductionOrderProposalRequest(BaseModel):

@@ -154,6 +154,10 @@ def test_production_order_settings_get_empty(client, db_session):
     assert body["assorti_bundle_type_ids"] == []
     assert body["freshness_sales_stale_after_days"] is None
     assert body["freshness_stock_stale_after_days"] is None
+    assert body["layer3_stockout_boost_max"] is None
+    assert body["layer3_overstock_dampen_max"] is None
+    assert body["layer5_unavoidable_stockout_risk_threshold"] is None
+    assert body["layer5_accelerate_production_risk_threshold"] is None
 
 
 def test_production_order_settings_put_and_get_roundtrip(client, db_session):
@@ -189,6 +193,10 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
         "assorti_bundle_type_ids": [seeded["bundle_type"].id],
         "freshness_sales_stale_after_days": 14,
         "freshness_stock_stale_after_days": 9,
+        "layer3_stockout_boost_max": 0.22,
+        "layer3_overstock_dampen_max": 0.18,
+        "layer5_unavoidable_stockout_risk_threshold": 0.28,
+        "layer5_accelerate_production_risk_threshold": 0.42,
     }
 
     put_response = client.put(
@@ -204,6 +212,10 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
     assert body["assorti_bundle_type_ids"] == [seeded["bundle_type"].id]
     assert body["freshness_sales_stale_after_days"] == 14
     assert body["freshness_stock_stale_after_days"] == 9
+    assert body["layer3_stockout_boost_max"] == 0.22
+    assert body["layer3_overstock_dampen_max"] == 0.18
+    assert body["layer5_unavoidable_stockout_risk_threshold"] == 0.28
+    assert body["layer5_accelerate_production_risk_threshold"] == 0.42
 
     get_response = client.get(f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}")
     assert get_response.status_code == 200, get_response.text
@@ -235,6 +247,24 @@ def test_production_order_settings_rejects_sku_from_other_article(client, db_ses
     assert "does not belong to article" in response.json()["detail"]
 
 
+def test_production_order_settings_rejects_invalid_layer5_threshold_order(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [],
+        "layer5_unavoidable_stockout_risk_threshold": 0.5,
+        "layer5_accelerate_production_risk_threshold": 0.2,
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 422, response.text
+
+
 def test_production_order_proposal_uses_admin_defaults(client, db_session):
     seeded = _seed_scope(db_session)
 
@@ -255,6 +285,10 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
             }
         ],
         "assorti_bundle_type_ids": [seeded["bundle_type"].id],
+        "layer3_stockout_boost_max": 0.21,
+        "layer3_overstock_dampen_max": 0.17,
+        "layer5_unavoidable_stockout_risk_threshold": 0.24,
+        "layer5_accelerate_production_risk_threshold": 0.31,
     }
 
     save_resp = client.put(
@@ -299,3 +333,18 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
             "source": ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
         }
     ]
+
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.21
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.17
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.24
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.31,
+        "increase_price_to_slow_velocity": 0.24,
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": "admin_defaults",
+        "layer3_overstock_dampen_max": "admin_defaults",
+        "layer5_unavoidable_stockout_risk_threshold": "admin_defaults",
+        "layer5_accelerate_production_risk_threshold": "admin_defaults",
+    }
