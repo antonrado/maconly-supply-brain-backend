@@ -28,7 +28,7 @@
 ### 2.1 Layer 1 - Stock health metrics foundation (in progress)
 - Per-SKU deterministic metrics: velocity (main/assorti), coverage, stock, in-flight, ETA, margin proxy, capital proxy, stockout/overstock risk.
 - Assorti classification now uses explicit `bundle_type.is_assorti` as primary source with deterministic admin/global fallback mapping (`admin_defaults` -> `global_default`) and traceable meta output (no runtime keyword parsing).
-- Expose machine-readable metrics in explanation meta.
+- Machine-readable metrics and contract checks are exposed in explanation meta (risk bounds, non-negative invariants, unique SKU pairs).
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
 - Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
@@ -71,7 +71,7 @@
 - Layer-by-layer delivery, no scope creep.
 
 ## Immediate high-leverage follow-ups
-1. Complete Layer 1 metric contract and lock regression tests.
+1. Stabilize Layer 1 metric contract and lock regression tests.
 2. Stabilize Layer 3 deterministic calibration coefficients/bounds and lock regression coverage.
 3. Finalize Layer 4 scenario contract and stabilize regression coverage.
 4. Stabilize Layer 5 intervention threshold policy/rules and lock regression coverage.

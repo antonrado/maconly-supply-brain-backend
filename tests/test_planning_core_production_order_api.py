@@ -12,6 +12,7 @@ from app.services.planning_production_order import (
     ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_SOURCE,
     EXPLAINABILITY_MODE_COMPACT,
+    LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
     LAYER2_ALLOCATION_METHOD,
     LAYER4_SCENARIO_FACTORS,
     LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
@@ -19,6 +20,7 @@ from app.services.planning_production_order import (
     LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
     _apply_layer3_purchase_shaping,
+    _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
     _build_layer5_intervention_signals,
 )
@@ -808,6 +810,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     layer5 = meta["layer_5_intervention"]
 
     assert layer1["summary"]["sku_count"] == 4
+    assert layer1["summary"]["high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert len(layer1["metrics"]) == 4
     for metric in layer1["metrics"]:
         assert {
@@ -830,6 +833,18 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "main_margin": 1.0,
         "assorti_margin": 0.85,
         "unit_capital": 1.0,
+    }
+    assert layer1["contract"] == {
+        "version": "v1_alpha",
+        "status": "ok",
+        "sku_count": 4,
+        "checks": {
+            "unique_color_size_pairs": True,
+            "risk_bounds_valid": True,
+            "non_negative_quantities": True,
+            "non_negative_velocity": True,
+            "non_negative_coverage": True,
+        },
     }
     assert layer1["assorti_classification"]["source"] == ASSORTI_CLASSIFICATION_SOURCE
     assert layer1["assorti_classification"]["source_breakdown"] == {
@@ -975,6 +990,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "",
     )
     assert "sku_count=4" in layer1_step
+    assert f"high_stockout_threshold={LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD}" in layer1_step
+    assert "contract_status=ok" in layer1_step
     assert f"source={ASSORTI_CLASSIFICATION_SOURCE}" in assorti_step
     assert "assorti_bundle_types=0" in assorti_step
     assert "main_bundle_types=1" in assorti_step
@@ -1272,6 +1289,50 @@ def test_layer3_purchase_shaping_calibration_boosts_and_dampens_by_risk():
         "avg": 0.62,
         "min": 0.1,
         "max": 1.25,
+    }
+
+
+def test_layer1_contract_summary_marks_violations_for_duplicate_and_invalid_risk():
+    metrics = [
+        {
+            "color_id": 7,
+            "size_id": 8,
+            "velocity_main": 1.0,
+            "velocity_assorti": 0.0,
+            "coverage_days": 3.0,
+            "current_stock": 3,
+            "in_flight": 0,
+            "capital_locked": 3.0,
+            "stockout_risk": 1.2,
+            "overstock_risk": 0.0,
+        },
+        {
+            "color_id": 7,
+            "size_id": 8,
+            "velocity_main": -0.1,
+            "velocity_assorti": 0.0,
+            "coverage_days": -1.0,
+            "current_stock": -1,
+            "in_flight": 0,
+            "capital_locked": -1.0,
+            "stockout_risk": 0.1,
+            "overstock_risk": 0.2,
+        },
+    ]
+
+    contract = _build_layer1_contract_summary(metrics)
+
+    assert contract == {
+        "version": "v1_alpha",
+        "status": "violated",
+        "sku_count": 2,
+        "checks": {
+            "unique_color_size_pairs": False,
+            "risk_bounds_valid": False,
+            "non_negative_quantities": False,
+            "non_negative_velocity": False,
+            "non_negative_coverage": False,
+        },
     }
 
 

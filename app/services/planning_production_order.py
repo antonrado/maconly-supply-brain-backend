@@ -57,6 +57,8 @@ LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
 LAYER2_MAIN_MARGIN_PROXY = 1.0
 LAYER2_ASSORTI_MARGIN_PROXY = 0.85
 LAYER2_UNIT_CAPITAL_PROXY = 1.0
+LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD = 0.5
+LAYER1_CONTRACT_VERSION = "v1_alpha"
 LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "main": 1.0,
     "assorti": 0.75,
@@ -434,6 +436,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
 
         compact_meta["layer_1_stock_health"] = {
             "summary": layer1_raw.get("summary", {}),
+            "contract": layer1_raw.get("contract", {}),
             "assorti_classification": assorti_compact,
             "proxies": layer1_raw.get("proxies", {}),
         }
@@ -746,6 +749,65 @@ def _build_layer1_stock_health_metrics(
         )
 
     return metrics
+
+
+def _build_layer1_contract_summary(
+    stock_health_metrics: list[dict[str, int | float | None]],
+) -> dict[str, str | int | dict[str, bool]]:
+    seen_keys: set[tuple[int, int]] = set()
+    duplicates_found = False
+
+    risk_bounds_valid = True
+    non_negative_quantities = True
+    non_negative_velocity = True
+    non_negative_coverage = True
+
+    for metric in stock_health_metrics:
+        color_id_raw = metric.get("color_id")
+        size_id_raw = metric.get("size_id")
+        try:
+            line_key = (int(color_id_raw), int(size_id_raw))
+        except (TypeError, ValueError):
+            duplicates_found = True
+            continue
+
+        if line_key in seen_keys:
+            duplicates_found = True
+        seen_keys.add(line_key)
+
+        stockout_risk = float(metric.get("stockout_risk", 0.0))
+        overstock_risk = float(metric.get("overstock_risk", 0.0))
+        if not (0.0 <= stockout_risk <= 1.0 and 0.0 <= overstock_risk <= 1.0):
+            risk_bounds_valid = False
+
+        current_stock = int(metric.get("current_stock", 0))
+        in_flight = int(metric.get("in_flight", 0))
+        capital_locked = float(metric.get("capital_locked", 0.0))
+        if current_stock < 0 or in_flight < 0 or capital_locked < 0:
+            non_negative_quantities = False
+
+        velocity_main = float(metric.get("velocity_main", 0.0))
+        velocity_assorti = float(metric.get("velocity_assorti", 0.0))
+        if velocity_main < 0 or velocity_assorti < 0:
+            non_negative_velocity = False
+
+        coverage_days = float(metric.get("coverage_days", 0.0))
+        if coverage_days < 0:
+            non_negative_coverage = False
+
+    checks = {
+        "unique_color_size_pairs": not duplicates_found,
+        "risk_bounds_valid": risk_bounds_valid,
+        "non_negative_quantities": non_negative_quantities,
+        "non_negative_velocity": non_negative_velocity,
+        "non_negative_coverage": non_negative_coverage,
+    }
+    return {
+        "version": LAYER1_CONTRACT_VERSION,
+        "status": "ok" if all(checks.values()) else "violated",
+        "sku_count": len(stock_health_metrics),
+        "checks": checks,
+    }
 
 
 def _build_layer2_allocation_decisions(
@@ -2259,8 +2321,9 @@ def build_production_order_proposal(
     layer1_high_stockout_risk_count = sum(
         1
         for item in layer1_stock_health_metrics
-        if float(item["stockout_risk"]) >= 0.5
+        if float(item["stockout_risk"]) >= LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     )
+    layer1_contract = _build_layer1_contract_summary(layer1_stock_health_metrics)
 
     if total_daily_sales <= 0:
         days_of_cover_estimate = 9999.0
@@ -2623,7 +2686,9 @@ def build_production_order_proposal(
             (
                 f"Layer 1 stock health: sku_count={len(layer1_stock_health_metrics)}, "
                 f"avg_coverage_days={layer1_avg_coverage_days}, "
-                f"high_stockout_risk_skus={layer1_high_stockout_risk_count}."
+                f"high_stockout_risk_skus={layer1_high_stockout_risk_count}, "
+                f"high_stockout_threshold={LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD}, "
+                f"contract_status={layer1_contract['status']}."
             ),
             (
                 f"Layer 2 allocation: method={LAYER2_ALLOCATION_METHOD}, "
@@ -2706,7 +2771,9 @@ def build_production_order_proposal(
                     "sku_count": len(layer1_stock_health_metrics),
                     "avg_coverage_days": layer1_avg_coverage_days,
                     "high_stockout_risk_skus": layer1_high_stockout_risk_count,
+                    "high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
                 },
+                "contract": layer1_contract,
                 "assorti_classification": {
                     "source": ASSORTI_CLASSIFICATION_SOURCE,
                     "fallback_sources": [
