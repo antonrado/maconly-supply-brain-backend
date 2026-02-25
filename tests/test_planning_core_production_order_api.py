@@ -257,6 +257,14 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
         "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
         "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
     }
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert alpha_proxy["layer_3_calibration"]["method"] == "risk_weighted_factor_clamp"
+    assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
     assert "line_keys" not in meta["elastic_uplift"]
     assert "line_alloc" not in meta["elastic_uplift"]
 
@@ -1875,6 +1883,14 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert alpha_proxy["layer_3_calibration"]["method"] == "risk_weighted_factor_clamp"
+    assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
     from_wb_meta = meta["from_wb"]
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta
