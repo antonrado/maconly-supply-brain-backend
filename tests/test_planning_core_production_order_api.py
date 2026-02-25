@@ -14,6 +14,8 @@ from app.services.planning_production_order import (
     EXPLAINABILITY_MODE_COMPACT,
     LAYER2_ALLOCATION_METHOD,
     LAYER4_SCENARIO_FACTORS,
+    LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+    LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
     LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
     _apply_layer3_purchase_shaping,
@@ -911,13 +913,20 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert aggressive["assorti_sustainability_impact"] == "neutral_no_assorti_signal"
 
     assert layer5["method"] == "deterministic_unavoidable_stockout_flags"
+    assert layer5["signal_policy"] == "critical_risk_thresholds"
     assert layer5["risk_threshold"] == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    assert layer5["signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
     assert isinstance(layer5["unavoidable_stockout"], bool)
     assert isinstance(layer5["signals"], list)
     assert layer5["reason"] in {
         "none",
         "no_effective_in_flight_and_high_stockout_risk",
+        "no_effective_in_flight_but_stockout_risk_persists",
         "in_flight_present_but_stockout_risk_persists",
+        "in_flight_present_but_severe_stockout_risk",
     }
 
     alpha_proxy = meta["alpha_proxy_economics"]
@@ -1281,11 +1290,47 @@ def test_layer5_intervention_signals_accelerate_when_no_in_flight():
 
     assert result == {
         "method": "deterministic_unavoidable_stockout_flags",
+        "signal_policy": "critical_risk_thresholds",
         "unavoidable_stockout": True,
         "signals": ["accelerate_production"],
         "reason": "no_effective_in_flight_and_high_stockout_risk",
         "aggressive_stockout_risk_proxy": 0.4,
         "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "signal_thresholds": {
+            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        },
+    }
+
+
+def test_layer5_intervention_signals_dual_signal_when_severe_and_in_flight_present():
+    scenarios = [
+        {"scenario": "Conservative", "stockout_risk_proxy": 0.70},
+        {"scenario": "Balanced", "stockout_risk_proxy": 0.60},
+        {"scenario": "Aggressive", "stockout_risk_proxy": 0.45},
+    ]
+
+    result = _build_layer5_intervention_signals(
+        risk_level="critical",
+        layer4_scenarios=scenarios,
+        in_flight_effective_qty_total=50,
+    )
+
+    assert result == {
+        "method": "deterministic_unavoidable_stockout_flags",
+        "signal_policy": "critical_risk_thresholds",
+        "unavoidable_stockout": True,
+        "signals": [
+            "accelerate_production",
+            "increase_price_to_slow_velocity",
+        ],
+        "reason": "in_flight_present_but_severe_stockout_risk",
+        "aggressive_stockout_risk_proxy": 0.45,
+        "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "signal_thresholds": {
+            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        },
     }
 
 
@@ -1304,11 +1349,16 @@ def test_layer5_intervention_signals_price_slowdown_when_in_flight_present():
 
     assert result == {
         "method": "deterministic_unavoidable_stockout_flags",
+        "signal_policy": "critical_risk_thresholds",
         "unavoidable_stockout": True,
         "signals": ["increase_price_to_slow_velocity"],
         "reason": "in_flight_present_but_stockout_risk_persists",
         "aggressive_stockout_risk_proxy": 0.31,
         "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "signal_thresholds": {
+            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        },
     }
 
 
@@ -1327,11 +1377,16 @@ def test_layer5_intervention_signals_not_triggered_when_not_unavoidable():
 
     assert result == {
         "method": "deterministic_unavoidable_stockout_flags",
+        "signal_policy": "critical_risk_thresholds",
         "unavoidable_stockout": False,
         "signals": [],
         "reason": "none",
         "aggressive_stockout_risk_proxy": 0.05,
         "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "signal_thresholds": {
+            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        },
     }
 
 

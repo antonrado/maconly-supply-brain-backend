@@ -48,7 +48,8 @@
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
-- Current signal set: `accelerate_production` / `increase_price_to_slow_velocity`.
+- Signal thresholds are explicit and deterministic (`accelerate_production` severe threshold, `increase_price_to_slow_velocity` unavoidable threshold).
+- Current signal set: `accelerate_production` / `increase_price_to_slow_velocity` (dual signal allowed under severe in-flight risk).
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
 ### 2.6 Explainability payload controls (in progress)
@@ -73,7 +74,7 @@
 1. Complete Layer 1 metric contract and lock regression tests.
 2. Stabilize Layer 3 deterministic calibration coefficients/bounds and lock regression coverage.
 3. Finalize Layer 4 scenario contract and stabilize regression coverage.
-4. Finalize Layer 5 intervention thresholds/rules and stabilize regression coverage.
+4. Stabilize Layer 5 intervention threshold policy/rules and lock regression coverage.
 5. Stabilize explainability `compact|full` payload contract and lock regression coverage.
 6. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
 7. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.

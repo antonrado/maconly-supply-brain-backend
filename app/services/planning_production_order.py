@@ -92,6 +92,8 @@ LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
     ("Aggressive", 1.20),
 )
 LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
+LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = 0.35
+LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
 
 
 @dataclass
@@ -1137,7 +1139,7 @@ def _build_layer5_intervention_signals(
 
     unavoidable_stockout = (
         risk_level == "critical"
-        and aggressive_stockout_risk >= LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+        and aggressive_stockout_risk >= LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD
     )
 
     signals: list[str] = []
@@ -1145,19 +1147,32 @@ def _build_layer5_intervention_signals(
 
     if unavoidable_stockout:
         if in_flight_effective_qty_total <= 0:
+            if aggressive_stockout_risk >= LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD:
+                signals.append("accelerate_production")
+                reason = "no_effective_in_flight_and_high_stockout_risk"
+            else:
+                signals.append("increase_price_to_slow_velocity")
+                reason = "no_effective_in_flight_but_stockout_risk_persists"
+        elif aggressive_stockout_risk >= LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD:
             signals.append("accelerate_production")
-            reason = "no_effective_in_flight_and_high_stockout_risk"
+            signals.append("increase_price_to_slow_velocity")
+            reason = "in_flight_present_but_severe_stockout_risk"
         else:
             signals.append("increase_price_to_slow_velocity")
             reason = "in_flight_present_but_stockout_risk_persists"
 
     return {
         "method": "deterministic_unavoidable_stockout_flags",
+        "signal_policy": "critical_risk_thresholds",
         "unavoidable_stockout": unavoidable_stockout,
         "signals": signals,
         "reason": reason,
         "aggressive_stockout_risk_proxy": round(aggressive_stockout_risk, 4),
         "risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        "signal_thresholds": {
+            "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+            "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        },
     }
 
 
@@ -2649,7 +2664,8 @@ def build_production_order_proposal(
                 f"reason={layer5_intervention['reason']}, "
                 "aggressive_stockout_risk="
                 f"{layer5_intervention['aggressive_stockout_risk_proxy']}, "
-                f"threshold={layer5_intervention['risk_threshold']}."
+                f"threshold={layer5_intervention['risk_threshold']}, "
+                f"signal_thresholds={layer5_intervention['signal_thresholds']}."
             ),
             (
                 f"Elastic scope: mode={elastic_scope_mode}, "
