@@ -16,6 +16,7 @@ from app.services.planning_production_order import (
     LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
     LAYER2_ALLOCATION_METHOD,
     LAYER2_CONTRACT_VERSION,
+    LAYER3_CONTRACT_VERSION,
     LAYER4_SCENARIO_FACTORS,
     LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
     LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
@@ -25,6 +26,7 @@ from app.services.planning_production_order import (
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
     _build_layer2_contract_summary,
+    _build_layer3_contract_summary,
     _build_layer4_contract_summary,
     _build_layer5_intervention_signals,
 )
@@ -236,6 +238,59 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
     }
 
 
+def test_layer3_contract_summary_marks_violated_for_invariant_breaks():
+    contract = _build_layer3_contract_summary(
+        {
+            "qty_before": 12,
+            "qty_after_base": 7,
+            "qty_after": 9,
+            "qty_delta_vs_base": 1,
+            "adjusted_lines": 5,
+            "main_lines": 2,
+            "assorti_lines": 1,
+            "hold_lines": 0,
+            "calibration": {
+                "method": "unexpected_method",
+                "risk_lines_covered": 2,
+                "risk_lines_missing": 0,
+                "up_lines": 2,
+                "down_lines": 2,
+                "factor_bounds": {
+                    "main": {
+                        "min": 0.7,
+                        "max": 1.2,
+                    }
+                },
+                "factor_summary": {
+                    "avg": 0.5,
+                    "min": 0.6,
+                    "max": 2.0,
+                },
+            },
+        }
+    )
+
+    assert contract == {
+        "version": LAYER3_CONTRACT_VERSION,
+        "status": "violated",
+        "decision_lines": 3,
+        "checks": {
+            "non_negative_quantities": True,
+            "qty_delta_matches_after_minus_base": False,
+            "non_negative_line_counts": True,
+            "adjusted_lines_within_decision_lines": False,
+            "non_negative_risk_line_counts": True,
+            "risk_partition_matches_decision_lines": False,
+            "non_negative_calibration_direction_counts": True,
+            "calibration_direction_counts_within_decision_lines": False,
+            "calibration_method_matches": False,
+            "factor_bounds_match_expected": False,
+            "factor_summary_consistent": False,
+            "factor_summary_within_bounds": False,
+        },
+    }
+
+
 def _business_projection(body: dict[str, object]) -> dict[str, object]:
     return {
         "status": body["status"],
@@ -301,6 +356,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["layer_3_purchase_shaping"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
     assert meta["layer_5_intervention"]["signal_thresholds"] == {
@@ -1008,6 +1064,25 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert layer3["calibration"]["risk_lines_covered"] + layer3["calibration"]["risk_lines_missing"] == (
         layer3["main_lines"] + layer3["assorti_lines"] + layer3["hold_lines"]
     )
+    assert layer3["contract"] == {
+        "version": LAYER3_CONTRACT_VERSION,
+        "status": "ok",
+        "decision_lines": 4,
+        "checks": {
+            "non_negative_quantities": True,
+            "qty_delta_matches_after_minus_base": True,
+            "non_negative_line_counts": True,
+            "adjusted_lines_within_decision_lines": True,
+            "non_negative_risk_line_counts": True,
+            "risk_partition_matches_decision_lines": True,
+            "non_negative_calibration_direction_counts": True,
+            "calibration_direction_counts_within_decision_lines": True,
+            "calibration_method_matches": True,
+            "factor_bounds_match_expected": True,
+            "factor_summary_consistent": True,
+            "factor_summary_within_bounds": True,
+        },
+    }
 
     assert layer4["method"] == "deterministic_factor_scenarios"
     assert len(layer4["scenarios"]) == 3
@@ -1168,6 +1243,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert "tie_break=hold" in layer2_step
     assert "contract_status=ok" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
+    assert "contract_status=ok" in layer3_step
     assert "Conservative(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
     assert "status=ok" in layer4_contract_step

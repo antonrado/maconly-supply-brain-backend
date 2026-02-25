@@ -40,6 +40,7 @@
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
 - Allocation-driven purchase shaping now includes deterministic risk-weighted calibration on top of Layer 2 decisions.
 - Layer 3 calibration coefficients now support deterministic precedence (`request -> admin_defaults -> global_default -> code_default_constants`) with source tracing in explainability meta.
+- Layer 3 contract summary is now exposed (version/checks/status; qty delta invariants, decision/risk partition consistency, calibration method/bounds, factor summary sanity) and projected in compact explainability mode.
 - Stabilize Layer 3 calibration coefficients/bounds and lock regression coverage.
 - Preserve deterministic math and full explainability.
 
