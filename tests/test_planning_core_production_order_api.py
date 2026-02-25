@@ -487,6 +487,13 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
+    assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert layer2_compact_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert layer2_compact_contract_checks["capital_locked_metric_valid"] is True
     assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is True
     assert (
         meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
@@ -603,6 +610,13 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
+    compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
+    assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
     if profile_name == "overstock":
         assert compact_body["risk_level"] == "overstock"
@@ -2631,6 +2645,18 @@ def test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5
     assert layer2_decision_quality["near_tie_count"] == expected["layer2_near_tie_count"]
     assert layer2_decision_quality["tie_count"] == expected["layer2_tie_count"]
 
+    layer2_contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=layer2_decisions,
+        layer2_allocation_summary=layer2_summary,
+    )
+    assert layer2_contract["status"] == "ok"
+    assert layer2_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert layer2_contract["checks"]["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
+    assert layer2_contract["checks"]["profit_gap_consistent_with_profits"] is True
+    assert layer2_contract["checks"]["gmroi_gap_consistent_with_gmroi"] is True
+    assert layer2_contract["checks"]["capital_locked_metric_valid"] is True
+
     line_qty = {(10, 1): base_line_qty}
     _, layer3_purchase_shaping = _apply_layer3_purchase_shaping(
         line_qty=line_qty,
@@ -2959,6 +2985,13 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
+    assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert layer2_compact_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert layer2_compact_contract_checks["capital_locked_metric_valid"] is True
     assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is True
     assert (
         meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
@@ -3148,6 +3181,13 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
+    compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
+    assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
+    assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
+    assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
+    assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
     if profile_name == "overstock":
         assert compact_body["risk_level"] == "overstock"
