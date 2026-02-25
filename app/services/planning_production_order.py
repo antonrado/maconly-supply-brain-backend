@@ -3306,6 +3306,12 @@ def build_production_order_proposal(
                 f"hold={layer2_allocation_summary['hold']}, "
                 f"near_tie={layer2_decision_quality['near_tie_count']}, "
                 f"tie_count={layer2_decision_quality['tie_count']}, "
+                "reason_counts="
+                f"{layer2_decision_quality['decision_reason_counts']}, "
+                "avg_profit_gap_until_eta="
+                f"{layer2_decision_quality['avg_profit_gap_until_eta']}, "
+                "capital_locked_total="
+                f"{layer2_decision_quality['capital_locked_total']}, "
                 f"contract_status={layer2_contract['status']}."
             ),
             (

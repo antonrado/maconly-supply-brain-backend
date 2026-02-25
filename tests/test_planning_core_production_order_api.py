@@ -1475,6 +1475,9 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert "tie_break=hold" in layer2_step
     assert "near_tie=0" in layer2_step
     assert "tie_count=0" in layer2_step
+    assert "reason_counts={" in layer2_step
+    assert "avg_profit_gap_until_eta=" in layer2_step
+    assert "capital_locked_total=" in layer2_step
     assert "contract_status=ok" in layer2_step
     assert "main:4|assorti:0|hold:0" in layer3_step
     assert "contract_status=ok" in layer3_step
@@ -2820,6 +2823,10 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
         (step for step in body["explanation"]["steps"] if "ready stock наборов" in step),
         "",
     )
+    layer2_step = next(
+        (step for step in body["explanation"]["steps"] if "Layer 2 allocation" in step),
+        "",
+    )
 
     assert "observation_window_days=30" in wb_adapter_step
     assert "freshness_mode=warn" in wb_adapter_step
@@ -2838,6 +2845,10 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=20" in stock_step
+    assert "decision_gate=profit_until_eta" in layer2_step
+    assert "reason_counts={" in layer2_step
+    assert "avg_profit_gap_until_eta=" in layer2_step
+    assert "capital_locked_total=" in layer2_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     assert from_wb_meta["observation_window_days"] == 30
