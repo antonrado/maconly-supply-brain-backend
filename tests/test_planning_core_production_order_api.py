@@ -25,6 +25,7 @@ from app.services.planning_production_order import (
     LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
     _apply_layer3_purchase_shaping,
+    _build_layer1_stock_health_metrics,
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
     _build_layer2_contract_summary,
@@ -2402,6 +2403,252 @@ def test_decision_quality_case_studies_are_deterministic(
 
     # Layer 5 is signal-only and must not directly force recommendation action type.
     if case_name == "stockout_risk_case":
+        assert layer5_intervention["signals"] == ["accelerate_production"]
+        assert action == "order_minimum_only"
+
+
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "layer1_input",
+        "base_line_qty",
+        "available_bundles_for_cover",
+        "total_daily_sales",
+        "reorder_point_days",
+        "risk_level",
+        "in_flight_effective_qty_total",
+        "expected",
+    ),
+    [
+        pytest.param(
+            "stockout",
+            {
+                "daily_sales_main": 3.0,
+                "daily_sales_assorti": 1.5,
+                "current_stock": 20,
+                "in_flight": 0,
+                "eta_days": 10,
+                "target_coverage_days": 60,
+            },
+            120,
+            20,
+            8.0,
+            40,
+            "critical",
+            0,
+            {
+                "layer1": {
+                    "velocity_main": 3.0,
+                    "velocity_assorti": 1.5,
+                    "coverage_days": 4.44,
+                    "stockout_risk": 0.8889,
+                    "overstock_risk": 0.0,
+                    "capital_locked": 20.0,
+                },
+                "layer2_decision": "main",
+                "layer2_summary": {"main": 1, "assorti": 0, "hold": 0},
+                "layer2_near_tie_count": 0,
+                "layer2_tie_count": 0,
+                "layer3_qty_after": 150,
+                "layer3_qty_delta_vs_base": 30,
+                "reorder_qty": 150,
+                "layer4_purchase_units": [120, 150, 180],
+                "layer4_capital": [120.0, 150.0, 180.0],
+                "capital_delta_aggressive_vs_conservative": 60.0,
+                "layer5_signals": ["accelerate_production"],
+                "layer5_reason": "no_effective_in_flight_and_high_stockout_risk",
+                "action": "order_minimum_only",
+            },
+            id="stockout",
+        ),
+        pytest.param(
+            "balanced",
+            {
+                "daily_sales_main": 1.0,
+                "daily_sales_assorti": 2.0,
+                "current_stock": 90,
+                "in_flight": 0,
+                "eta_days": 10,
+                "target_coverage_days": 60,
+            },
+            100,
+            180,
+            5.0,
+            40,
+            "warning",
+            20,
+            {
+                "layer1": {
+                    "velocity_main": 1.0,
+                    "velocity_assorti": 2.0,
+                    "coverage_days": 30.0,
+                    "stockout_risk": 0.25,
+                    "overstock_risk": 0.0,
+                    "capital_locked": 90.0,
+                },
+                "layer2_decision": "assorti",
+                "layer2_summary": {"main": 0, "assorti": 1, "hold": 0},
+                "layer2_near_tie_count": 0,
+                "layer2_tie_count": 0,
+                "layer3_qty_after": 80,
+                "layer3_qty_delta_vs_base": 5,
+                "reorder_qty": 80,
+                "layer4_purchase_units": [64, 80, 96],
+                "layer4_capital": [64.0, 80.0, 96.0],
+                "capital_delta_aggressive_vs_conservative": 32.0,
+                "layer5_signals": [],
+                "layer5_reason": "none",
+                "action": "order_minimum_only",
+            },
+            id="balanced",
+        ),
+        pytest.param(
+            "overstock",
+            {
+                "daily_sales_main": 1.7,
+                "daily_sales_assorti": 2.0,
+                "current_stock": 300,
+                "in_flight": 50,
+                "eta_days": 10,
+                "target_coverage_days": 20,
+            },
+            40,
+            1000,
+            4.0,
+            40,
+            "overstock",
+            40,
+            {
+                "layer1": {
+                    "velocity_main": 1.7,
+                    "velocity_assorti": 2.0,
+                    "coverage_days": 94.59,
+                    "stockout_risk": 0.0,
+                    "overstock_risk": 1.0,
+                    "capital_locked": 350.0,
+                },
+                "layer2_decision": "hold",
+                "layer2_summary": {"main": 0, "assorti": 0, "hold": 1},
+                "layer2_near_tie_count": 1,
+                "layer2_tie_count": 1,
+                "layer3_qty_after": 4,
+                "layer3_qty_delta_vs_base": -10,
+                "reorder_qty": 4,
+                "layer4_purchase_units": [4, 4, 5],
+                "layer4_capital": [4.0, 4.0, 5.0],
+                "capital_delta_aggressive_vs_conservative": 1.0,
+                "layer5_signals": [],
+                "layer5_reason": "none",
+                "action": "wait",
+            },
+            id="overstock",
+        ),
+    ],
+)
+def test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5(
+    case_name,
+    layer1_input,
+    base_line_qty,
+    available_bundles_for_cover,
+    total_daily_sales,
+    reorder_point_days,
+    risk_level,
+    in_flight_effective_qty_total,
+    expected,
+):
+    stock_health_metrics = _build_layer1_stock_health_metrics(
+        bundle_type_ids=[101, 202],
+        demand_by_bundle={
+            101: layer1_input["daily_sales_main"],
+            202: layer1_input["daily_sales_assorti"],
+        },
+        recipe_colors_by_bundle={
+            101: {10},
+            202: {10},
+        },
+        color_to_sizes={10: [1]},
+        size_weights={1: 1.0},
+        current_stock_by_color_size={(10, 1): layer1_input["current_stock"]},
+        in_flight_effective_by_color_size={(10, 1): layer1_input["in_flight"]},
+        in_flight_eta_days_by_color_size={(10, 1): layer1_input["eta_days"]},
+        assorti_by_bundle_type={
+            101: False,
+            202: True,
+        },
+        reorder_point_days=reorder_point_days,
+        target_coverage_days=layer1_input["target_coverage_days"],
+    )
+
+    assert len(stock_health_metrics) == 1
+    layer1_metric = stock_health_metrics[0]
+    assert layer1_metric["velocity_main"] == expected["layer1"]["velocity_main"]
+    assert layer1_metric["velocity_assorti"] == expected["layer1"]["velocity_assorti"]
+    assert layer1_metric["coverage_days"] == expected["layer1"]["coverage_days"]
+    assert layer1_metric["stockout_risk"] == expected["layer1"]["stockout_risk"]
+    assert layer1_metric["overstock_risk"] == expected["layer1"]["overstock_risk"]
+    assert layer1_metric["capital_locked"] == expected["layer1"]["capital_locked"]
+
+    layer1_contract = _build_layer1_contract_summary(stock_health_metrics)
+    assert layer1_contract["status"] == "ok"
+
+    layer2_decisions, layer2_summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=stock_health_metrics,
+        lead_time_days_total=30,
+    )
+    assert len(layer2_decisions) == 1
+    assert layer2_summary == expected["layer2_summary"]
+    assert layer2_decisions[0]["allocation_decision"] == expected["layer2_decision"]
+
+    layer2_decision_quality = _build_layer2_decision_quality_summary(layer2_decisions)
+    assert layer2_decision_quality["decision_count"] == 1
+    assert layer2_decision_quality["near_tie_count"] == expected["layer2_near_tie_count"]
+    assert layer2_decision_quality["tie_count"] == expected["layer2_tie_count"]
+
+    line_qty = {(10, 1): base_line_qty}
+    _, layer3_purchase_shaping = _apply_layer3_purchase_shaping(
+        line_qty=line_qty,
+        layer2_allocation_decisions=layer2_decisions,
+        layer1_stock_health_metrics=stock_health_metrics,
+    )
+    assert line_qty[(10, 1)] == expected["layer3_qty_after"]
+    assert layer3_purchase_shaping["qty_after"] == expected["layer3_qty_after"]
+    assert layer3_purchase_shaping["qty_delta_vs_base"] == expected["layer3_qty_delta_vs_base"]
+
+    candidate_total_units = sum(line_qty.values())
+    assert candidate_total_units == expected["reorder_qty"]
+
+    layer4_scenarios = _build_layer4_scenarios(
+        base_purchase_units=candidate_total_units,
+        available_bundles_for_cover=available_bundles_for_cover,
+        total_daily_sales=total_daily_sales,
+        reorder_point_days=reorder_point_days,
+        expected_horizon_sales=total_daily_sales * 90,
+        layer3_purchase_shaping=layer3_purchase_shaping,
+    )
+    assert [item["purchase_units"] for item in layer4_scenarios] == expected["layer4_purchase_units"]
+    assert [item["total_capital_required"] for item in layer4_scenarios] == expected["layer4_capital"]
+    assert (
+        float(layer4_scenarios[2]["total_capital_required"])
+        - float(layer4_scenarios[0]["total_capital_required"])
+    ) == expected["capital_delta_aggressive_vs_conservative"]
+
+    layer5_intervention = _build_layer5_intervention_signals(
+        risk_level=risk_level,
+        layer4_scenarios=layer4_scenarios,
+        in_flight_effective_qty_total=in_flight_effective_qty_total,
+    )
+    assert layer5_intervention["signals"] == expected["layer5_signals"]
+    assert layer5_intervention["reason"] == expected["layer5_reason"]
+
+    action = _choose_action(
+        risk_level=risk_level,
+        candidate_units=candidate_total_units,
+        allow_order_with_buffer=False,
+    )
+    assert action == expected["action"]
+
+    if case_name == "stockout":
+        # Explicit guardrail: intervention signal does not override recommendation action policy.
         assert layer5_intervention["signals"] == ["accelerate_production"]
         assert action == "order_minimum_only"
 

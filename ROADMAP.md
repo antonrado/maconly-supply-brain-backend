@@ -29,6 +29,7 @@
 - Per-SKU deterministic metrics: velocity (main/assorti), coverage, stock, in-flight, ETA, margin proxy, capital proxy, stockout/overstock risk.
 - Assorti classification now uses explicit `bundle_type.is_assorti` as primary source with deterministic admin/global fallback mapping (`admin_defaults` -> `global_default`) and traceable meta output (no runtime keyword parsing).
 - Machine-readable metrics and contract checks are exposed in explanation meta (risk bounds, non-negative invariants, unique SKU pairs).
+- Decision-quality case-study regression now includes full helper-chain `L1 -> L5` deterministic coverage to lock computed Layer 1 metric stability together with downstream allocation/shaping/scenario/intervention behavior.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
 - Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
