@@ -37,7 +37,7 @@
 - Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
 - Layer 2 decision flags (`allocation_decision`, `tie_break_applied`, `near_tie`) are stabilized against floating-point boundary noise by using normalized 4-decimal profit/GMROI diagnostics that are also emitted in explainability payloads.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
-- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, decision validity, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, capital metric sanity) and projected in compact explainability mode.
+- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, capital metric sanity) and projected in compact explainability mode.
 - No hard-coded "critical SKU" classifier as primary allocator.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)

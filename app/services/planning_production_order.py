@@ -1088,6 +1088,7 @@ def _build_layer2_contract_summary(
     eta_days_positive = True
     tie_break_hold_when_equal_profit = True
     decision_reason_matches_allocation = True
+    allocation_matches_profit_gate = True
     tie_break_applied_matches_profit_tie = True
     near_tie_matches_profit_gap_threshold = True
     profit_gap_consistent_with_profits = True
@@ -1125,11 +1126,22 @@ def _build_layer2_contract_summary(
         except (TypeError, ValueError):
             non_negative_profit_metrics = False
             tie_break_hold_when_equal_profit = False
+            allocation_matches_profit_gate = False
             tie_break_applied_matches_profit_tie = False
             near_tie_matches_profit_gap_threshold = False
             profit_gap_consistent_with_profits = False
         else:
             profit_gap_until_eta_expected = abs(profit_main - profit_assorti)
+            if profit_main > profit_assorti:
+                expected_allocation_decision = "main"
+            elif profit_assorti > profit_main:
+                expected_allocation_decision = "assorti"
+            else:
+                expected_allocation_decision = "hold"
+
+            if allocation_decision != expected_allocation_decision:
+                allocation_matches_profit_gate = False
+
             if profit_main < 0 or profit_assorti < 0:
                 non_negative_profit_metrics = False
             if abs(profit_main - profit_assorti) <= 1e-9 and allocation_decision != "hold":
@@ -1202,6 +1214,7 @@ def _build_layer2_contract_summary(
         "eta_days_positive": eta_days_positive,
         "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_profit,
         "decision_reason_matches_allocation": decision_reason_matches_allocation,
+        "allocation_matches_profit_gate": allocation_matches_profit_gate,
         "tie_break_applied_matches_profit_tie": tie_break_applied_matches_profit_tie,
         "near_tie_matches_profit_gap_threshold": near_tie_matches_profit_gap_threshold,
         "profit_gap_consistent_with_profits": profit_gap_consistent_with_profits,

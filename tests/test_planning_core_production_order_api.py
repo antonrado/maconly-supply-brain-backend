@@ -255,6 +255,7 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "eta_days_positive": False,
         "tie_break_hold_when_equal_profit": False,
         "decision_reason_matches_allocation": False,
+        "allocation_matches_profit_gate": False,
         "tie_break_applied_matches_profit_tie": False,
         "near_tie_matches_profit_gap_threshold": False,
         "profit_gap_consistent_with_profits": False,
@@ -311,8 +312,40 @@ def test_layer2_allocation_rounding_boundary_stays_contract_consistent():
 
     assert contract["status"] == "ok"
     assert contract["checks"]["tie_break_hold_when_equal_profit"] is True
+    assert contract["checks"]["allocation_matches_profit_gate"] is True
     assert contract["checks"]["tie_break_applied_matches_profit_tie"] is True
     assert contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
+
+
+def test_layer2_contract_summary_marks_violated_when_allocation_conflicts_with_profit_gate():
+    decisions = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 2.0,
+            "profit_if_assorti_until_eta": 1.0,
+            "profit_gap_until_eta": 1.0,
+            "capital_locked": 10.0,
+            "gmroi_main": 0.2,
+            "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.1,
+            "allocation_decision": "assorti",
+            "decision_reason": "profit_assorti_gt_main",
+            "tie_break_applied": False,
+            "near_tie": True,
+        }
+    ]
+    summary = {"main": 0, "assorti": 1, "hold": 0}
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary=summary,
+    )
+
+    assert contract["status"] == "violated"
+    assert contract["checks"]["decision_reason_matches_allocation"] is True
+    assert contract["checks"]["allocation_matches_profit_gate"] is False
 
 
 def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts():
@@ -547,6 +580,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
     assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -622,6 +656,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     assert compact_layer2["decision_quality"]["decision_count"] == 4
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -701,6 +736,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     assert compact_layer2["decision_quality"]["decision_count"] == 4
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -1374,6 +1410,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "eta_days_positive": True,
             "tie_break_hold_when_equal_profit": True,
             "decision_reason_matches_allocation": True,
+            "allocation_matches_profit_gate": True,
             "tie_break_applied_matches_profit_tie": True,
             "near_tie_matches_profit_gap_threshold": True,
             "profit_gap_consistent_with_profits": True,
@@ -2799,6 +2836,7 @@ def test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5
     )
     assert layer2_contract["status"] == "ok"
     assert layer2_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert layer2_contract["checks"]["allocation_matches_profit_gate"] is True
     assert layer2_contract["checks"]["tie_break_applied_matches_profit_tie"] is True
     assert layer2_contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_contract["checks"]["profit_gap_consistent_with_profits"] is True
@@ -3051,6 +3089,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
 
     layer2_contract_checks = body["explanation"]["meta"]["layer_2_allocation"]["contract"]["checks"]
     assert layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_contract_checks["allocation_matches_profit_gate"] is True
     assert layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -3150,6 +3189,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
     assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -3275,6 +3315,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2["decision_quality"]["decision_count"] == 4
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
@@ -3377,6 +3418,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2["decision_quality"]["decision_count"] == 4
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
