@@ -18,6 +18,7 @@ from app.services.planning_production_order import (
     LAYER2_CONTRACT_VERSION,
     LAYER3_CONTRACT_VERSION,
     LAYER4_SCENARIO_FACTORS,
+    LAYER5_CONTRACT_VERSION,
     LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
     LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
     LAYER_PROXY_VALUE_SOURCE,
@@ -28,6 +29,7 @@ from app.services.planning_production_order import (
     _build_layer2_contract_summary,
     _build_layer3_contract_summary,
     _build_layer4_contract_summary,
+    _build_layer5_contract_summary,
     _build_layer5_intervention_signals,
 )
 from app.models.models import (
@@ -291,6 +293,54 @@ def test_layer3_contract_summary_marks_violated_for_invariant_breaks():
     }
 
 
+def test_layer5_contract_summary_marks_violated_for_threshold_and_signal_invariants():
+    contract = _build_layer5_contract_summary(
+        layer5_intervention={
+            "method": "unexpected",
+            "signal_policy": "unexpected_policy",
+            "unavoidable_stockout": "yes",
+            "signals": [
+                "accelerate_production",
+                "increase_price_to_slow_velocity",
+                "accelerate_production",
+            ],
+            "reason": "none",
+            "aggressive_stockout_risk_proxy": -0.2,
+            "risk_threshold": 0.31,
+            "signal_thresholds": {
+                "accelerate_production": 0.2,
+                "increase_price_to_slow_velocity": 1.2,
+            },
+        },
+        unavoidable_stockout_risk_threshold=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        accelerate_production_risk_threshold=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+    )
+
+    assert contract == {
+        "version": LAYER5_CONTRACT_VERSION,
+        "status": "violated",
+        "signal_count": 3,
+        "checks": {
+            "method_matches_expected": False,
+            "signal_policy_matches_expected": False,
+            "unavoidable_stockout_is_bool": False,
+            "aggressive_risk_in_unit_interval": False,
+            "thresholds_in_unit_interval": False,
+            "threshold_sources_match_effective": False,
+            "threshold_order_valid": False,
+            "risk_threshold_matches_price_slowdown_threshold": False,
+            "signals_known_only": True,
+            "signals_unique": False,
+            "signals_order_is_canonical": False,
+            "non_unavoidable_has_no_signals_and_none_reason": False,
+            "unavoidable_has_signals": True,
+            "reason_consistent_with_signals": False,
+            "accelerate_signal_requires_severe_risk": False,
+            "price_slowdown_signal_requires_unavoidable_threshold": False,
+        },
+    }
+
+
 def _business_projection(body: dict[str, object]) -> dict[str, object]:
     return {
         "status": body["status"],
@@ -359,6 +409,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert meta["layer_3_purchase_shaping"]["contract"]["status"] == "ok"
     assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
+    assert meta["layer_5_intervention"]["contract"]["status"] == "ok"
     assert meta["layer_5_intervention"]["signal_thresholds"] == {
         "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
         "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
@@ -1134,6 +1185,29 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
         "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
     }
+    assert layer5["contract"] == {
+        "version": LAYER5_CONTRACT_VERSION,
+        "status": "ok",
+        "signal_count": len(layer5["signals"]),
+        "checks": {
+            "method_matches_expected": True,
+            "signal_policy_matches_expected": True,
+            "unavoidable_stockout_is_bool": True,
+            "aggressive_risk_in_unit_interval": True,
+            "thresholds_in_unit_interval": True,
+            "threshold_sources_match_effective": True,
+            "threshold_order_valid": True,
+            "risk_threshold_matches_price_slowdown_threshold": True,
+            "signals_known_only": True,
+            "signals_unique": True,
+            "signals_order_is_canonical": True,
+            "non_unavoidable_has_no_signals_and_none_reason": True,
+            "unavoidable_has_signals": True,
+            "reason_consistent_with_signals": True,
+            "accelerate_signal_requires_severe_risk": True,
+            "price_slowdown_signal_requires_unavoidable_threshold": True,
+        },
+    }
     assert isinstance(layer5["unavoidable_stockout"], bool)
     assert isinstance(layer5["signals"], list)
     assert layer5["reason"] in {
@@ -1250,6 +1324,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert "order_matches_expected=True" in layer4_contract_step
     assert "unavoidable_stockout=" in layer5_step
     assert "signals=" in layer5_step
+    assert "contract_status=ok" in layer5_step
 
     if body["recommendation"] is not None and body["recommendation"]["lines"]:
         assert all(

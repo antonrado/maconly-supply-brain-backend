@@ -95,6 +95,7 @@ LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
     ("Balanced", 1.00),
     ("Aggressive", 1.20),
 )
+LAYER5_CONTRACT_VERSION = "v1_alpha"
 LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
 LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = 0.35
 LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
@@ -1598,6 +1599,122 @@ def _build_layer5_intervention_signals(
     }
 
 
+def _build_layer5_contract_summary(
+    *,
+    layer5_intervention: dict[str, object],
+    unavoidable_stockout_risk_threshold: float,
+    accelerate_production_risk_threshold: float,
+) -> dict[str, str | int | dict[str, bool]]:
+    def _safe_float(value: object) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    method = str(layer5_intervention.get("method", ""))
+    signal_policy = str(layer5_intervention.get("signal_policy", ""))
+    reason = str(layer5_intervention.get("reason", ""))
+
+    unavoidable_raw = layer5_intervention.get("unavoidable_stockout")
+    unavoidable_stockout_is_bool = isinstance(unavoidable_raw, bool)
+    unavoidable_stockout = bool(unavoidable_raw) if unavoidable_stockout_is_bool else False
+
+    aggressive_stockout_risk = _safe_float(
+        layer5_intervention.get("aggressive_stockout_risk_proxy")
+    )
+    risk_threshold = _safe_float(layer5_intervention.get("risk_threshold"))
+
+    signal_thresholds_raw = layer5_intervention.get("signal_thresholds")
+    signal_thresholds = signal_thresholds_raw if isinstance(signal_thresholds_raw, dict) else {}
+    accelerate_threshold = _safe_float(signal_thresholds.get("accelerate_production"))
+    price_slowdown_threshold = _safe_float(
+        signal_thresholds.get("increase_price_to_slow_velocity")
+    )
+
+    signals_raw = layer5_intervention.get("signals")
+    signals_list = signals_raw if isinstance(signals_raw, list) else []
+    signals = [str(item) for item in signals_list]
+
+    known_signals = {
+        "accelerate_production",
+        "increase_price_to_slow_velocity",
+    }
+    signals_set = set(signals)
+
+    expected_threshold = round(unavoidable_stockout_risk_threshold, 4)
+    expected_accelerate_threshold = round(accelerate_production_risk_threshold, 4)
+    severity_risk_triggered = aggressive_stockout_risk >= accelerate_threshold
+
+    checks = {
+        "method_matches_expected": method == "deterministic_unavoidable_stockout_flags",
+        "signal_policy_matches_expected": signal_policy == "critical_risk_thresholds",
+        "unavoidable_stockout_is_bool": unavoidable_stockout_is_bool,
+        "aggressive_risk_in_unit_interval": 0.0 <= aggressive_stockout_risk <= 1.0,
+        "thresholds_in_unit_interval": (
+            0.0 <= risk_threshold <= 1.0
+            and 0.0 <= accelerate_threshold <= 1.0
+            and 0.0 <= price_slowdown_threshold <= 1.0
+        ),
+        "threshold_sources_match_effective": (
+            risk_threshold == expected_threshold
+            and accelerate_threshold == expected_accelerate_threshold
+            and price_slowdown_threshold == expected_threshold
+        ),
+        "threshold_order_valid": accelerate_threshold >= price_slowdown_threshold,
+        "risk_threshold_matches_price_slowdown_threshold": (
+            risk_threshold == price_slowdown_threshold
+        ),
+        "signals_known_only": all(signal in known_signals for signal in signals),
+        "signals_unique": len(signals) == len(signals_set),
+        "signals_order_is_canonical": (
+            signals == []
+            or signals == ["accelerate_production"]
+            or signals == ["increase_price_to_slow_velocity"]
+            or signals == ["accelerate_production", "increase_price_to_slow_velocity"]
+        ),
+        "non_unavoidable_has_no_signals_and_none_reason": (
+            unavoidable_stockout
+            or (not signals and reason == "none")
+        ),
+        "unavoidable_has_signals": (
+            not unavoidable_stockout
+            or len(signals) > 0
+        ),
+        "reason_consistent_with_signals": (
+            (not signals and reason == "none")
+            or (
+                signals == ["accelerate_production"]
+                and reason == "no_effective_in_flight_and_high_stockout_risk"
+            )
+            or (
+                signals == ["increase_price_to_slow_velocity"]
+                and reason in {
+                    "no_effective_in_flight_but_stockout_risk_persists",
+                    "in_flight_present_but_stockout_risk_persists",
+                }
+            )
+            or (
+                signals == ["accelerate_production", "increase_price_to_slow_velocity"]
+                and reason == "in_flight_present_but_severe_stockout_risk"
+            )
+        ),
+        "accelerate_signal_requires_severe_risk": (
+            "accelerate_production" not in signals_set
+            or severity_risk_triggered
+        ),
+        "price_slowdown_signal_requires_unavoidable_threshold": (
+            "increase_price_to_slow_velocity" not in signals_set
+            or aggressive_stockout_risk >= price_slowdown_threshold
+        ),
+    }
+    return {
+        "version": LAYER5_CONTRACT_VERSION,
+        "status": "ok" if all(checks.values()) else "violated",
+        "signal_count": len(signals),
+        "checks": checks,
+    }
+
+
 def _resolve_elastic_binding_scope(
     bindings: list[ProductionOrderElasticBinding],
     line_qty: dict[tuple[int, int], int],
@@ -2971,6 +3088,19 @@ def build_production_order_proposal(
             layer_proxy_settings.layer5_accelerate_production_risk_threshold
         ),
     )
+    layer5_contract = _build_layer5_contract_summary(
+        layer5_intervention=layer5_intervention,
+        unavoidable_stockout_risk_threshold=(
+            layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+        ),
+        accelerate_production_risk_threshold=(
+            layer_proxy_settings.layer5_accelerate_production_risk_threshold
+        ),
+    )
+    layer5_intervention_meta = {
+        **layer5_intervention,
+        "contract": layer5_contract,
+    }
     action = _choose_action(
         risk_level=risk_level,
         candidate_units=candidate_total_units,
@@ -3110,7 +3240,8 @@ def build_production_order_proposal(
                 "aggressive_stockout_risk="
                 f"{layer5_intervention['aggressive_stockout_risk_proxy']}, "
                 f"threshold={layer5_intervention['risk_threshold']}, "
-                f"signal_thresholds={layer5_intervention['signal_thresholds']}."
+                f"signal_thresholds={layer5_intervention['signal_thresholds']}, "
+                f"contract_status={layer5_contract['status']}."
             ),
             (
                 f"Elastic scope: mode={elastic_scope_mode}, "
@@ -3198,7 +3329,7 @@ def build_production_order_proposal(
                 "contract": layer4_contract,
                 "scenarios": layer4_scenarios,
             },
-            "layer_5_intervention": layer5_intervention,
+            "layer_5_intervention": layer5_intervention_meta,
             "alpha_proxy_economics": {
                 "source": LAYER_PROXY_VALUE_SOURCE,
                 "calibration_state": "alpha_proxy_not_calibrated",

@@ -53,6 +53,7 @@
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
 - Signal thresholds are explicit and deterministic (`accelerate_production` severe threshold, `increase_price_to_slow_velocity` unavoidable threshold).
 - Layer 5 thresholds now support deterministic precedence (`request -> admin_defaults -> global_default -> code_default_constants`) with source tracing and safe threshold-order clamping.
+- Layer 5 contract summary is now exposed (version/checks/status; threshold sanity, signal validity/order, reason-policy consistency) and projected in compact explainability mode.
 - Current signal set: `accelerate_production` / `increase_price_to_slow_velocity` (dual signal allowed under severe in-flight risk).
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
