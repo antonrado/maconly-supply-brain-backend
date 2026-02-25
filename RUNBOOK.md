@@ -15,10 +15,16 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 logs
 .\scripts\dev.ps1 health
 .\scripts\dev.ps1 proposal
+.\scripts\dev.ps1 po-api-smoke
 .\scripts\dev.ps1 test
 .\scripts\dev.ps1 context
 .\scripts\dev.ps1 verify
 ```
+
+`po-api-smoke` validates live API connectivity for production-order routes with deterministic expected statuses:
+- `GET /api/v1/planning/core/health` -> `200`
+- `POST /api/v1/planning/core/production-order/proposal` (schema-invalid payload) -> `422`
+- `POST /api/v1/planning/core/production-order/proposal/from-wb` (schema-invalid payload) -> `422`
 
 ## Git sanity checks
 ```powershell

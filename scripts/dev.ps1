@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "context", "verify")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "po-api-smoke", "context", "verify")]
     [string]$Command
 )
 
@@ -47,6 +47,57 @@ function Wait-BackendRunning {
     }
 
     return $false
+}
+
+function Invoke-ApiExpectedStatus {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [Parameter(Mandatory = $true)]
+        [int]$ExpectedStatus,
+        [string]$JsonBody = ""
+    )
+
+    $ResponseFile = [System.IO.Path]::GetTempFileName()
+    $PayloadFile = $null
+    try {
+        if ($JsonBody) {
+            $PayloadFile = [System.IO.Path]::GetTempFileName()
+            $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        else {
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[po-api-smoke] FAIL ${Name}: curl exited with code $LASTEXITCODE" -ForegroundColor Red
+            if (Test-Path $ResponseFile) {
+                Get-Content -Raw $ResponseFile | Write-Host
+            }
+            exit $LASTEXITCODE
+        }
+
+        if ("$StatusCode" -ne "$ExpectedStatus") {
+            Write-Host "[po-api-smoke] FAIL ${Name}: expected HTTP $ExpectedStatus, got HTTP $StatusCode" -ForegroundColor Red
+            Get-Content -Raw $ResponseFile | Write-Host
+            exit 1
+        }
+
+        Write-Host "[po-api-smoke] OK  $Name -> HTTP $StatusCode"
+    }
+    finally {
+        if ($PayloadFile -and (Test-Path $PayloadFile)) {
+            Remove-Item $PayloadFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $ResponseFile) {
+            Remove-Item $ResponseFile -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Invoke-SmokeTests {
@@ -123,6 +174,15 @@ switch ($Command) {
     "proposal" {
         '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
         curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+    }
+    "po-api-smoke" {
+        Invoke-ApiExpectedStatus -Name "planning-core-health" -Method "GET" -Url "http://localhost:8000/api/v1/planning/core/health" -ExpectedStatus 200
+
+        $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
+        Invoke-ApiExpectedStatus -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload
+
+        $FromWbInvalidPayload = '{"article_id":1,"planning_horizon_days":90,"observation_window_days":30,"freshness_mode":"hard_fail","bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatus -Name "production-order-from-wb-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 422 -JsonBody $FromWbInvalidPayload
     }
     "context" {
         Invoke-ContextGuard

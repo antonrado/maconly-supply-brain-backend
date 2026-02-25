@@ -94,6 +94,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `default_production_order_layer5_accelerate_production_risk_threshold`
 - Tests added for production-order endpoint:
   - `tests/test_planning_core_production_order_api.py`
+  - Validation regressions now explicitly assert deterministic 422 details for production-order direct/from-WB schema errors (invalid literals, duplicate IDs, invalid threshold ordering, multi-field validation failures).
 - Tests added for production-order admin settings:
   - `tests/test_planning_core_production_order_settings_api.py`
 - Pydantic v2 migration hardening completed across monitoring/core schema surfaces:
@@ -103,6 +104,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Local verify workflow hardening:
   - Added `pytest` and `httpx` to image dependencies so `scripts/dev.ps1 verify` no longer performs ad-hoc pip installs inside running backend containers.
   - Added backend-running wait gate after `up -d --build backend` to avoid dependency-check race when container is still starting.
+  - Added `scripts/dev.ps1 po-api-smoke` for deterministic live connectivity checks of production-order endpoints (`health=200`, schema-invalid direct/from-WB requests=`422`).
 - Governance baseline added:
   - CI pipeline: `.github/workflows/ci.yml`
   - Context synchronization guard in CI: `scripts/context_guard.py`

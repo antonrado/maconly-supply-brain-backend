@@ -4149,6 +4149,25 @@ def test_production_order_proposal_from_wb_validation_error_invalid_freshness_mo
         },
     )
     assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert detail[0]["loc"] == ["body", "freshness_mode"]
+    assert detail[0]["type"] == "literal_error"
+
+
+def test_production_order_proposal_from_wb_validation_error_duplicate_bundle_type_ids(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [1, 1],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "bundle_type_ids contains duplicates" in response.text
 
 
 def test_production_order_proposal_validation_error_invalid_layer5_threshold_order(client, db_session):  # noqa: ARG001
@@ -4179,6 +4198,42 @@ def test_production_order_proposal_validation_error_invalid_layer5_threshold_ord
         },
     )
     assert response.status_code == 422, response.text
+    assert (
+        "layer5_accelerate_production_risk_threshold must be greater than or equal to "
+        "layer5_unavoidable_stockout_risk_threshold"
+    ) in response.text
+
+
+def test_production_order_proposal_validation_error_duplicate_bundle_stock_bundle_type_id(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 90,
+            "bundle_daily_sales": [
+                {
+                    "bundle_type_id": 1,
+                    "daily_sales": 1.0,
+                }
+            ],
+            "bundle_stock": [
+                {
+                    "bundle_type_id": 1,
+                    "wb_qty": 0,
+                    "local_qty": 0,
+                },
+                {
+                    "bundle_type_id": 1,
+                    "wb_qty": 1,
+                    "local_qty": 0,
+                },
+            ],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "bundle_stock contains duplicate bundle_type_id" in response.text
 
 
 def test_production_order_proposal_validation_error(client, db_session):  # noqa: ARG001
@@ -4191,3 +4246,7 @@ def test_production_order_proposal_validation_error(client, db_session):  # noqa
         },
     )
     assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    detail_locs = {tuple(item["loc"]) for item in detail}
+    assert ("body", "planning_horizon_days") in detail_locs
+    assert ("body", "bundle_daily_sales") in detail_locs

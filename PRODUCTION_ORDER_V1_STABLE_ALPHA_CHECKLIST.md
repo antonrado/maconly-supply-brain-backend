@@ -8,6 +8,7 @@
 - [ ] `POST /api/v1/planning/core/production-order/proposal` returns stable structured response.
 - [ ] `POST /api/v1/planning/core/production-order/proposal/from-wb` returns stable structured response.
 - [ ] Request validation rejects malformed payloads with deterministic 4xx errors.
+- [ ] Live connectivity smoke check passes via `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 po-api-smoke` (health `200`, production-order schema validations `422`).
 
 ## 3) Layer 1 contract (stock health)
 - [ ] Layer 1 emits per-SKU metrics in `explanation.meta.layer_1_stock_health.metrics`.
