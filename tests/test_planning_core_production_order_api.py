@@ -233,8 +233,15 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
     assert meta["explainability"]["steps_omitted"] >= 1
     assert "metrics" not in meta["layer_1_stock_health"]
+    assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
+    assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
+    assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
+    assert meta["layer_5_intervention"]["signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
     assert "line_keys" not in meta["elastic_uplift"]
     assert "line_alloc" not in meta["elastic_uplift"]
 
@@ -1788,6 +1795,9 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
 
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
+    assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
+    assert meta["layer_4_scenarios"]["contract"]["status"] == "ok"
+    assert meta["layer_5_intervention"]["signal_policy"] == "critical_risk_thresholds"
     from_wb_meta = meta["from_wb"]
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta

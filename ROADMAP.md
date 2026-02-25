@@ -77,7 +77,7 @@
 4. Stabilize Layer 5 intervention threshold policy/rules and lock regression coverage.
 5. Stabilize explainability `compact|full` payload contract and lock regression coverage.
 6. Freeze freshness/infrastructure work to bug-fix-only while Layer 1-5 stabilizes.
-7. Publish explicit `Production Order v1 Stable Alpha` acceptance checklist.
+7. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.
