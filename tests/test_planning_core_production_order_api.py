@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
@@ -186,6 +187,20 @@ def _build_payload(article_id: int, bundle_type_id: int, size_s_id: int, size_m_
     }
 
 
+def _business_projection(body: dict[str, object]) -> dict[str, object]:
+    return {
+        "status": body["status"],
+        "article_id": body["article_id"],
+        "risk_level": body["risk_level"],
+        "days_of_cover_estimate": body["days_of_cover_estimate"],
+        "lead_time_days_total": body["lead_time_days_total"],
+        "reorder_point_days": body.get("reorder_point_days"),
+        "recommendation": body["recommendation"],
+        "alternatives": body["alternatives"],
+        "constraints_applied": body["constraints_applied"],
+    }
+
+
 def test_production_order_proposal_happy_path(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     payload = _build_payload(
@@ -244,6 +259,33 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     }
     assert "line_keys" not in meta["elastic_uplift"]
     assert "line_alloc" not in meta["elastic_uplift"]
+
+
+def test_production_order_proposal_compact_mode_preserves_deterministic_output(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    full_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert full_response.status_code == 200, full_response.text
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    full_body = full_response.json()
+    compact_body = compact_response.json()
+    assert _business_projection(full_body) == _business_projection(compact_body)
 
 
 def test_production_order_proposal_skipped_when_article_excluded(client, db_session):
@@ -1811,6 +1853,72 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "wb_stock_total": 20,
         "wb_stock_updated_bundle_count": 1,
     }
+
+
+def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_output(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-COMPACT-PARITY",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-COMPACT-PARITY",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-COMPACT-PARITY",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    base_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    full_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=base_payload,
+    )
+    assert full_response.status_code == 200, full_response.text
+
+    compact_payload = deepcopy(base_payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    full_body = full_response.json()
+    compact_body = compact_response.json()
+    assert _business_projection(full_body) == _business_projection(compact_body)
 
 
 def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(client, db_session):
