@@ -38,6 +38,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Core production-order Layer 4 now emits deterministic scenarios (Conservative/Balanced/Aggressive) with per-scenario `total_capital_required`, `expected_turnover_proxy`, `stockout_risk_proxy`, and assorti sustainability proxy/impact via `explanation.meta.layer_4_scenarios`.
   - Core production-order Layer 5 now emits deterministic threshold-policy intervention signals via `explanation.meta.layer_5_intervention`: unavoidable threshold drives `increase_price_to_slow_velocity`, severe threshold drives `accelerate_production`, and severe + in-flight allows deterministic dual-signal output.
   - Core production-order now exposes `explanation.meta.alpha_proxy_economics` with effective alpha proxy values and source tracing (`code_default_constants`) for layer thresholds/calibration/factors (Layer 1 stockout threshold, Layer 3 calibration params/bounds, Layer 4 contract version, Layer 5 intervention thresholds).
+  - Layer 3 calibration coefficients and Layer 5 intervention thresholds now support deterministic precedence (`request > admin_defaults > global_default > code_default_constants`) with source tracing in `alpha_proxy_economics.layer_proxy_source` and safe threshold-order clamping for Layer 5.
+  - Admin settings API now supports Layer 3/5 calibration thresholds with validation and persistence; request overrides support same thresholds with precedence and validation.
   - Production-order explanation now exposes machine-readable `explanation.meta` alongside textual `steps`; from-WB adapter writes a dedicated `meta.from_wb` block (as_of trace, sales window bounds, sales/stock snapshots, freshness snapshot) while core planner writes structured source/economic-buffer/elastic/in-flight details.
   - Production-order direct/from-WB now supports explainability payload modes: `full` (default) and `compact`; compact mode preserves deterministic outputs while trimming heavy explanation arrays/maps and adds explicit `explanation.meta.explainability` mode tracing.
   - Regression coverage now includes compact/full deterministic parity checks for direct and from-WB proposal flows and ensures compact mode preserves key contract blocks (`layer_1`, `layer_4`, `layer_5`, `alpha_proxy_economics`).
@@ -60,8 +62,25 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order admin settings persistence added:
   - `production_order_size_weight_settings`
   - `production_order_elastic_bindings`
-  - `production_order_in_flight_defaults`
-  - migration: `alembic/versions/0009_add_production_order_admin_settings.py`
+  - `production_order_in_flight_supply_defaults`
+  - `production_order_assorti_bundle_type_ids`
+  - `production_order_freshness_sales_stale_after_days`
+  - `production_order_freshness_stock_stale_after_days`
+  - `production_order_layer3_stockout_boost_max`
+  - `production_order_layer3_overstock_dampen_max`
+  - `production_order_layer5_unavoidable_stockout_risk_threshold`
+  - `production_order_layer5_accelerate_production_risk_threshold`
+  - Global planning settings persistence added:
+    - `default_production_order_size_weight_settings`
+    - `default_production_order_elastic_bindings`
+    - `default_production_order_in_flight_supply_defaults`
+    - `default_production_order_assorti_bundle_type_ids`
+    - `default_production_order_freshness_sales_stale_after_days`
+    - `default_production_order_freshness_stock_stale_after_days`
+    - `default_production_order_layer3_stockout_boost_max`
+    - `default_production_order_layer3_overstock_dampen_max`
+    - `default_production_order_layer5_unavoidable_stockout_risk_threshold`
+    - `default_production_order_layer5_accelerate_production_risk_threshold`
 - Tests added for production-order endpoint:
   - `tests/test_planning_core_production_order_api.py`
 - Tests added for production-order admin settings:

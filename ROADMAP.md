@@ -38,6 +38,7 @@
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
 - Allocation-driven purchase shaping now includes deterministic risk-weighted calibration on top of Layer 2 decisions.
+- Layer 3 calibration coefficients now support deterministic precedence (`request -> admin_defaults -> global_default -> code_default_constants`) with source tracing in explainability meta.
 - Stabilize Layer 3 calibration coefficients/bounds and lock regression coverage.
 - Preserve deterministic math and full explainability.
 
@@ -49,6 +50,7 @@
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
 - Signal thresholds are explicit and deterministic (`accelerate_production` severe threshold, `increase_price_to_slow_velocity` unavoidable threshold).
+- Layer 5 thresholds now support deterministic precedence (`request -> admin_defaults -> global_default -> code_default_constants`) with source tracing and safe threshold-order clamping.
 - Current signal set: `accelerate_production` / `increase_price_to_slow_velocity` (dual signal allowed under severe in-flight risk).
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
