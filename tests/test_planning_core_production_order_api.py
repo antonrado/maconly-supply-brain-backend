@@ -22,6 +22,7 @@ from app.services.planning_production_order import (
     _apply_layer3_purchase_shaping,
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
+    _build_layer4_contract_summary,
     _build_layer5_intervention_signals,
 )
 from app.models.models import (
@@ -1332,6 +1333,48 @@ def test_layer1_contract_summary_marks_violations_for_duplicate_and_invalid_risk
             "non_negative_quantities": False,
             "non_negative_velocity": False,
             "non_negative_coverage": False,
+        },
+    }
+
+
+def test_layer4_contract_summary_marks_violated_when_order_and_monotonicity_break():
+    scenarios = [
+        {
+            "scenario": "Balanced",
+            "total_capital_required": 100.0,
+            "expected_turnover_proxy": 0.3,
+            "stockout_risk_proxy": 0.20,
+            "purchase_units": 100,
+        },
+        {
+            "scenario": "Conservative",
+            "total_capital_required": 90.0,
+            "expected_turnover_proxy": 0.4,
+            "stockout_risk_proxy": 0.25,
+            "purchase_units": 90,
+        },
+        {
+            "scenario": "Aggressive",
+            "total_capital_required": 80.0,
+            "expected_turnover_proxy": 0.35,
+            "stockout_risk_proxy": 0.30,
+            "purchase_units": 80,
+        },
+    ]
+
+    contract = _build_layer4_contract_summary(scenarios)
+
+    assert contract == {
+        "version": "v1_alpha",
+        "status": "violated",
+        "order_matches_expected": False,
+        "scenario_order_expected": ["Conservative", "Balanced", "Aggressive"],
+        "scenario_order_actual": ["Balanced", "Conservative", "Aggressive"],
+        "checks": {
+            "capital_non_decreasing": False,
+            "stockout_risk_non_increasing": False,
+            "turnover_non_increasing": False,
+            "purchase_units_non_decreasing": False,
         },
     }
 
