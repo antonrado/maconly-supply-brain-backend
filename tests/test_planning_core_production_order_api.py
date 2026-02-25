@@ -2936,6 +2936,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "reason_counts={" in layer2_step
     assert "avg_profit_gap_until_eta=" in layer2_step
     assert "capital_locked_total=" in layer2_step
+    assert "contract_status=ok" in layer2_step
 
     layer2_contract_checks = body["explanation"]["meta"]["layer_2_allocation"]["contract"]["checks"]
     assert layer2_contract_checks["decision_reason_matches_allocation"] is True
