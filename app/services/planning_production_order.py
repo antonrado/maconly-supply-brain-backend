@@ -2820,6 +2820,7 @@ def build_production_order_proposal(
             "alpha_proxy_economics": {
                 "source": LAYER_PROXY_VALUE_SOURCE,
                 "calibration_state": "alpha_proxy_not_calibrated",
+                "layer_1_high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
                 "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD,
                 "margin_proxy": {
                     "main": LAYER2_MAIN_MARGIN_PROXY,
@@ -2827,8 +2828,27 @@ def build_production_order_proposal(
                 },
                 "unit_capital_proxy": LAYER2_UNIT_CAPITAL_PROXY,
                 "layer_3_purchase_factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
+                "layer_3_calibration": {
+                    "method": LAYER3_CALIBRATION_METHOD,
+                    "stockout_boost_max": LAYER3_STOCKOUT_BOOST_MAX,
+                    "overstock_dampen_max": LAYER3_OVERSTOCK_DAMPEN_MAX,
+                    "stockout_weight_by_decision": LAYER3_STOCKOUT_WEIGHT_BY_DECISION,
+                    "overstock_weight_by_decision": LAYER3_OVERSTOCK_WEIGHT_BY_DECISION,
+                    "factor_bounds": {
+                        decision: {
+                            "min": bounds[0],
+                            "max": bounds[1],
+                        }
+                        for decision, bounds in LAYER3_FACTOR_BOUNDS.items()
+                    },
+                },
                 "layer_4_scenario_factors": layer4_scenario_factor_items,
+                "layer_4_contract_version": LAYER4_CONTRACT_VERSION,
                 "layer_5_unavoidable_stockout_risk_threshold": LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+                "layer_5_signal_thresholds": {
+                    "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+                    "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+                },
             },
             "economic_buffer": {
                 "enabled": settings.allow_order_with_buffer,

@@ -997,6 +997,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["source"] == LAYER_PROXY_VALUE_SOURCE
     assert alpha_proxy["calibration_state"] == "alpha_proxy_not_calibrated"
+    assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD
     assert alpha_proxy["margin_proxy"] == {"main": 1.0, "assorti": 0.85}
     assert alpha_proxy["unit_capital_proxy"] == 1.0
@@ -1005,11 +1006,45 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "assorti": 0.75,
         "hold": 0.35,
     }
+    assert alpha_proxy["layer_3_calibration"] == {
+        "method": "risk_weighted_factor_clamp",
+        "stockout_boost_max": 0.3,
+        "overstock_dampen_max": 0.4,
+        "stockout_weight_by_decision": {
+            "main": 1.0,
+            "assorti": 0.7,
+            "hold": 0.15,
+        },
+        "overstock_weight_by_decision": {
+            "main": 0.35,
+            "assorti": 0.6,
+            "hold": 1.0,
+        },
+        "factor_bounds": {
+            "main": {
+                "min": 0.65,
+                "max": 1.25,
+            },
+            "assorti": {
+                "min": 0.3,
+                "max": 0.95,
+            },
+            "hold": {
+                "min": 0.1,
+                "max": 0.6,
+            },
+        },
+    }
     assert alpha_proxy["layer_4_scenario_factors"] == layer4["factors"]
+    assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
     assert (
         alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
         == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
     )
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+    }
 
     layer1_step = next(
         (step for step in body["explanation"]["steps"] if "Layer 1 stock health" in step),
