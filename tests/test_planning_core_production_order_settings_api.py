@@ -7,7 +7,11 @@ from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
-from app.services.planning_production_order import ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE
+from app.services.planning_production_order import (
+    ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+    LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    LAYER_PROXY_VALUE_SOURCE,
+)
 from app.models.models import (
     Article,
     ArticlePlanningSettings,
@@ -158,6 +162,13 @@ def test_production_order_settings_get_empty(client, db_session):
     assert body["layer3_overstock_dampen_max"] is None
     assert body["layer5_unavoidable_stockout_risk_threshold"] is None
     assert body["layer5_accelerate_production_risk_threshold"] is None
+    assert body["production_cost_per_unit"] is None
+    assert body["logistics_cost_per_unit"] is None
+    assert body["wb_commission_percent_main"] is None
+    assert body["wb_commission_percent_assorti"] is None
+    assert body["average_realized_price_main"] is None
+    assert body["average_realized_price_assorti"] is None
+    assert body["available_capital"] is None
 
 
 def test_production_order_settings_put_and_get_roundtrip(client, db_session):
@@ -197,6 +208,13 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
         "layer3_overstock_dampen_max": 0.18,
         "layer5_unavoidable_stockout_risk_threshold": 0.28,
         "layer5_accelerate_production_risk_threshold": 0.42,
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.2,
+        "wb_commission_percent_main": 0.08,
+        "wb_commission_percent_assorti": 0.12,
+        "average_realized_price_main": 2.8,
+        "average_realized_price_assorti": 3.1,
+        "available_capital": 450.0,
     }
 
     put_response = client.put(
@@ -216,6 +234,13 @@ def test_production_order_settings_put_and_get_roundtrip(client, db_session):
     assert body["layer3_overstock_dampen_max"] == 0.18
     assert body["layer5_unavoidable_stockout_risk_threshold"] == 0.28
     assert body["layer5_accelerate_production_risk_threshold"] == 0.42
+    assert body["production_cost_per_unit"] == 1.0
+    assert body["logistics_cost_per_unit"] == 0.2
+    assert body["wb_commission_percent_main"] == 0.08
+    assert body["wb_commission_percent_assorti"] == 0.12
+    assert body["average_realized_price_main"] == 2.8
+    assert body["average_realized_price_assorti"] == 3.1
+    assert body["available_capital"] == 450.0
 
     get_response = client.get(f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}")
     assert get_response.status_code == 200, get_response.text
@@ -289,6 +314,13 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
         "layer3_overstock_dampen_max": 0.17,
         "layer5_unavoidable_stockout_risk_threshold": 0.24,
         "layer5_accelerate_production_risk_threshold": 0.31,
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.3,
+        "wb_commission_percent_main": 0.10,
+        "wb_commission_percent_assorti": 0.20,
+        "average_realized_price_main": 3.0,
+        "average_realized_price_assorti": 3.5,
+        "available_capital": 500.0,
     }
 
     save_resp = client.put(
@@ -341,10 +373,40 @@ def test_production_order_proposal_uses_admin_defaults(client, db_session):
     assert alpha_proxy["layer_5_signal_thresholds"] == {
         "accelerate_production": 0.31,
         "increase_price_to_slow_velocity": 0.24,
+        "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
     }
     assert alpha_proxy["layer_proxy_source"] == {
         "layer3_stockout_boost_max": "admin_defaults",
         "layer3_overstock_dampen_max": "admin_defaults",
         "layer5_unavoidable_stockout_risk_threshold": "admin_defaults",
         "layer5_accelerate_production_risk_threshold": "admin_defaults",
+        "layer2_capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer2_stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "layer2_overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_accelerate_action_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_price_slowdown_lost_volume_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_reduce_order_marginal_profit_rate": LAYER_PROXY_VALUE_SOURCE,
     }
+    assert alpha_proxy["economic_source"] == {
+        "production_cost_per_unit": "admin_defaults",
+        "logistics_cost_per_unit": "admin_defaults",
+        "wb_commission_percent_main": "admin_defaults",
+        "wb_commission_percent_assorti": "admin_defaults",
+        "average_realized_price_main": "admin_defaults",
+        "average_realized_price_assorti": "admin_defaults",
+        "available_capital": "admin_defaults",
+    }
+    assert alpha_proxy["economic_inputs"] == {
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.3,
+        "wb_commission_percent_main": 0.1,
+        "wb_commission_percent_assorti": 0.2,
+        "average_realized_price_main": 3.0,
+        "average_realized_price_assorti": 3.5,
+        "available_capital": 500.0,
+    }
+    assert alpha_proxy["margin_proxy"] == {
+        "main": 1.4,
+        "assorti": 1.5,
+    }
+    assert alpha_proxy["unit_capital_proxy"] == 1.3

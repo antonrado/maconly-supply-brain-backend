@@ -30,6 +30,55 @@ function Invoke-CompileCheck {
     }
 }
 
+function Invoke-DockerComposeBackendBuild {
+    $ComposeArgs = @("compose", "-f", $ComposeFile, "up", "-d", "--build", "backend")
+
+    $BuildOutput = & docker @ComposeArgs 2>&1
+    $BuildExitCode = $LASTEXITCODE
+    if ($BuildOutput) {
+        $BuildOutput | ForEach-Object { Write-Host $_ }
+    }
+
+    if ($BuildExitCode -eq 0) {
+        return
+    }
+
+    $BuildOutputText = ($BuildOutput | Out-String)
+    $ShouldRetryWithLegacyBuilder = (
+        ($BuildOutputText -match "failed to fetch anonymous token") -or
+        ($BuildOutputText -match "auth\.docker\.io/token") -or
+        ($BuildOutputText -match "failed to solve")
+    )
+
+    if (-not $ShouldRetryWithLegacyBuilder) {
+        exit $BuildExitCode
+    }
+
+    Write-Host "[po-api-smoke] detected transient Docker Hub auth/buildkit issue, retrying with DOCKER_BUILDKIT=0..." -ForegroundColor Yellow
+
+    $PreviousDockerBuildkit = $env:DOCKER_BUILDKIT
+    try {
+        $env:DOCKER_BUILDKIT = "0"
+        $RetryOutput = & docker @ComposeArgs 2>&1
+        $RetryExitCode = $LASTEXITCODE
+        if ($RetryOutput) {
+            $RetryOutput | ForEach-Object { Write-Host $_ }
+        }
+
+        if ($RetryExitCode -ne 0) {
+            exit $RetryExitCode
+        }
+    }
+    finally {
+        if ($null -eq $PreviousDockerBuildkit) {
+            Remove-Item Env:DOCKER_BUILDKIT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DOCKER_BUILDKIT = $PreviousDockerBuildkit
+        }
+    }
+}
+
 function Wait-BackendRunning {
     param(
         [int]$TimeoutSeconds = 30
@@ -162,10 +211,7 @@ function Invoke-SmokeTests {
 
     if ($BackendRunning) {
         Write-Host "[verify] syncing backend image with current workspace..."
-        docker compose -f $ComposeFile up -d --build backend
-        if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-        }
+        Invoke-DockerComposeBackendBuild
 
         if (-not (Wait-BackendRunning -TimeoutSeconds 30)) {
             Write-Host "[verify] backend did not reach running state in time." -ForegroundColor Yellow
@@ -197,10 +243,7 @@ function Invoke-SmokeTests {
 
 function Invoke-ProductionOrderApiSmokePositive {
     Write-Host "[po-api-smoke] syncing backend image with current workspace..."
-    docker compose -f $ComposeFile up -d --build backend
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
+    Invoke-DockerComposeBackendBuild
 
     if (-not (Wait-BackendRunning -TimeoutSeconds 45)) {
         Write-Host "[po-api-smoke] backend did not reach running state in time." -ForegroundColor Yellow

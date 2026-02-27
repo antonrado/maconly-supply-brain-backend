@@ -26,7 +26,8 @@
 
 ## 4) Layer 2 contract (allocation)
 - [ ] Allocation decision is profit-comparison based (`profit_if_main_until_eta` vs `profit_if_assorti_until_eta`), not rule-based classification.
-- [ ] Decision gate is `profit_until_eta`.
+- [ ] Canonical expected-gross-profit aliases are present in Layer 2 decisions/diagnostics during transition (`expected_gross_profit_*` fields and canonical reason counts).
+- [ ] Decision gate default presentation is `expected_gross_profit_until_eta` with explicit legacy alias `profit_until_eta`.
 - [ ] Tie-break is `hold`.
 - [ ] GMROI is diagnostic-only.
 - [ ] `explanation.meta.layer_2_allocation.summary` and `decisions` are present in full mode.
@@ -52,6 +53,14 @@
 - [ ] Scenario factor list is exposed in `explanation.meta.layer_4_scenarios.factors`.
 - [ ] Layer 4 contract summary exists in `explanation.meta.layer_4_scenarios.contract`.
 - [ ] Contract checks verify order and monotonic invariants.
+- [ ] Per-scenario money outputs are present:
+  - [ ] `expected_revenue`
+  - [ ] `expected_gross_profit`
+  - [ ] `expected_margin_percent`
+  - [ ] `expected_turnover_days`
+  - [ ] `stockout_probability_proxy`
+  - [ ] `overstock_risk_proxy`
+- [ ] Capital-gap transparency exists in `explanation.meta.capital_gap` (`available_capital`, `required_capital`, `deficit_or_surplus`) and is signal-only (no auto-policy override).
 
 ## 7) Layer 5 contract (interventions)
 - [ ] Layer 5 uses explicit threshold policy with traceable thresholds in `explanation.meta.layer_5_intervention.signal_thresholds`.
@@ -69,6 +78,7 @@
 ## 9) From-WB ingestion/freshness
 - [ ] Freshness mode (`warn|strict`) behavior is deterministic and covered.
 - [ ] Freshness threshold source precedence (`request > admin_defaults > global_default`) is traceable.
+- [ ] Observed realized-price calibration from WB revenue window is traceable in `meta.from_wb.economic_observed_prices` and deterministic anomaly filtering (`max deviation=30%`) is covered.
 - [ ] `meta.from_wb` contains stable as-of trace and compact/full-consistent diagnostics.
 
 ## 10) Decision quality evidence (mandatory for stable alpha)
@@ -85,10 +95,33 @@
   - [ ] Scenario comparison (`Conservative|Balanced|Aggressive`)
   - [ ] Capital impact proxy
 
+## 10.1) Economic Alpha calibration (mandatory transition block)
+- [ ] Economics are formula-based and traceable (not proxy-only constants):
+  - [ ] `production_cost_per_unit`
+  - [ ] `logistics_cost_per_unit`
+  - [ ] `wb_commission_percent_main|assorti`
+  - [ ] `average_realized_price_main|assorti`
+  - [ ] `available_capital` (awareness-only input)
+- [ ] `explanation.meta.alpha_proxy_economics` contains economics source tracing (`economic_source`) and effective inputs (`economic_inputs`).
+- [ ] Source-tier precedence evidence is regression-locked for Economic Alpha inputs:
+  - [ ] `request`
+  - [ ] `admin_defaults`
+  - [ ] `global_default`
+  - [ ] `code_default_constants`
+- [ ] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
+- [ ] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
+
 ## 11) Verification gate
 - [ ] Run verification suite and confirm green:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify`
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify-live` (includes production-order live API smoke checks)
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify-live` (targeted local gate: verify + production-order live API smoke checks)
 - [ ] Regression tests include Layer 1-5 contracts + explainability compact/full coverage.
 - [ ] Decision quality case studies are documented and reviewable for external sanity check.
 - [ ] Working tree is clean after final commit.
+
+## 12) Decision documentation discipline (mandatory)
+- [ ] Each accepted architectural/product decision is documented in the same work block (no deferred doc updates).
+- [ ] `ROADMAP.md` is updated to reflect plan-level impact of the accepted decision.
+- [ ] `STATUS.md` is updated to reflect implementation/runtime state of the accepted decision.
+- [ ] Relevant acceptance artifact is updated for the accepted decision (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR).
+- [ ] Documentation update behavior is explicit: after each accepted decision, documentation updates are applied automatically to prevent omissions.

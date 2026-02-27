@@ -32,13 +32,16 @@
 - Decision-quality case-study regression now includes full helper-chain `L1 -> L5` deterministic coverage to lock computed Layer 1 metric stability together with downstream allocation/shaping/scenario/intervention behavior.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
-- Deterministic scenario comparison `profit_if_main_until_eta` vs `profit_if_assorti_until_eta` is the primary decision gate.
+- Deterministic scenario comparison remains the primary decision gate; active migration target is `expected_gross_profit_until_eta` computed from traceable economics inputs (realized price, commission, production cost, logistics cost).
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
 - Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
+- Layer 2 default presentation now uses canonical expected-gross-profit naming (`method`, `decision_gate`) while keeping explicit legacy aliases (`legacy_method`, `legacy_decision_gate`) to support transition without facade drift.
 - Layer 2 decision flags (`allocation_decision`, `tie_break_applied`, `near_tie`) are stabilized against floating-point boundary noise by using normalized 4-decimal profit/GMROI diagnostics that are also emitted in explainability payloads.
+- Layer 2 helper interfaces now require explicit economics inputs (`margin_main_per_unit`, `margin_assorti_per_unit`, `unit_capital_per_unit`) to prevent accidental fallback to proxy constants after refactors.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
 - Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, capital metric sanity) and projected in compact explainability mode.
 - No hard-coded "critical SKU" classifier as primary allocator.
+- Economic Alpha economics precedence is now wired and traceable end-to-end (`request -> admin_defaults -> global_default -> code_default_constants`) with regression coverage for each source tier.
 
 ### 2.3 Layer 3 - Purchase recommendation (in progress)
 - Allocation-driven purchase shaping now includes deterministic risk-weighted calibration on top of Layer 2 decisions.
@@ -50,8 +53,21 @@
 
 ### 2.4 Layer 4 - Scenario output (in progress)
 - Deterministic scenarios are wired in explanation meta: Conservative / Balanced / Aggressive.
-- Per-scenario outputs include: capital required, turnover proxy, stockout risk proxy, assorti sustainability proxy/impact.
+- Per-scenario outputs now include money fields (`expected_revenue`, `expected_gross_profit`, `expected_margin_percent`, `expected_turnover_days`) plus risk proxies (`stockout_probability_proxy`, `stockout_risk_proxy`, `overstock_risk_proxy`) and assorti sustainability proxy/impact.
+- Capital-gap transparency is now emitted (`available_capital`, `required_capital`, `deficit_or_surplus`) without auto-policy enforcement.
 - Finalize calibration rules and intervention handoff contract.
+
+### 2.7 Economic Alpha calibration (active, highest priority)
+- Replace proxy-only economics with formula-based, source-traceable economics inputs.
+- Keep deterministic behavior and API contract stability while migrating.
+- Scope guard for this block is strict: no ML, no solver optimization, no multi-warehouse rollout, no new non-economics entities.
+- from-WB adapter now feeds observed realized prices from WB revenue window into runtime economics source `from_wb_observed_window` (request still has top precedence), with deterministic anomaly filtering (`30%` max deviation) and diagnostics projected in explainability meta.
+- Execution order inside this block:
+  1. economics input traceability (`request -> admin_defaults -> global_default -> code_default_constants`),
+  2. Layer 2 gross-profit gate upgrade,
+  3. Layer 4 full money outputs + capital-gap diagnostics,
+  4. targeted decomposition of layer helpers into modules without facade behavior drift.
+- Release evidence now includes deterministic end-to-end allocation flip under identical units-until-ETA where only realized price inputs are swapped (`main -> assorti`), executed in the integration gate test set used by `verify`/`verify-live`.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
@@ -81,13 +97,15 @@
 - Verify before merge.
 - Design before implementation.
 - Layer-by-layer delivery, no scope creep.
+- Decision logging discipline is mandatory: every accepted architectural/product decision is documented immediately in the same work block.
+- Documentation update is automatic after each accepted decision and must include at least `ROADMAP.md`, `STATUS.md`, and the relevant acceptance artifact (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR) to avoid omissions.
 
 ## Immediate high-leverage follow-ups
-1. Publish deterministic decision-quality casebook (3 SKU cases: stockout / balanced / overstock) with input metrics, `L1->L5` outputs, reasoning trace, reorder qty, scenario comparison, and capital impact proxy.
-2. Add regression harness that locks these case-study outputs and verifies deterministic parity in `full|compact` explainability modes.
-3. Build on Layer 2 decision-quality diagnostics to improve tie/near-tie trade-off readability while keeping profit gate primary (no rule-based override).
-4. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
-5. Freeze freshness/infrastructure work to bug-fix-only while decision-quality evidence is being locked.
+1. Finalize Layer 2 naming/contract wording transition from proxy-profit labels to expected-gross-profit labels without breaking stable API behavior.
+2. Lock regressions that prove allocation sensitivity to economics changes and preserve deterministic outputs.
+3. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
+4. Keep explainability/contract expansion limited to behavior-critical checks while economics calibration evidence is finalized.
+5. Freeze freshness/infrastructure work to bug-fix-only while economics release evidence is being locked.
 6. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
 
 ## Phase 3 - Hardening and developer UX

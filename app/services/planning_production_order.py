@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from math import floor
 
 from fastapi import HTTPException, status
+import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,7 @@ from app.models.models import (
     ProductionOrderSizeWeightSetting,
     SkuUnit,
     StockBalance,
+    WbIntegrationAccount,
     WbSalesDaily,
     WbStock,
 )
@@ -46,7 +48,31 @@ from app.schemas.planning_production_order import (
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+FROM_WB_OBSERVED_ECONOMIC_SOURCE = "from_wb_observed_window"
+FROM_WB_TARIFFS_COMMISSION_SOURCE = "from_wb_tariffs_commission"
+FROM_WB_PRICE_ANOMALY_MAX_DEVIATION = 0.30
+FROM_WB_TARIFFS_API_BASE_URL = "https://common-api.wildberries.ru"
+FROM_WB_TARIFFS_COMMISSION_PATH = "/api/v1/tariffs/commission"
+FROM_WB_TARIFFS_HTTP_TIMEOUT_SECONDS = 20.0
 LAYER2_ALLOCATION_METHOD = "time_window_profit_proxy_with_gmroi_diagnostics"
+LAYER2_ALLOCATION_METHOD_CANONICAL = "time_window_composite_objective_with_gmroi_diagnostics"
+LAYER2_DECISION_GATE_LEGACY = "profit_until_eta"
+LAYER2_DECISION_GATE_CANONICAL = "composite_objective_until_eta"
+LAYER2_DECISION_REASON_LEGACY_BY_DECISION: dict[str, str] = {
+    "main": "profit_main_gt_assorti",
+    "assorti": "profit_assorti_gt_main",
+    "hold": "profit_tie_hold",
+}
+LAYER2_DECISION_REASON_CANONICAL_BY_DECISION: dict[str, str] = {
+    "main": "expected_gross_profit_main_gt_assorti",
+    "assorti": "expected_gross_profit_assorti_gt_main",
+    "hold": "expected_gross_profit_tie_hold",
+}
+LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION: dict[str, str] = {
+    "main": "objective_score_main_gt_assorti",
+    "assorti": "objective_score_assorti_gt_main",
+    "hold": "objective_score_tie_hold",
+}
 ASSORTI_CLASSIFICATION_SOURCE = "bundle_type.is_assorti"
 ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE = "admin_defaults_assorti_mapping"
 ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE = "global_default_assorti_mapping"
@@ -54,10 +80,18 @@ ASSORTI_CLASSIFICATION_MISSING_SOURCE = "bundle_type_missing_default_main"
 EXPLAINABILITY_MODE_FULL = "full"
 EXPLAINABILITY_MODE_COMPACT = "compact"
 LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
-LAYER2_MAIN_MARGIN_PROXY = 1.0
-LAYER2_ASSORTI_MARGIN_PROXY = 0.85
-LAYER2_UNIT_CAPITAL_PROXY = 1.0
+ECONOMICS_FORMULA_VERSION = "v1_economic_alpha"
+ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT = 0.8
+ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT = 0.2
+ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN = 0.0
+ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI = 0.0
+ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN = 1.8
+ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI = 1.65
 LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = 1.0
+LAYER2_CAPITAL_COST_RATE = 0.08
+LAYER2_STOCKOUT_PENALTY_WEIGHT = 1.0
+LAYER2_OVERSTOCK_PENALTY_WEIGHT = 1.0
+LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW = "2026-12-31"
 LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD = 0.5
 LAYER1_CONTRACT_VERSION = "v1_alpha"
 LAYER2_CONTRACT_VERSION = "v1_alpha"
@@ -100,6 +134,9 @@ LAYER5_CONTRACT_VERSION = "v1_alpha"
 LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
 LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = 0.35
 LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+LAYER5_ACCELERATE_ACTION_COST_RATE = 0.20
+LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE = 0.15
+LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE = 0.10
 
 
 @dataclass
@@ -122,7 +159,29 @@ class _EffectiveLayerProxySettings:
     layer3_overstock_dampen_max: float
     layer5_unavoidable_stockout_risk_threshold: float
     layer5_accelerate_production_risk_threshold: float
+    layer2_capital_cost_rate: float
+    layer2_stockout_penalty_weight: float
+    layer2_overstock_penalty_weight: float
+    layer5_accelerate_action_cost_rate: float
+    layer5_price_slowdown_lost_volume_rate: float
+    layer5_reduce_order_marginal_profit_rate: float
     threshold_order_adjusted: bool
+    source: dict[str, str]
+
+
+@dataclass
+class _EffectiveEconomicSettings:
+    production_cost_per_unit: float
+    logistics_cost_per_unit: float
+    wb_commission_percent_main: float
+    wb_commission_percent_assorti: float
+    average_realized_price_main: float
+    average_realized_price_assorti: float
+    margin_main_per_unit: float
+    margin_assorti_per_unit: float
+    unit_capital_per_unit: float
+    available_capital: float | None
+    calibration_state: str
     source: dict[str, str]
 
 
@@ -349,6 +408,56 @@ def _normalize_unit_interval(value: float | None) -> float | None:
     return normalized
 
 
+def _bounded_unit_float(value: object) -> float:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(min(normalized, 1.0), 0.0)
+
+
+def _compute_objective_components(
+    *,
+    expected_gross_profit: float,
+    capital_locked: float,
+    stockout_risk: float,
+    overstock_risk: float,
+    expected_lost_margin_if_stockout: float,
+    inventory_carrying_cost: float,
+    capital_cost_rate: float,
+    stockout_penalty_weight: float,
+    overstock_penalty_weight: float,
+    horizon_factor: float,
+) -> dict[str, float]:
+    expected_profit = max(float(expected_gross_profit), 0.0)
+    capital_locked_value = max(float(capital_locked), 0.0)
+    stockout_risk_value = _bounded_unit_float(stockout_risk)
+    overstock_risk_value = _bounded_unit_float(overstock_risk)
+    stockout_loss = max(float(expected_lost_margin_if_stockout), 0.0)
+    carrying_cost = max(float(inventory_carrying_cost), 0.0)
+    capital_cost_rate_value = max(float(capital_cost_rate), 0.0)
+    stockout_weight = max(float(stockout_penalty_weight), 0.0)
+    overstock_weight = max(float(overstock_penalty_weight), 0.0)
+    horizon_factor_value = max(float(horizon_factor), 0.0)
+
+    capital_cost_penalty = capital_locked_value * capital_cost_rate_value * horizon_factor_value
+    stockout_penalty = stockout_risk_value * stockout_loss * stockout_weight
+    overstock_penalty = overstock_risk_value * carrying_cost * overstock_weight
+    objective_score = (
+        expected_profit
+        - capital_cost_penalty
+        - stockout_penalty
+        - overstock_penalty
+    )
+
+    return {
+        "objective_score": objective_score,
+        "capital_cost_penalty": capital_cost_penalty,
+        "stockout_penalty": stockout_penalty,
+        "overstock_penalty": overstock_penalty,
+    }
+
+
 def _resolve_layer_proxy_float(
     *,
     request_value: float | None,
@@ -367,6 +476,307 @@ def _resolve_layer_proxy_float(
     if global_normalized is not None:
         return global_normalized, "global_default"
     return float(code_default), LAYER_PROXY_VALUE_SOURCE
+
+
+def _normalize_non_negative_float(value: object) -> float | None:
+    if value is None:
+        return None
+
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if normalized < 0.0:
+        return None
+    return normalized
+
+
+def _resolve_economic_float(
+    *,
+    request_value: float | None,
+    runtime_value: float | None,
+    admin_value: float | None,
+    global_value: float | None,
+    code_default: float,
+    runtime_source: str,
+) -> tuple[float, str]:
+    request_normalized = _normalize_non_negative_float(request_value)
+    runtime_normalized = _normalize_non_negative_float(runtime_value)
+    admin_normalized = _normalize_non_negative_float(admin_value)
+    global_normalized = _normalize_non_negative_float(global_value)
+
+    if request_normalized is not None:
+        return request_normalized, "request"
+    if runtime_normalized is not None:
+        return runtime_normalized, runtime_source
+    if admin_normalized is not None:
+        return admin_normalized, "admin_defaults"
+    if global_normalized is not None:
+        return global_normalized, "global_default"
+    return float(code_default), LAYER_PROXY_VALUE_SOURCE
+
+
+def _resolve_optional_economic_float(
+    *,
+    request_value: float | None,
+    admin_value: float | None,
+    global_value: float | None,
+) -> tuple[float | None, str]:
+    request_normalized = _normalize_non_negative_float(request_value)
+    admin_normalized = _normalize_non_negative_float(admin_value)
+    global_normalized = _normalize_non_negative_float(global_value)
+
+    if request_normalized is not None:
+        return request_normalized, "request"
+    if admin_normalized is not None:
+        return admin_normalized, "admin_defaults"
+    if global_normalized is not None:
+        return global_normalized, "global_default"
+    return None, "not_set"
+
+
+def _resolve_economic_settings(
+    *,
+    article_settings: ArticlePlanningSettings | None,
+    global_settings: GlobalPlanningSettings | None,
+    overrides: PlanningOverridesInput | None,
+    runtime_overrides: dict[str, float | None] | None = None,
+    runtime_source: str | None = None,
+    runtime_source_overrides: dict[str, str] | None = None,
+) -> _EffectiveEconomicSettings:
+    request_production_cost = (
+        overrides.production_cost_per_unit
+        if overrides is not None
+        else None
+    )
+    request_logistics_cost = (
+        overrides.logistics_cost_per_unit
+        if overrides is not None
+        else None
+    )
+    request_commission_main = (
+        overrides.wb_commission_percent_main
+        if overrides is not None
+        else None
+    )
+    request_commission_assorti = (
+        overrides.wb_commission_percent_assorti
+        if overrides is not None
+        else None
+    )
+    request_price_main = (
+        overrides.average_realized_price_main
+        if overrides is not None
+        else None
+    )
+    request_price_assorti = (
+        overrides.average_realized_price_assorti
+        if overrides is not None
+        else None
+    )
+    request_available_capital = (
+        overrides.available_capital
+        if overrides is not None
+        else None
+    )
+    runtime_values = runtime_overrides or {}
+    runtime_source_label = runtime_source or FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    runtime_source_by_field = runtime_source_overrides or {}
+
+    def _runtime_source_for(field_name: str) -> str:
+        source_raw = runtime_source_by_field.get(field_name)
+        if isinstance(source_raw, str):
+            normalized = source_raw.strip()
+            if normalized:
+                return normalized
+        return runtime_source_label
+
+    runtime_production_cost = runtime_values.get("production_cost_per_unit")
+    runtime_logistics_cost = runtime_values.get("logistics_cost_per_unit")
+    runtime_commission_main = runtime_values.get("wb_commission_percent_main")
+    runtime_commission_assorti = runtime_values.get("wb_commission_percent_assorti")
+    runtime_price_main = runtime_values.get("average_realized_price_main")
+    runtime_price_assorti = runtime_values.get("average_realized_price_assorti")
+
+    admin_production_cost = (
+        getattr(article_settings, "production_order_production_cost_per_unit", None)
+        if article_settings is not None
+        else None
+    )
+    admin_logistics_cost = (
+        getattr(article_settings, "production_order_logistics_cost_per_unit", None)
+        if article_settings is not None
+        else None
+    )
+    admin_commission_main = (
+        getattr(article_settings, "production_order_wb_commission_percent_main", None)
+        if article_settings is not None
+        else None
+    )
+    admin_commission_assorti = (
+        getattr(article_settings, "production_order_wb_commission_percent_assorti", None)
+        if article_settings is not None
+        else None
+    )
+    admin_price_main = (
+        getattr(article_settings, "production_order_average_realized_price_main", None)
+        if article_settings is not None
+        else None
+    )
+    admin_price_assorti = (
+        getattr(article_settings, "production_order_average_realized_price_assorti", None)
+        if article_settings is not None
+        else None
+    )
+    admin_available_capital = (
+        getattr(article_settings, "production_order_available_capital", None)
+        if article_settings is not None
+        else None
+    )
+
+    global_production_cost = (
+        getattr(global_settings, "default_production_order_production_cost_per_unit", None)
+        if global_settings is not None
+        else None
+    )
+    global_logistics_cost = (
+        getattr(global_settings, "default_production_order_logistics_cost_per_unit", None)
+        if global_settings is not None
+        else None
+    )
+    global_commission_main = (
+        getattr(global_settings, "default_production_order_wb_commission_percent_main", None)
+        if global_settings is not None
+        else None
+    )
+    global_commission_assorti = (
+        getattr(global_settings, "default_production_order_wb_commission_percent_assorti", None)
+        if global_settings is not None
+        else None
+    )
+    global_price_main = (
+        getattr(global_settings, "default_production_order_average_realized_price_main", None)
+        if global_settings is not None
+        else None
+    )
+    global_price_assorti = (
+        getattr(global_settings, "default_production_order_average_realized_price_assorti", None)
+        if global_settings is not None
+        else None
+    )
+    global_available_capital = (
+        getattr(global_settings, "default_production_order_available_capital", None)
+        if global_settings is not None
+        else None
+    )
+
+    production_cost_per_unit, production_cost_source = _resolve_economic_float(
+        request_value=request_production_cost,
+        runtime_value=runtime_production_cost,
+        admin_value=admin_production_cost,
+        global_value=global_production_cost,
+        code_default=ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT,
+        runtime_source=_runtime_source_for("production_cost_per_unit"),
+    )
+    logistics_cost_per_unit, logistics_cost_source = _resolve_economic_float(
+        request_value=request_logistics_cost,
+        runtime_value=runtime_logistics_cost,
+        admin_value=admin_logistics_cost,
+        global_value=global_logistics_cost,
+        code_default=ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT,
+        runtime_source=_runtime_source_for("logistics_cost_per_unit"),
+    )
+    wb_commission_percent_main, wb_commission_main_source = _resolve_economic_float(
+        request_value=request_commission_main,
+        runtime_value=runtime_commission_main,
+        admin_value=admin_commission_main,
+        global_value=global_commission_main,
+        code_default=ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN,
+        runtime_source=_runtime_source_for("wb_commission_percent_main"),
+    )
+    wb_commission_percent_assorti, wb_commission_assorti_source = _resolve_economic_float(
+        request_value=request_commission_assorti,
+        runtime_value=runtime_commission_assorti,
+        admin_value=admin_commission_assorti,
+        global_value=global_commission_assorti,
+        code_default=ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI,
+        runtime_source=_runtime_source_for("wb_commission_percent_assorti"),
+    )
+    average_realized_price_main, price_main_source = _resolve_economic_float(
+        request_value=request_price_main,
+        runtime_value=runtime_price_main,
+        admin_value=admin_price_main,
+        global_value=global_price_main,
+        code_default=ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN,
+        runtime_source=_runtime_source_for("average_realized_price_main"),
+    )
+    average_realized_price_assorti, price_assorti_source = _resolve_economic_float(
+        request_value=request_price_assorti,
+        runtime_value=runtime_price_assorti,
+        admin_value=admin_price_assorti,
+        global_value=global_price_assorti,
+        code_default=ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI,
+        runtime_source=_runtime_source_for("average_realized_price_assorti"),
+    )
+    available_capital, available_capital_source = _resolve_optional_economic_float(
+        request_value=request_available_capital,
+        admin_value=admin_available_capital,
+        global_value=global_available_capital,
+    )
+
+    wb_commission_percent_main = max(min(wb_commission_percent_main, 1.0), 0.0)
+    wb_commission_percent_assorti = max(min(wb_commission_percent_assorti, 1.0), 0.0)
+
+    commission_main_amount = average_realized_price_main * wb_commission_percent_main
+    commission_assorti_amount = average_realized_price_assorti * wb_commission_percent_assorti
+    margin_main_per_unit = max(
+        average_realized_price_main - commission_main_amount - production_cost_per_unit - logistics_cost_per_unit,
+        0.0,
+    )
+    margin_assorti_per_unit = max(
+        average_realized_price_assorti - commission_assorti_amount - production_cost_per_unit - logistics_cost_per_unit,
+        0.0,
+    )
+    unit_capital_per_unit = max(production_cost_per_unit + logistics_cost_per_unit, 0.0)
+
+    source = {
+        "production_cost_per_unit": production_cost_source,
+        "logistics_cost_per_unit": logistics_cost_source,
+        "wb_commission_percent_main": wb_commission_main_source,
+        "wb_commission_percent_assorti": wb_commission_assorti_source,
+        "average_realized_price_main": price_main_source,
+        "average_realized_price_assorti": price_assorti_source,
+        "available_capital": available_capital_source,
+    }
+    calibrated_sources = [
+        source["production_cost_per_unit"],
+        source["logistics_cost_per_unit"],
+        source["wb_commission_percent_main"],
+        source["wb_commission_percent_assorti"],
+        source["average_realized_price_main"],
+        source["average_realized_price_assorti"],
+    ]
+    calibration_state = (
+        "economic_inputs_calibrated"
+        if any(item != LAYER_PROXY_VALUE_SOURCE for item in calibrated_sources)
+        else "economic_inputs_default_formula"
+    )
+
+    return _EffectiveEconomicSettings(
+        production_cost_per_unit=round(production_cost_per_unit, 4),
+        logistics_cost_per_unit=round(logistics_cost_per_unit, 4),
+        wb_commission_percent_main=round(wb_commission_percent_main, 4),
+        wb_commission_percent_assorti=round(wb_commission_percent_assorti, 4),
+        average_realized_price_main=round(average_realized_price_main, 4),
+        average_realized_price_assorti=round(average_realized_price_assorti, 4),
+        margin_main_per_unit=round(margin_main_per_unit, 4),
+        margin_assorti_per_unit=round(margin_assorti_per_unit, 4),
+        unit_capital_per_unit=round(unit_capital_per_unit, 4),
+        available_capital=round(available_capital, 4) if available_capital is not None else None,
+        calibration_state=calibration_state,
+        source=source,
+    )
 
 
 def _resolve_layer_proxy_settings(
@@ -395,6 +805,36 @@ def _resolve_layer_proxy_settings(
         if overrides is not None
         else None
     )
+    request_layer2_capital_cost_rate = (
+        overrides.layer2_capital_cost_rate
+        if overrides is not None
+        else None
+    )
+    request_layer2_stockout_penalty_weight = (
+        overrides.layer2_stockout_penalty_weight
+        if overrides is not None
+        else None
+    )
+    request_layer2_overstock_penalty_weight = (
+        overrides.layer2_overstock_penalty_weight
+        if overrides is not None
+        else None
+    )
+    request_layer5_accelerate_action_cost_rate = (
+        overrides.layer5_accelerate_action_cost_rate
+        if overrides is not None
+        else None
+    )
+    request_layer5_price_slowdown_lost_volume_rate = (
+        overrides.layer5_price_slowdown_lost_volume_rate
+        if overrides is not None
+        else None
+    )
+    request_layer5_reduce_order_marginal_profit_rate = (
+        overrides.layer5_reduce_order_marginal_profit_rate
+        if overrides is not None
+        else None
+    )
 
     admin_layer3_stockout_boost = (
         article_settings.production_order_layer3_stockout_boost_max
@@ -416,6 +856,36 @@ def _resolve_layer_proxy_settings(
         if article_settings is not None
         else None
     )
+    admin_layer2_capital_cost_rate = (
+        getattr(article_settings, "production_order_layer2_capital_cost_rate", None)
+        if article_settings is not None
+        else None
+    )
+    admin_layer2_stockout_penalty_weight = (
+        getattr(article_settings, "production_order_layer2_stockout_penalty_weight", None)
+        if article_settings is not None
+        else None
+    )
+    admin_layer2_overstock_penalty_weight = (
+        getattr(article_settings, "production_order_layer2_overstock_penalty_weight", None)
+        if article_settings is not None
+        else None
+    )
+    admin_layer5_accelerate_action_cost_rate = (
+        getattr(article_settings, "production_order_layer5_accelerate_action_cost_rate", None)
+        if article_settings is not None
+        else None
+    )
+    admin_layer5_price_slowdown_lost_volume_rate = (
+        getattr(article_settings, "production_order_layer5_price_slowdown_lost_volume_rate", None)
+        if article_settings is not None
+        else None
+    )
+    admin_layer5_reduce_order_marginal_profit_rate = (
+        getattr(article_settings, "production_order_layer5_reduce_order_marginal_profit_rate", None)
+        if article_settings is not None
+        else None
+    )
 
     global_layer3_stockout_boost = (
         global_settings.default_production_order_layer3_stockout_boost_max
@@ -434,6 +904,36 @@ def _resolve_layer_proxy_settings(
     )
     global_layer5_accelerate_threshold = (
         global_settings.default_production_order_layer5_accelerate_production_risk_threshold
+        if global_settings is not None
+        else None
+    )
+    global_layer2_capital_cost_rate = (
+        getattr(global_settings, "default_production_order_layer2_capital_cost_rate", None)
+        if global_settings is not None
+        else None
+    )
+    global_layer2_stockout_penalty_weight = (
+        getattr(global_settings, "default_production_order_layer2_stockout_penalty_weight", None)
+        if global_settings is not None
+        else None
+    )
+    global_layer2_overstock_penalty_weight = (
+        getattr(global_settings, "default_production_order_layer2_overstock_penalty_weight", None)
+        if global_settings is not None
+        else None
+    )
+    global_layer5_accelerate_action_cost_rate = (
+        getattr(global_settings, "default_production_order_layer5_accelerate_action_cost_rate", None)
+        if global_settings is not None
+        else None
+    )
+    global_layer5_price_slowdown_lost_volume_rate = (
+        getattr(global_settings, "default_production_order_layer5_price_slowdown_lost_volume_rate", None)
+        if global_settings is not None
+        else None
+    )
+    global_layer5_reduce_order_marginal_profit_rate = (
+        getattr(global_settings, "default_production_order_layer5_reduce_order_marginal_profit_rate", None)
         if global_settings is not None
         else None
     )
@@ -462,6 +962,48 @@ def _resolve_layer_proxy_settings(
         global_value=global_layer5_accelerate_threshold,
         code_default=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
     )
+    layer2_capital_cost_rate, layer2_capital_cost_rate_source = _resolve_layer_proxy_float(
+        request_value=request_layer2_capital_cost_rate,
+        admin_value=admin_layer2_capital_cost_rate,
+        global_value=global_layer2_capital_cost_rate,
+        code_default=LAYER2_CAPITAL_COST_RATE,
+    )
+    layer2_stockout_penalty_weight, layer2_stockout_penalty_weight_source = _resolve_layer_proxy_float(
+        request_value=request_layer2_stockout_penalty_weight,
+        admin_value=admin_layer2_stockout_penalty_weight,
+        global_value=global_layer2_stockout_penalty_weight,
+        code_default=LAYER2_STOCKOUT_PENALTY_WEIGHT,
+    )
+    layer2_overstock_penalty_weight, layer2_overstock_penalty_weight_source = _resolve_layer_proxy_float(
+        request_value=request_layer2_overstock_penalty_weight,
+        admin_value=admin_layer2_overstock_penalty_weight,
+        global_value=global_layer2_overstock_penalty_weight,
+        code_default=LAYER2_OVERSTOCK_PENALTY_WEIGHT,
+    )
+    layer5_accelerate_action_cost_rate, layer5_accelerate_action_cost_rate_source = _resolve_layer_proxy_float(
+        request_value=request_layer5_accelerate_action_cost_rate,
+        admin_value=admin_layer5_accelerate_action_cost_rate,
+        global_value=global_layer5_accelerate_action_cost_rate,
+        code_default=LAYER5_ACCELERATE_ACTION_COST_RATE,
+    )
+    (
+        layer5_price_slowdown_lost_volume_rate,
+        layer5_price_slowdown_lost_volume_rate_source,
+    ) = _resolve_layer_proxy_float(
+        request_value=request_layer5_price_slowdown_lost_volume_rate,
+        admin_value=admin_layer5_price_slowdown_lost_volume_rate,
+        global_value=global_layer5_price_slowdown_lost_volume_rate,
+        code_default=LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE,
+    )
+    (
+        layer5_reduce_order_marginal_profit_rate,
+        layer5_reduce_order_marginal_profit_rate_source,
+    ) = _resolve_layer_proxy_float(
+        request_value=request_layer5_reduce_order_marginal_profit_rate,
+        admin_value=admin_layer5_reduce_order_marginal_profit_rate,
+        global_value=global_layer5_reduce_order_marginal_profit_rate,
+        code_default=LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    )
 
     threshold_order_adjusted = False
     if layer5_accelerate_threshold < layer5_unavoidable_threshold:
@@ -474,12 +1016,28 @@ def _resolve_layer_proxy_settings(
         layer3_overstock_dampen_max=layer3_overstock_dampen_max,
         layer5_unavoidable_stockout_risk_threshold=layer5_unavoidable_threshold,
         layer5_accelerate_production_risk_threshold=layer5_accelerate_threshold,
+        layer2_capital_cost_rate=layer2_capital_cost_rate,
+        layer2_stockout_penalty_weight=layer2_stockout_penalty_weight,
+        layer2_overstock_penalty_weight=layer2_overstock_penalty_weight,
+        layer5_accelerate_action_cost_rate=layer5_accelerate_action_cost_rate,
+        layer5_price_slowdown_lost_volume_rate=layer5_price_slowdown_lost_volume_rate,
+        layer5_reduce_order_marginal_profit_rate=layer5_reduce_order_marginal_profit_rate,
         threshold_order_adjusted=threshold_order_adjusted,
         source={
             "layer3_stockout_boost_max": layer3_stockout_source,
             "layer3_overstock_dampen_max": layer3_overstock_source,
             "layer5_unavoidable_stockout_risk_threshold": layer5_unavoidable_source,
             "layer5_accelerate_production_risk_threshold": layer5_accelerate_source,
+            "layer2_capital_cost_rate": layer2_capital_cost_rate_source,
+            "layer2_stockout_penalty_weight": layer2_stockout_penalty_weight_source,
+            "layer2_overstock_penalty_weight": layer2_overstock_penalty_weight_source,
+            "layer5_accelerate_action_cost_rate": layer5_accelerate_action_cost_rate_source,
+            "layer5_price_slowdown_lost_volume_rate": (
+                layer5_price_slowdown_lost_volume_rate_source
+            ),
+            "layer5_reduce_order_marginal_profit_rate": (
+                layer5_reduce_order_marginal_profit_rate_source
+            ),
         },
     )
 
@@ -541,6 +1099,7 @@ def _compact_explanation_steps(steps: list[str]) -> tuple[list[str], int]:
         "Layer 2 allocation",
         "Layer 3 purchase shaping",
         "Layer 4 scenarios",
+        "Capital constraint",
         "Layer 5 intervention",
         "Применены ограничения",
     )
@@ -583,6 +1142,8 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
         "reorder_policy": meta.get("reorder_policy", {}),
         "economic_buffer": meta.get("economic_buffer", {}),
         "in_flight_effective": meta.get("in_flight_effective", {}),
+        "capital_gap": meta.get("capital_gap", {}),
+        "capital_constraint": meta.get("capital_constraint", {}),
         "alpha_proxy_economics": meta.get("alpha_proxy_economics", {}),
     }
 
@@ -609,12 +1170,19 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
     if isinstance(layer2_raw, dict):
         compact_meta["layer_2_allocation"] = {
             "method": layer2_raw.get("method"),
+            "method_canonical": layer2_raw.get("method_canonical"),
+            "legacy_method": layer2_raw.get("legacy_method"),
             "summary": layer2_raw.get("summary", {}),
             "contract": layer2_raw.get("contract", {}),
             "decision_quality": layer2_raw.get("decision_quality", {}),
             "decision_gate": layer2_raw.get("decision_gate"),
+            "decision_gate_canonical": layer2_raw.get("decision_gate_canonical"),
+            "legacy_decision_gate": layer2_raw.get("legacy_decision_gate"),
             "tie_break": layer2_raw.get("tie_break"),
             "gmroi_usage": layer2_raw.get("gmroi_usage"),
+            "objective_formula": layer2_raw.get("objective_formula"),
+            "objective_parameters": layer2_raw.get("objective_parameters", {}),
+            "objective_source": layer2_raw.get("objective_source", {}),
         }
 
     layer3_raw = meta.get("layer_3_purchase_shaping")
@@ -645,9 +1213,30 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
                 scenarios_compact.append(
                     {
                         "scenario": scenario.get("scenario"),
+                        "purchase_units": scenario.get("purchase_units"),
                         "total_capital_required": scenario.get("total_capital_required"),
+                        "expected_revenue": scenario.get("expected_revenue"),
+                        "expected_gross_profit": scenario.get("expected_gross_profit"),
+                        "objective_score": scenario.get("objective_score"),
+                        "expected_margin_percent": scenario.get("expected_margin_percent"),
+                        "expected_turnover_days": scenario.get("expected_turnover_days"),
                         "expected_turnover_proxy": scenario.get("expected_turnover_proxy"),
+                        "stockout_probability_proxy": scenario.get("stockout_probability_proxy"),
                         "stockout_risk_proxy": scenario.get("stockout_risk_proxy"),
+                        "overstock_risk_proxy": scenario.get("overstock_risk_proxy"),
+                        "risk_adjusted_profit": scenario.get("risk_adjusted_profit"),
+                        "capital_efficiency_metric": scenario.get("capital_efficiency_metric"),
+                        "capital_delta_vs_balanced": scenario.get("capital_delta_vs_balanced"),
+                        "expected_revenue_delta_vs_balanced": scenario.get(
+                            "expected_revenue_delta_vs_balanced"
+                        ),
+                        "expected_gross_profit_delta_vs_balanced": scenario.get(
+                            "expected_gross_profit_delta_vs_balanced"
+                        ),
+                        "gross_profit_delta_vs_balanced": scenario.get("gross_profit_delta_vs_balanced"),
+                        "objective_score_delta_vs_balanced": (
+                            scenario.get("objective_score_delta_vs_balanced")
+                        ),
                         "assorti_sustainability_impact": scenario.get("assorti_sustainability_impact"),
                     }
                 )
@@ -656,6 +1245,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
             "method": layer4_raw.get("method"),
             "factors": layer4_raw.get("factors", []),
             "contract": layer4_raw.get("contract", {}),
+            "aggregate_deltas": layer4_raw.get("aggregate_deltas", {}),
             "scenarios": scenarios_compact,
         }
 
@@ -678,7 +1268,11 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
     from_wb_raw = meta.get("from_wb")
     if isinstance(from_wb_raw, dict):
         freshness_raw = from_wb_raw.get("freshness")
+        economic_observed_raw = from_wb_raw.get("economic_observed_prices")
+        economic_commission_raw = from_wb_raw.get("economic_observed_commission")
         freshness_compact: dict[str, object] = {}
+        economic_observed_compact: dict[str, object] = {}
+        economic_commission_compact: dict[str, object] = {}
         if isinstance(freshness_raw, dict):
             freshness_compact = {
                 "status": freshness_raw.get("status"),
@@ -686,6 +1280,25 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
                 "stock_oldest_age_days": freshness_raw.get("stock_oldest_age_days"),
                 "threshold_days": freshness_raw.get("threshold_days"),
                 "threshold_source": freshness_raw.get("threshold_source"),
+            }
+        if isinstance(economic_observed_raw, dict):
+            economic_observed_compact = {
+                "source": economic_observed_raw.get("source"),
+                "window": economic_observed_raw.get("window"),
+                "anomaly_max_deviation": economic_observed_raw.get(
+                    "anomaly_max_deviation"
+                ),
+                "prices": economic_observed_raw.get("prices"),
+                "sample_counts": economic_observed_raw.get("sample_counts"),
+            }
+        if isinstance(economic_commission_raw, dict):
+            economic_commission_compact = {
+                "source": economic_commission_raw.get("source"),
+                "status": economic_commission_raw.get("status"),
+                "reason": economic_commission_raw.get("reason"),
+                "commission_percent": economic_commission_raw.get("commission_percent"),
+                "commission_percent_stats": economic_commission_raw.get("commission_percent_stats"),
+                "kgvp_supplier_percent_stats": economic_commission_raw.get("kgvp_supplier_percent_stats"),
             }
 
         daily_sales_by_bundle = from_wb_raw.get("daily_sales_by_bundle")
@@ -701,6 +1314,8 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
             "bundle_type_ids": from_wb_raw.get("bundle_type_ids", []),
             "sales_window": from_wb_raw.get("sales_window"),
             "freshness": freshness_compact,
+            "economic_observed_prices": economic_observed_compact,
+            "economic_observed_commission": economic_commission_compact,
             "snapshot": {
                 "daily_sales_bundle_count": (
                     len(daily_sales_by_bundle)
@@ -813,6 +1428,9 @@ def _build_layer1_stock_health_metrics(
     assorti_by_bundle_type: dict[int, bool],
     reorder_point_days: int,
     target_coverage_days: int,
+    margin_main_per_unit: float,
+    margin_assorti_per_unit: float,
+    unit_capital_per_unit: float,
 ) -> list[dict[str, int | float | None]]:
     velocity_main_by_color_size: dict[tuple[int, int], float] = defaultdict(float)
     velocity_assorti_by_color_size: dict[tuple[int, int], float] = defaultdict(float)
@@ -855,6 +1473,9 @@ def _build_layer1_stock_health_metrics(
     metrics: list[dict[str, int | float | None]] = []
     reorder_point_anchor = max(reorder_point_days, 1)
     overstock_anchor = max(target_coverage_days * 2, 1)
+    margin_main = max(float(margin_main_per_unit), 0.0)
+    margin_assorti = max(float(margin_assorti_per_unit), 0.0)
+    unit_capital = max(float(unit_capital_per_unit), 0.0)
 
     for color_id, size_id in all_keys:
         key = (color_id, size_id)
@@ -890,13 +1511,13 @@ def _build_layer1_stock_health_metrics(
 
         if velocity_total > 0:
             gross_margin = (
-                (velocity_main * LAYER2_MAIN_MARGIN_PROXY)
-                + (velocity_assorti * LAYER2_ASSORTI_MARGIN_PROXY)
+                (velocity_main * margin_main)
+                + (velocity_assorti * margin_assorti)
             ) / velocity_total
         else:
             gross_margin = 0.0
 
-        capital_locked = float(available_units) * LAYER2_UNIT_CAPITAL_PROXY
+        capital_locked = float(available_units) * unit_capital
 
         metrics.append(
             {
@@ -981,6 +1602,12 @@ def _build_layer2_allocation_decisions(
     *,
     stock_health_metrics: list[dict[str, int | float | None]],
     lead_time_days_total: int,
+    margin_main_per_unit: float,
+    margin_assorti_per_unit: float,
+    unit_capital_per_unit: float,
+    capital_cost_rate: float = LAYER2_CAPITAL_COST_RATE,
+    stockout_penalty_weight: float = LAYER2_STOCKOUT_PENALTY_WEIGHT,
+    overstock_penalty_weight: float = LAYER2_OVERSTOCK_PENALTY_WEIGHT,
 ) -> tuple[list[dict[str, int | float | str]], dict[str, int]]:
     decisions: list[dict[str, int | float | str]] = []
     summary = {
@@ -988,6 +1615,13 @@ def _build_layer2_allocation_decisions(
         "assorti": 0,
         "hold": 0,
     }
+    margin_main = max(float(margin_main_per_unit), 0.0)
+    margin_assorti = max(float(margin_assorti_per_unit), 0.0)
+    unit_capital = max(float(unit_capital_per_unit), 0.0)
+    capital_cost_rate_value = max(float(capital_cost_rate), 0.0)
+    stockout_penalty_weight_value = max(float(stockout_penalty_weight), 0.0)
+    overstock_penalty_weight_value = max(float(overstock_penalty_weight), 0.0)
+    lead_time_anchor = max(int(lead_time_days_total), 1)
 
     for metric in stock_health_metrics:
         eta_days_raw = metric.get("eta_days")
@@ -1000,14 +1634,59 @@ def _build_layer2_allocation_decisions(
 
         velocity_main = max(float(metric.get("velocity_main", 0.0)), 0.0)
         velocity_assorti = max(float(metric.get("velocity_assorti", 0.0)), 0.0)
+        stockout_risk = _bounded_unit_float(metric.get("stockout_risk", 0.0))
+        overstock_risk = _bounded_unit_float(metric.get("overstock_risk", 0.0))
 
         units_main_until_eta = min(float(available_units), velocity_main * float(horizon_days))
         units_assorti_until_eta = min(float(available_units), velocity_assorti * float(horizon_days))
+        demand_main_until_eta = velocity_main * float(horizon_days)
+        demand_assorti_until_eta = velocity_assorti * float(horizon_days)
 
-        profit_if_main_until_eta_raw = units_main_until_eta * LAYER2_MAIN_MARGIN_PROXY
-        profit_if_assorti_until_eta_raw = units_assorti_until_eta * LAYER2_ASSORTI_MARGIN_PROXY
+        profit_if_main_until_eta_raw = units_main_until_eta * margin_main
+        profit_if_assorti_until_eta_raw = units_assorti_until_eta * margin_assorti
+
+        expected_lost_margin_main_if_stockout = (
+            max(demand_main_until_eta - units_main_until_eta, 0.0) * margin_main
+        )
+        expected_lost_margin_assorti_if_stockout = (
+            max(demand_assorti_until_eta - units_assorti_until_eta, 0.0) * margin_assorti
+        )
+        inventory_carrying_cost_main = max(float(available_units) - units_main_until_eta, 0.0) * unit_capital
+        inventory_carrying_cost_assorti = (
+            max(float(available_units) - units_assorti_until_eta, 0.0) * unit_capital
+        )
+        capital_locked_if_main_until_eta = max(units_main_until_eta * unit_capital, 0.0)
+        capital_locked_if_assorti_until_eta = max(units_assorti_until_eta * unit_capital, 0.0)
+        horizon_factor = float(horizon_days) / float(lead_time_anchor)
+
+        objective_main_components = _compute_objective_components(
+            expected_gross_profit=profit_if_main_until_eta_raw,
+            capital_locked=capital_locked_if_main_until_eta,
+            stockout_risk=stockout_risk,
+            overstock_risk=overstock_risk,
+            expected_lost_margin_if_stockout=expected_lost_margin_main_if_stockout,
+            inventory_carrying_cost=inventory_carrying_cost_main,
+            capital_cost_rate=capital_cost_rate_value,
+            stockout_penalty_weight=stockout_penalty_weight_value,
+            overstock_penalty_weight=overstock_penalty_weight_value,
+            horizon_factor=horizon_factor,
+        )
+        objective_assorti_components = _compute_objective_components(
+            expected_gross_profit=profit_if_assorti_until_eta_raw,
+            capital_locked=capital_locked_if_assorti_until_eta,
+            stockout_risk=stockout_risk,
+            overstock_risk=overstock_risk,
+            expected_lost_margin_if_stockout=expected_lost_margin_assorti_if_stockout,
+            inventory_carrying_cost=inventory_carrying_cost_assorti,
+            capital_cost_rate=capital_cost_rate_value,
+            stockout_penalty_weight=stockout_penalty_weight_value,
+            overstock_penalty_weight=overstock_penalty_weight_value,
+            horizon_factor=horizon_factor,
+        )
 
         capital_locked = max(float(metric.get("capital_locked", 0.0)), 0.0)
+        if capital_locked <= 0 and unit_capital > 0:
+            capital_locked = round(float(available_units) * unit_capital, 4)
         if capital_locked > 0:
             gmroi_main_raw = profit_if_main_until_eta_raw / capital_locked
             gmroi_assorti_raw = profit_if_assorti_until_eta_raw / capital_locked
@@ -1019,25 +1698,44 @@ def _build_layer2_allocation_decisions(
         profit_if_assorti_until_eta = round(profit_if_assorti_until_eta_raw, 4)
         gmroi_main = round(gmroi_main_raw, 4)
         gmroi_assorti = round(gmroi_assorti_raw, 4)
+        objective_score_if_main_until_eta = round(
+            objective_main_components["objective_score"],
+            4,
+        )
+        objective_score_if_assorti_until_eta = round(
+            objective_assorti_components["objective_score"],
+            4,
+        )
 
         profit_gap_until_eta = round(
             abs(profit_if_main_until_eta - profit_if_assorti_until_eta),
             4,
         )
+        expected_gross_profit_if_main_until_eta = profit_if_main_until_eta
+        expected_gross_profit_if_assorti_until_eta = profit_if_assorti_until_eta
+        expected_gross_profit_gap_until_eta = profit_gap_until_eta
+        objective_score_gap_until_eta = round(
+            abs(objective_score_if_main_until_eta - objective_score_if_assorti_until_eta),
+            4,
+        )
         gmroi_gap = round(abs(gmroi_main - gmroi_assorti), 4)
 
-        if profit_if_main_until_eta > profit_if_assorti_until_eta:
+        if objective_score_if_main_until_eta > objective_score_if_assorti_until_eta:
             allocation_decision = "main"
-            decision_reason = "profit_main_gt_assorti"
-        elif profit_if_assorti_until_eta > profit_if_main_until_eta:
+        elif objective_score_if_assorti_until_eta > objective_score_if_main_until_eta:
             allocation_decision = "assorti"
-            decision_reason = "profit_assorti_gt_main"
         else:
             allocation_decision = "hold"
-            decision_reason = "profit_tie_hold"
+        decision_reason = LAYER2_DECISION_REASON_LEGACY_BY_DECISION[allocation_decision]
+        decision_reason_expected_gross_profit = LAYER2_DECISION_REASON_CANONICAL_BY_DECISION[
+            allocation_decision
+        ]
+        decision_reason_objective_score = LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION[
+            allocation_decision
+        ]
 
-        tie_break_applied = profit_gap_until_eta <= 1e-9
-        near_tie = profit_gap_until_eta <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+        tie_break_applied = objective_score_gap_until_eta <= 1e-9
+        near_tie = objective_score_gap_until_eta <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
 
         summary[allocation_decision] += 1
 
@@ -1049,12 +1747,84 @@ def _build_layer2_allocation_decisions(
                 "profit_if_main_until_eta": profit_if_main_until_eta,
                 "profit_if_assorti_until_eta": profit_if_assorti_until_eta,
                 "profit_gap_until_eta": profit_gap_until_eta,
+                "expected_gross_profit_if_main_until_eta": expected_gross_profit_if_main_until_eta,
+                "expected_gross_profit_if_assorti_until_eta": expected_gross_profit_if_assorti_until_eta,
+                "expected_gross_profit_gap_until_eta": expected_gross_profit_gap_until_eta,
+                "objective_score_if_main_until_eta": objective_score_if_main_until_eta,
+                "objective_score_if_assorti_until_eta": objective_score_if_assorti_until_eta,
+                "objective_components_if_main": {
+                    "expected_gross_profit": expected_gross_profit_if_main_until_eta,
+                    "capital_cost_penalty": round(
+                        objective_main_components["capital_cost_penalty"],
+                        4,
+                    ),
+                    "stockout_penalty": round(
+                        objective_main_components["stockout_penalty"],
+                        4,
+                    ),
+                    "overstock_penalty": round(
+                        objective_main_components["overstock_penalty"],
+                        4,
+                    ),
+                    "objective_score": objective_score_if_main_until_eta,
+                },
+                "objective_components_if_assorti": {
+                    "expected_gross_profit": expected_gross_profit_if_assorti_until_eta,
+                    "capital_cost_penalty": round(
+                        objective_assorti_components["capital_cost_penalty"],
+                        4,
+                    ),
+                    "stockout_penalty": round(
+                        objective_assorti_components["stockout_penalty"],
+                        4,
+                    ),
+                    "overstock_penalty": round(
+                        objective_assorti_components["overstock_penalty"],
+                        4,
+                    ),
+                    "objective_score": objective_score_if_assorti_until_eta,
+                },
+                "objective_score_gap_until_eta": objective_score_gap_until_eta,
                 "capital_locked": round(capital_locked, 4),
+                "capital_locked_if_main_until_eta": round(capital_locked_if_main_until_eta, 4),
+                "capital_locked_if_assorti_until_eta": round(capital_locked_if_assorti_until_eta, 4),
+                "capital_cost_penalty_if_main_until_eta": round(
+                    objective_main_components["capital_cost_penalty"],
+                    4,
+                ),
+                "capital_cost_penalty_if_assorti_until_eta": round(
+                    objective_assorti_components["capital_cost_penalty"],
+                    4,
+                ),
+                "stockout_penalty_if_main_until_eta": round(
+                    objective_main_components["stockout_penalty"],
+                    4,
+                ),
+                "stockout_penalty_if_assorti_until_eta": round(
+                    objective_assorti_components["stockout_penalty"],
+                    4,
+                ),
+                "overstock_penalty_if_main_until_eta": round(
+                    objective_main_components["overstock_penalty"],
+                    4,
+                ),
+                "overstock_penalty_if_assorti_until_eta": round(
+                    objective_assorti_components["overstock_penalty"],
+                    4,
+                ),
+                "stockout_risk": round(stockout_risk, 4),
+                "overstock_risk": round(overstock_risk, 4),
+                "horizon_factor": round(horizon_factor, 4),
+                "capital_cost_rate": round(capital_cost_rate_value, 4),
+                "stockout_penalty_weight": round(stockout_penalty_weight_value, 4),
+                "overstock_penalty_weight": round(overstock_penalty_weight_value, 4),
                 "gmroi_main": gmroi_main,
                 "gmroi_assorti": gmroi_assorti,
                 "gmroi_gap": gmroi_gap,
                 "allocation_decision": allocation_decision,
                 "decision_reason": decision_reason,
+                "decision_reason_expected_gross_profit": decision_reason_expected_gross_profit,
+                "decision_reason_objective_score": decision_reason_objective_score,
                 "tie_break_applied": tie_break_applied,
                 "near_tie": near_tie,
             }
@@ -1068,10 +1838,12 @@ def _build_layer2_contract_summary(
     layer2_allocation_summary: dict[str, int],
 ) -> dict[str, str | int | dict[str, bool] | dict[str, int]]:
     expected_decisions = ("main", "assorti", "hold")
-    expected_decision_reason_by_decision = {
-        "main": "profit_main_gt_assorti",
-        "assorti": "profit_assorti_gt_main",
-        "hold": "profit_tie_hold",
+    expected_decision_reasons_by_decision = {
+        decision: {
+            LAYER2_DECISION_REASON_LEGACY_BY_DECISION[decision],
+            LAYER2_DECISION_REASON_CANONICAL_BY_DECISION[decision],
+        }
+        for decision in expected_decisions
     }
 
     summary_expected = {
@@ -1088,12 +1860,25 @@ def _build_layer2_contract_summary(
     eta_days_positive = True
     tie_break_hold_when_equal_profit = True
     decision_reason_matches_allocation = True
-    allocation_matches_profit_gate = True
+    decision_reason_expected_gross_profit_matches_allocation = True
+    allocation_matches_composite_objective_gate = True
     tie_break_applied_matches_profit_tie = True
     near_tie_matches_profit_gap_threshold = True
     profit_gap_consistent_with_profits = True
     gmroi_gap_consistent_with_gmroi = True
     capital_locked_metric_valid = True
+    objective_required_fields_present = True
+    objective_score_fields_numeric = True
+    objective_components_present = True
+    objective_components_numeric = True
+    objective_components_consistent_with_scores = True
+    required_objective_component_keys = (
+        "expected_gross_profit",
+        "capital_cost_penalty",
+        "stockout_penalty",
+        "overstock_penalty",
+        "objective_score",
+    )
 
     for decision_item in layer2_allocation_decisions:
         color_id_raw = decision_item.get("color_id")
@@ -1116,51 +1901,156 @@ def _build_layer2_contract_summary(
             unknown_decisions_found = True
 
         decision_reason = str(decision_item.get("decision_reason", "")).strip()
-        expected_decision_reason = expected_decision_reason_by_decision.get(allocation_decision)
-        if expected_decision_reason is None or decision_reason != expected_decision_reason:
+        expected_decision_reasons = expected_decision_reasons_by_decision.get(allocation_decision)
+        if expected_decision_reasons is None or decision_reason not in expected_decision_reasons:
             decision_reason_matches_allocation = False
 
+        decision_reason_expected_gross_profit = str(
+            decision_item.get("decision_reason_expected_gross_profit", "")
+        ).strip()
+        expected_decision_reason_expected_gross_profit = (
+            LAYER2_DECISION_REASON_CANONICAL_BY_DECISION.get(allocation_decision)
+        )
+        if decision_reason_expected_gross_profit:
+            if (
+                expected_decision_reason_expected_gross_profit is None
+                or decision_reason_expected_gross_profit
+                != expected_decision_reason_expected_gross_profit
+            ):
+                decision_reason_expected_gross_profit_matches_allocation = False
+
         try:
-            profit_main = float(decision_item.get("profit_if_main_until_eta", 0.0))
-            profit_assorti = float(decision_item.get("profit_if_assorti_until_eta", 0.0))
+            profit_main_raw = decision_item.get("expected_gross_profit_if_main_until_eta")
+            if profit_main_raw is None:
+                profit_main_raw = decision_item.get("profit_if_main_until_eta", 0.0)
+            profit_assorti_raw = decision_item.get("expected_gross_profit_if_assorti_until_eta")
+            if profit_assorti_raw is None:
+                profit_assorti_raw = decision_item.get("profit_if_assorti_until_eta", 0.0)
+            profit_main = float(profit_main_raw)
+            profit_assorti = float(profit_assorti_raw)
         except (TypeError, ValueError):
             non_negative_profit_metrics = False
             tie_break_hold_when_equal_profit = False
-            allocation_matches_profit_gate = False
+            allocation_matches_composite_objective_gate = False
             tie_break_applied_matches_profit_tie = False
             near_tie_matches_profit_gap_threshold = False
             profit_gap_consistent_with_profits = False
         else:
             profit_gap_until_eta_expected = abs(profit_main - profit_assorti)
-            if profit_main > profit_assorti:
-                expected_allocation_decision = "main"
-            elif profit_assorti > profit_main:
-                expected_allocation_decision = "assorti"
-            else:
-                expected_allocation_decision = "hold"
-
-            if allocation_decision != expected_allocation_decision:
-                allocation_matches_profit_gate = False
-
             if profit_main < 0 or profit_assorti < 0:
                 non_negative_profit_metrics = False
-            if abs(profit_main - profit_assorti) <= 1e-9 and allocation_decision != "hold":
-                tie_break_hold_when_equal_profit = False
 
-            tie_break_applied_raw = decision_item.get("tie_break_applied")
-            tie_expected = profit_gap_until_eta_expected <= 1e-9
-            if not isinstance(tie_break_applied_raw, bool) or tie_break_applied_raw != tie_expected:
-                tie_break_applied_matches_profit_tie = False
+            objective_main = 0.0
+            objective_assorti = 0.0
+            objective_main_raw = decision_item.get("objective_score_if_main_until_eta")
+            objective_assorti_raw = decision_item.get("objective_score_if_assorti_until_eta")
+            objective_components_main_raw = decision_item.get("objective_components_if_main")
+            objective_components_assorti_raw = decision_item.get("objective_components_if_assorti")
+            objective_scores_valid = True
+            objective_components_valid = True
+            objective_components_main_score = 0.0
+            objective_components_assorti_score = 0.0
 
-            near_tie_raw = decision_item.get("near_tie")
-            near_tie_expected = (
-                profit_gap_until_eta_expected <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
-            )
-            if not isinstance(near_tie_raw, bool) or near_tie_raw != near_tie_expected:
-                near_tie_matches_profit_gap_threshold = False
+            if objective_main_raw is None or objective_assorti_raw is None:
+                objective_required_fields_present = False
+                objective_score_fields_numeric = False
+                objective_scores_valid = False
+                allocation_matches_composite_objective_gate = False
+                objective_components_consistent_with_scores = False
+
+            if not isinstance(objective_components_main_raw, dict) or not isinstance(
+                objective_components_assorti_raw,
+                dict,
+            ):
+                objective_required_fields_present = False
+                objective_components_present = False
+                objective_components_numeric = False
+                objective_components_valid = False
+                allocation_matches_composite_objective_gate = False
+                objective_components_consistent_with_scores = False
+            else:
+                for component_key in required_objective_component_keys:
+                    if (
+                        component_key not in objective_components_main_raw
+                        or component_key not in objective_components_assorti_raw
+                    ):
+                        objective_required_fields_present = False
+                        objective_components_present = False
+                        objective_components_numeric = False
+                        objective_components_valid = False
+                        allocation_matches_composite_objective_gate = False
+                        objective_components_consistent_with_scores = False
+                        break
+
+                if objective_components_valid:
+                    try:
+                        objective_components_main_score = float(
+                            objective_components_main_raw["objective_score"]
+                        )
+                        objective_components_assorti_score = float(
+                            objective_components_assorti_raw["objective_score"]
+                        )
+                        for component_key in required_objective_component_keys:
+                            float(objective_components_main_raw[component_key])
+                            float(objective_components_assorti_raw[component_key])
+                    except (TypeError, ValueError):
+                        objective_components_numeric = False
+                        objective_components_valid = False
+                        allocation_matches_composite_objective_gate = False
+                        objective_components_consistent_with_scores = False
 
             try:
-                profit_gap_reported = float(decision_item.get("profit_gap_until_eta"))
+                if objective_scores_valid:
+                    objective_main = float(objective_main_raw)
+                    objective_assorti = float(objective_assorti_raw)
+            except (TypeError, ValueError):
+                objective_score_fields_numeric = False
+                objective_scores_valid = False
+                allocation_matches_composite_objective_gate = False
+                objective_components_consistent_with_scores = False
+
+            if objective_scores_valid and objective_components_valid:
+                if abs(objective_main - objective_components_main_score) > 1e-4:
+                    objective_components_consistent_with_scores = False
+                if abs(objective_assorti - objective_components_assorti_score) > 1e-4:
+                    objective_components_consistent_with_scores = False
+
+            if not objective_scores_valid:
+                tie_break_hold_when_equal_profit = False
+                tie_break_applied_matches_profit_tie = False
+                near_tie_matches_profit_gap_threshold = False
+            else:
+                objective_gap_until_eta_expected = abs(objective_main - objective_assorti)
+                if objective_main > objective_assorti:
+                    expected_allocation_decision = "main"
+                elif objective_assorti > objective_main:
+                    expected_allocation_decision = "assorti"
+                else:
+                    expected_allocation_decision = "hold"
+
+                if allocation_decision != expected_allocation_decision:
+                    allocation_matches_composite_objective_gate = False
+
+                if objective_gap_until_eta_expected <= 1e-9 and allocation_decision != "hold":
+                    tie_break_hold_when_equal_profit = False
+
+                tie_break_applied_raw = decision_item.get("tie_break_applied")
+                tie_expected = objective_gap_until_eta_expected <= 1e-9
+                if not isinstance(tie_break_applied_raw, bool) or tie_break_applied_raw != tie_expected:
+                    tie_break_applied_matches_profit_tie = False
+
+                near_tie_raw = decision_item.get("near_tie")
+                near_tie_expected = (
+                    objective_gap_until_eta_expected <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+                )
+                if not isinstance(near_tie_raw, bool) or near_tie_raw != near_tie_expected:
+                    near_tie_matches_profit_gap_threshold = False
+
+            try:
+                profit_gap_reported_raw = decision_item.get("expected_gross_profit_gap_until_eta")
+                if profit_gap_reported_raw is None:
+                    profit_gap_reported_raw = decision_item.get("profit_gap_until_eta")
+                profit_gap_reported = float(profit_gap_reported_raw)
             except (TypeError, ValueError):
                 profit_gap_consistent_with_profits = False
             else:
@@ -1214,12 +2104,25 @@ def _build_layer2_contract_summary(
         "eta_days_positive": eta_days_positive,
         "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_profit,
         "decision_reason_matches_allocation": decision_reason_matches_allocation,
-        "allocation_matches_profit_gate": allocation_matches_profit_gate,
+        "decision_reason_expected_gross_profit_matches_allocation": (
+            decision_reason_expected_gross_profit_matches_allocation
+        ),
+        "allocation_matches_composite_objective_gate": allocation_matches_composite_objective_gate,
+        "allocation_matches_profit_gate": allocation_matches_composite_objective_gate,
+        "allocation_matches_expected_gross_profit_gate": allocation_matches_composite_objective_gate,
         "tie_break_applied_matches_profit_tie": tie_break_applied_matches_profit_tie,
         "near_tie_matches_profit_gap_threshold": near_tie_matches_profit_gap_threshold,
         "profit_gap_consistent_with_profits": profit_gap_consistent_with_profits,
+        "expected_gross_profit_gap_consistent_with_expected_gross_profits": (
+            profit_gap_consistent_with_profits
+        ),
         "gmroi_gap_consistent_with_gmroi": gmroi_gap_consistent_with_gmroi,
         "capital_locked_metric_valid": capital_locked_metric_valid,
+        "objective_required_fields_present": objective_required_fields_present,
+        "objective_score_fields_numeric": objective_score_fields_numeric,
+        "objective_components_present": objective_components_present,
+        "objective_components_numeric": objective_components_numeric,
+        "objective_components_consistent_with_scores": objective_components_consistent_with_scores,
     }
     return {
         "version": LAYER2_CONTRACT_VERSION,
@@ -1228,6 +2131,16 @@ def _build_layer2_contract_summary(
         "summary_expected": summary_expected,
         "summary_actual": summary_actual,
         "checks": checks,
+        "legacy_aliases": {
+            "allocation_matches_profit_gate": {
+                "alias_for": "allocation_matches_composite_objective_gate",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "allocation_matches_expected_gross_profit_gate": {
+                "alias_for": "allocation_matches_composite_objective_gate",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+        },
     }
 
 
@@ -1238,22 +2151,69 @@ def _build_layer2_decision_quality_summary(
     tie_count = 0
     near_tie_count = 0
     total_profit_gap = 0.0
+    total_objective_gap = 0.0
     total_gmroi_gap = 0.0
     total_capital_locked = 0.0
+    total_objective_score_main = 0.0
+    total_objective_score_assorti = 0.0
+    objective_fields_valid_count = 0
+    objective_fields_missing_count = 0
+    objective_fields_invalid_count = 0
 
     decision_reason_counts = {
-        "profit_main_gt_assorti": 0,
-        "profit_assorti_gt_main": 0,
-        "profit_tie_hold": 0,
+        LAYER2_DECISION_REASON_LEGACY_BY_DECISION["main"]: 0,
+        LAYER2_DECISION_REASON_LEGACY_BY_DECISION["assorti"]: 0,
+        LAYER2_DECISION_REASON_LEGACY_BY_DECISION["hold"]: 0,
+    }
+    decision_reason_counts_expected_gross_profit = {
+        LAYER2_DECISION_REASON_CANONICAL_BY_DECISION["main"]: 0,
+        LAYER2_DECISION_REASON_CANONICAL_BY_DECISION["assorti"]: 0,
+        LAYER2_DECISION_REASON_CANONICAL_BY_DECISION["hold"]: 0,
+    }
+    decision_reason_counts_objective_score = {
+        LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION["main"]: 0,
+        LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION["assorti"]: 0,
+        LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION["hold"]: 0,
+    }
+    canonical_reason_by_legacy_reason = {
+        legacy_reason: LAYER2_DECISION_REASON_CANONICAL_BY_DECISION[decision]
+        for decision, legacy_reason in LAYER2_DECISION_REASON_LEGACY_BY_DECISION.items()
+    }
+    objective_reason_by_legacy_reason = {
+        legacy_reason: LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION[decision]
+        for decision, legacy_reason in LAYER2_DECISION_REASON_LEGACY_BY_DECISION.items()
     }
 
     for decision_item in layer2_allocation_decisions:
         try:
-            profit_main = float(decision_item.get("profit_if_main_until_eta", 0.0))
-            profit_assorti = float(decision_item.get("profit_if_assorti_until_eta", 0.0))
+            profit_main_raw = decision_item.get("expected_gross_profit_if_main_until_eta")
+            if profit_main_raw is None:
+                profit_main_raw = decision_item.get("profit_if_main_until_eta", 0.0)
+            profit_assorti_raw = decision_item.get("expected_gross_profit_if_assorti_until_eta")
+            if profit_assorti_raw is None:
+                profit_assorti_raw = decision_item.get("profit_if_assorti_until_eta", 0.0)
+            profit_main = float(profit_main_raw)
+            profit_assorti = float(profit_assorti_raw)
         except (TypeError, ValueError):
             profit_main = 0.0
             profit_assorti = 0.0
+
+        objective_main_raw = decision_item.get("objective_score_if_main_until_eta")
+        objective_assorti_raw = decision_item.get("objective_score_if_assorti_until_eta")
+        if objective_main_raw is None or objective_assorti_raw is None:
+            objective_fields_missing_count += 1
+            objective_main = 0.0
+            objective_assorti = 0.0
+        else:
+            try:
+                objective_main = float(objective_main_raw)
+                objective_assorti = float(objective_assorti_raw)
+            except (TypeError, ValueError):
+                objective_fields_invalid_count += 1
+                objective_main = 0.0
+                objective_assorti = 0.0
+            else:
+                objective_fields_valid_count += 1
 
         try:
             gmroi_main = float(decision_item.get("gmroi_main", 0.0))
@@ -1268,22 +2228,26 @@ def _build_layer2_decision_quality_summary(
             capital_locked = 0.0
 
         profit_gap = abs(profit_main - profit_assorti)
+        objective_gap = abs(objective_main - objective_assorti)
         gmroi_gap = abs(gmroi_main - gmroi_assorti)
         total_profit_gap += profit_gap
+        total_objective_gap += objective_gap
         total_gmroi_gap += gmroi_gap
         total_capital_locked += max(capital_locked, 0.0)
+        total_objective_score_main += objective_main
+        total_objective_score_assorti += objective_assorti
 
         tie_break_applied_raw = decision_item.get("tie_break_applied")
         tie_break_applied = (
             tie_break_applied_raw
             if isinstance(tie_break_applied_raw, bool)
-            else profit_gap <= 1e-9
+            else objective_gap <= 1e-9
         )
         near_tie_raw = decision_item.get("near_tie")
         near_tie = (
             near_tie_raw
             if isinstance(near_tie_raw, bool)
-            else profit_gap <= near_tie_profit_gap_threshold
+            else objective_gap <= near_tie_profit_gap_threshold
         )
         if tie_break_applied:
             tie_count += 1
@@ -1293,21 +2257,68 @@ def _build_layer2_decision_quality_summary(
         decision_reason = str(decision_item.get("decision_reason", "")).strip()
         if decision_reason in decision_reason_counts:
             decision_reason_counts[decision_reason] += 1
+        decision_reason_expected_gross_profit = str(
+            decision_item.get("decision_reason_expected_gross_profit", "")
+        ).strip()
+        if decision_reason_expected_gross_profit in decision_reason_counts_expected_gross_profit:
+            decision_reason_counts_expected_gross_profit[decision_reason_expected_gross_profit] += 1
+        else:
+            fallback_canonical_reason = canonical_reason_by_legacy_reason.get(decision_reason)
+            if fallback_canonical_reason is not None:
+                decision_reason_counts_expected_gross_profit[fallback_canonical_reason] += 1
+
+        decision_reason_objective_score = str(
+            decision_item.get("decision_reason_objective_score", "")
+        ).strip()
+        if decision_reason_objective_score in decision_reason_counts_objective_score:
+            decision_reason_counts_objective_score[decision_reason_objective_score] += 1
+        else:
+            fallback_objective_reason = objective_reason_by_legacy_reason.get(decision_reason)
+            if fallback_objective_reason is not None:
+                decision_reason_counts_objective_score[fallback_objective_reason] += 1
 
     decision_count = len(layer2_allocation_decisions)
     divisor = max(decision_count, 1)
+    avg_profit_gap_until_eta = round(total_profit_gap / float(divisor), 4)
     return {
-        "profit_gate_primary": True,
+        "primary_gate": LAYER2_DECISION_GATE_CANONICAL,
+        "composite_objective_gate_primary": True,
+        "legacy_gate_primary_aliases": {
+            "profit_gate_primary": {
+                "value": False,
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "expected_gross_profit_gate_primary": {
+                "value": False,
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+        },
+        "profit_gate_primary": False,
+        "expected_gross_profit_gate_primary": False,
         "gmroi_usage": "diagnostic_only",
+        "decision_gate": LAYER2_DECISION_GATE_CANONICAL,
+        "decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
+        "legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
         "near_tie_profit_gap_threshold": round(float(near_tie_profit_gap_threshold), 4),
         "decision_count": decision_count,
         "tie_count": tie_count,
         "near_tie_count": near_tie_count,
         "decision_reason_counts": decision_reason_counts,
-        "avg_profit_gap_until_eta": round(total_profit_gap / float(divisor), 4),
+        "decision_reason_counts_expected_gross_profit": (
+            decision_reason_counts_expected_gross_profit
+        ),
+        "decision_reason_counts_objective_score": decision_reason_counts_objective_score,
+        "avg_profit_gap_until_eta": avg_profit_gap_until_eta,
+        "avg_expected_gross_profit_gap_until_eta": avg_profit_gap_until_eta,
+        "avg_objective_score_gap_until_eta": round(total_objective_gap / float(divisor), 4),
         "avg_gmroi_gap": round(total_gmroi_gap / float(divisor), 4),
         "capital_locked_total": round(total_capital_locked, 4),
         "capital_locked_avg": round(total_capital_locked / float(divisor), 4),
+        "objective_score_main_total": round(total_objective_score_main, 4),
+        "objective_score_assorti_total": round(total_objective_score_assorti, 4),
+        "objective_fields_valid_count": objective_fields_valid_count,
+        "objective_fields_missing_count": objective_fields_missing_count,
+        "objective_fields_invalid_count": objective_fields_invalid_count,
     }
 
 
@@ -1598,6 +2609,14 @@ def _build_layer4_scenarios(
     reorder_point_days: int,
     expected_horizon_sales: float,
     layer3_purchase_shaping: dict[str, int],
+    unit_capital_per_unit: float,
+    margin_main_per_unit: float,
+    margin_assorti_per_unit: float,
+    average_realized_price_main: float = ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN,
+    average_realized_price_assorti: float = ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI,
+    capital_cost_rate: float = LAYER2_CAPITAL_COST_RATE,
+    stockout_penalty_weight: float = LAYER2_STOCKOUT_PENALTY_WEIGHT,
+    overstock_penalty_weight: float = LAYER2_OVERSTOCK_PENALTY_WEIGHT,
 ) -> list[dict[str, str | int | float]]:
     decision_lines_total = max(
         int(layer3_purchase_shaping.get("main_lines", 0))
@@ -1614,10 +2633,19 @@ def _build_layer4_scenarios(
 
     scenarios: list[dict[str, str | int | float]] = []
     reorder_anchor = max(int(reorder_point_days), 1)
+    overstock_anchor = max(reorder_anchor * 2, 1)
+    unit_capital = max(float(unit_capital_per_unit), 0.0)
+    margin_main = max(float(margin_main_per_unit), 0.0)
+    margin_assorti = max(float(margin_assorti_per_unit), 0.0)
+    price_main = max(float(average_realized_price_main), 0.0)
+    price_assorti = max(float(average_realized_price_assorti), 0.0)
+    capital_cost_rate_value = max(float(capital_cost_rate), 0.0)
+    stockout_penalty_weight_value = max(float(stockout_penalty_weight), 0.0)
+    overstock_penalty_weight_value = max(float(overstock_penalty_weight), 0.0)
 
     for scenario_name, factor in LAYER4_SCENARIO_FACTORS:
         purchase_units = max(_ceil_to_int(float(base_purchase_units) * factor), 0)
-        total_capital_required = round(float(purchase_units) * LAYER2_UNIT_CAPITAL_PROXY, 2)
+        total_capital_required = round(float(purchase_units) * unit_capital, 2)
 
         projected_units = max(int(available_bundles_for_cover) + purchase_units, 0)
         if total_daily_sales > 0:
@@ -1629,11 +2657,54 @@ def _build_layer4_scenarios(
                     1.0,
                 ),
             )
+            overstock_risk_proxy = max(
+                0.0,
+                min(
+                    (projected_cover_days - float(overstock_anchor)) / float(overstock_anchor),
+                    1.0,
+                ),
+            )
             expected_turnover_proxy = float(expected_horizon_sales) / float(max(projected_units, 1))
         else:
             projected_cover_days = 9999.0
             stockout_risk_proxy = 0.0
+            overstock_risk_proxy = 0.0
             expected_turnover_proxy = 0.0
+
+        weighted_price = (price_main * (1.0 - assorti_share)) + (price_assorti * assorti_share)
+        weighted_margin = (margin_main * (1.0 - assorti_share)) + (margin_assorti * assorti_share)
+        expected_sellable_units = min(float(projected_units), float(max(expected_horizon_sales, 0.0)))
+        expected_revenue = expected_sellable_units * weighted_price
+        expected_gross_profit = expected_sellable_units * weighted_margin
+        expected_margin_percent = (
+            (expected_gross_profit / expected_revenue) * 100.0
+            if expected_revenue > 0
+            else 0.0
+        )
+        expected_turnover_days = projected_cover_days
+
+        objective_components = _compute_objective_components(
+            expected_gross_profit=expected_gross_profit,
+            capital_locked=total_capital_required,
+            stockout_risk=stockout_risk_proxy,
+            overstock_risk=overstock_risk_proxy,
+            expected_lost_margin_if_stockout=expected_gross_profit,
+            inventory_carrying_cost=total_capital_required,
+            capital_cost_rate=capital_cost_rate_value,
+            stockout_penalty_weight=stockout_penalty_weight_value,
+            overstock_penalty_weight=overstock_penalty_weight_value,
+            horizon_factor=1.0,
+        )
+        risk_adjusted_profit = (
+            expected_gross_profit
+            - objective_components["stockout_penalty"]
+            - objective_components["overstock_penalty"]
+        )
+        capital_efficiency_metric = (
+            expected_gross_profit / total_capital_required
+            if total_capital_required > 0
+            else 0.0
+        )
 
         if assorti_share <= 0:
             assorti_sustainability_impact = "neutral_no_assorti_signal"
@@ -1651,15 +2722,312 @@ def _build_layer4_scenarios(
                 "scenario": scenario_name,
                 "purchase_units": int(purchase_units),
                 "total_capital_required": total_capital_required,
+                "expected_revenue": round(expected_revenue, 2),
+                "expected_gross_profit": round(expected_gross_profit, 2),
+                "expected_margin_percent": round(expected_margin_percent, 2),
+                "expected_turnover_days": round(expected_turnover_days, 2),
                 "expected_turnover_proxy": round(expected_turnover_proxy, 4),
+                "stockout_probability_proxy": round(stockout_risk_proxy, 4),
                 "stockout_risk_proxy": round(stockout_risk_proxy, 4),
+                "overstock_risk_proxy": round(overstock_risk_proxy, 4),
+                "capital_cost_penalty": round(objective_components["capital_cost_penalty"], 2),
+                "stockout_penalty": round(objective_components["stockout_penalty"], 2),
+                "overstock_penalty": round(objective_components["overstock_penalty"], 2),
+                "risk_adjusted_profit": round(risk_adjusted_profit, 2),
+                "capital_efficiency_metric": round(capital_efficiency_metric, 6),
+                "objective_score": round(objective_components["objective_score"], 2),
+                "capital_delta_vs_balanced": 0.0,
+                "expected_revenue_delta_vs_balanced": 0.0,
+                "expected_gross_profit_delta_vs_balanced": 0.0,
+                "gross_profit_delta_vs_balanced": 0.0,
+                "objective_score_delta_vs_balanced": 0.0,
                 "projected_cover_days": round(projected_cover_days, 2),
                 "assorti_sustainability_proxy": assorti_sustainability_proxy,
                 "assorti_sustainability_impact": assorti_sustainability_impact,
             }
         )
 
+    balanced = next(
+        (
+            item
+            for item in scenarios
+            if str(item.get("scenario", "")).strip().lower() == "balanced"
+        ),
+        None,
+    )
+    balanced_capital = float(balanced.get("total_capital_required", 0.0)) if balanced is not None else 0.0
+    balanced_revenue = float(balanced.get("expected_revenue", 0.0)) if balanced is not None else 0.0
+    balanced_profit = float(balanced.get("expected_gross_profit", 0.0)) if balanced is not None else 0.0
+    balanced_objective = float(balanced.get("objective_score", 0.0)) if balanced is not None else 0.0
+
+    for scenario in scenarios:
+        capital_value = float(scenario.get("total_capital_required", 0.0))
+        revenue_value = float(scenario.get("expected_revenue", 0.0))
+        profit_value = float(scenario.get("expected_gross_profit", 0.0))
+        objective_value = float(scenario.get("objective_score", 0.0))
+        scenario["capital_delta_vs_balanced"] = round(capital_value - balanced_capital, 2)
+        scenario["expected_revenue_delta_vs_balanced"] = round(revenue_value - balanced_revenue, 2)
+        expected_gross_profit_delta = round(profit_value - balanced_profit, 2)
+        scenario["expected_gross_profit_delta_vs_balanced"] = expected_gross_profit_delta
+        scenario["gross_profit_delta_vs_balanced"] = expected_gross_profit_delta
+        scenario["objective_score_delta_vs_balanced"] = round(objective_value - balanced_objective, 2)
+
     return scenarios
+
+
+def _build_line_objective_capital_rankings(
+    *,
+    candidate_lines: list[ProductionOrderRecommendationLine],
+    layer3_decision_by_line: dict[tuple[int, int], str],
+    layer1_stock_health_metrics: list[dict[str, int | float | None]],
+    margin_main_per_unit: float,
+    margin_assorti_per_unit: float,
+    unit_capital_per_unit: float,
+    capital_cost_rate: float,
+    stockout_penalty_weight: float,
+    overstock_penalty_weight: float,
+) -> list[dict[str, int | float | str]]:
+    line_risk_by_key: dict[tuple[int, int], tuple[float, float]] = {}
+    for metric in layer1_stock_health_metrics:
+        try:
+            key = (int(metric.get("color_id")), int(metric.get("size_id")))
+        except (TypeError, ValueError):
+            continue
+        line_risk_by_key[key] = (
+            _bounded_unit_float(metric.get("stockout_risk", 0.0)),
+            _bounded_unit_float(metric.get("overstock_risk", 0.0)),
+        )
+
+    unit_capital = max(float(unit_capital_per_unit), 0.0)
+    margin_main = max(float(margin_main_per_unit), 0.0)
+    margin_assorti = max(float(margin_assorti_per_unit), 0.0)
+    rows: list[dict[str, int | float | str]] = []
+
+    for line in candidate_lines:
+        requested_qty = max(int(line.recommended_qty), 0)
+        if requested_qty <= 0:
+            continue
+
+        line_key = (int(line.color_id), int(line.size_id))
+        allocation_decision = str(layer3_decision_by_line.get(line_key, "main")).strip().lower()
+        if allocation_decision == "assorti":
+            margin_per_unit = margin_assorti
+        elif allocation_decision == "hold":
+            margin_per_unit = min(margin_main, margin_assorti)
+        else:
+            allocation_decision = "main"
+            margin_per_unit = margin_main
+
+        stockout_risk, overstock_risk = line_risk_by_key.get(line_key, (0.0, 0.0))
+        capital_required = float(requested_qty) * unit_capital
+        expected_gross_profit = float(requested_qty) * margin_per_unit
+        objective_components = _compute_objective_components(
+            expected_gross_profit=expected_gross_profit,
+            capital_locked=capital_required,
+            stockout_risk=stockout_risk,
+            overstock_risk=overstock_risk,
+            expected_lost_margin_if_stockout=expected_gross_profit,
+            inventory_carrying_cost=capital_required,
+            capital_cost_rate=capital_cost_rate,
+            stockout_penalty_weight=stockout_penalty_weight,
+            overstock_penalty_weight=overstock_penalty_weight,
+            horizon_factor=1.0,
+        )
+        objective_score = objective_components["objective_score"]
+        objective_score_per_capital = (
+            objective_score / capital_required
+            if capital_required > 0
+            else objective_score
+        )
+
+        rows.append(
+            {
+                "color_id": int(line.color_id),
+                "size_id": int(line.size_id),
+                "requested_qty": requested_qty,
+                "allocation_decision": allocation_decision,
+                "stockout_risk": round(stockout_risk, 4),
+                "overstock_risk": round(overstock_risk, 4),
+                "capital_required": round(capital_required, 4),
+                "expected_gross_profit": round(expected_gross_profit, 4),
+                "objective_score": round(objective_score, 4),
+                "objective_score_per_capital": round(objective_score_per_capital, 6),
+            }
+        )
+
+    ranked = sorted(
+        rows,
+        key=lambda item: (
+            -float(item["objective_score_per_capital"]),
+            -float(item["objective_score"]),
+            int(item["color_id"]),
+            int(item["size_id"]),
+        ),
+    )
+    for index, row in enumerate(ranked, start=1):
+        row["rank"] = index
+    return ranked
+
+
+def _apply_capital_constraint_to_candidate_lines(
+    *,
+    candidate_lines: list[ProductionOrderRecommendationLine],
+    ranked_line_objectives: list[dict[str, int | float | str]],
+    available_capital: float | None,
+    unit_capital_per_unit: float,
+) -> tuple[list[ProductionOrderRecommendationLine], dict[str, object]]:
+    unit_capital = max(float(unit_capital_per_unit), 0.0)
+    required_capital_before = round(
+        sum(max(int(line.recommended_qty), 0) * unit_capital for line in candidate_lines),
+        2,
+    )
+
+    if available_capital is None:
+        return (
+            candidate_lines,
+            {
+                "status": "available_capital_not_set",
+                "constrained": False,
+                "available_capital": None,
+                "required_capital_before_constraint": required_capital_before,
+                "allocated_capital_after_constraint": required_capital_before,
+                "remaining_capital": None,
+                "line_count_before": len(candidate_lines),
+                "line_count_after": len(candidate_lines),
+                "cutoff_line": None,
+                "ranking": ranked_line_objectives,
+            },
+        )
+
+    available_capital_value = max(float(available_capital), 0.0)
+    if unit_capital <= 0 or required_capital_before <= available_capital_value:
+        return (
+            candidate_lines,
+            {
+                "status": "within_budget",
+                "constrained": False,
+                "available_capital": round(available_capital_value, 2),
+                "required_capital_before_constraint": required_capital_before,
+                "allocated_capital_after_constraint": required_capital_before,
+                "remaining_capital": round(max(available_capital_value - required_capital_before, 0.0), 2),
+                "line_count_before": len(candidate_lines),
+                "line_count_after": len(candidate_lines),
+                "cutoff_line": None,
+                "ranking": ranked_line_objectives,
+            },
+        )
+
+    candidate_line_by_key = {
+        (int(line.color_id), int(line.size_id)): line
+        for line in candidate_lines
+    }
+    constrained_lines: list[ProductionOrderRecommendationLine] = []
+    remaining_capital = available_capital_value
+    allocated_capital = 0.0
+    cutoff_line: dict[str, object] | None = None
+
+    for ranked_line in ranked_line_objectives:
+        key = (int(ranked_line["color_id"]), int(ranked_line["size_id"]))
+        source_line = candidate_line_by_key.get(key)
+        if source_line is None:
+            continue
+
+        requested_qty = max(int(source_line.recommended_qty), 0)
+        if requested_qty <= 0:
+            continue
+
+        max_affordable_qty = int(remaining_capital // unit_capital)
+        allocated_qty = min(requested_qty, max(max_affordable_qty, 0))
+
+        if allocated_qty <= 0:
+            if cutoff_line is None:
+                cutoff_line = {
+                    "rank": int(ranked_line.get("rank", 0)),
+                    "color_id": int(source_line.color_id),
+                    "size_id": int(source_line.size_id),
+                    "requested_qty": requested_qty,
+                    "allocated_qty": 0,
+                    "objective_score_per_capital": float(
+                        ranked_line.get("objective_score_per_capital", 0.0)
+                    ),
+                }
+            continue
+
+        if allocated_qty < requested_qty and cutoff_line is None:
+            cutoff_line = {
+                "rank": int(ranked_line.get("rank", 0)),
+                "color_id": int(source_line.color_id),
+                "size_id": int(source_line.size_id),
+                "requested_qty": requested_qty,
+                "allocated_qty": allocated_qty,
+                "objective_score_per_capital": float(
+                    ranked_line.get("objective_score_per_capital", 0.0)
+                ),
+            }
+
+        constrained_lines.append(
+            ProductionOrderRecommendationLine(
+                article_id=source_line.article_id,
+                color_id=source_line.color_id,
+                size_id=source_line.size_id,
+                recommended_qty=allocated_qty,
+                source_reason=f"{source_line.source_reason}|capital_constraint",
+            )
+        )
+
+        allocated_capital += float(allocated_qty) * unit_capital
+        remaining_capital = max(remaining_capital - (float(allocated_qty) * unit_capital), 0.0)
+
+    return (
+        constrained_lines,
+        {
+            "status": "budget_limited_applied",
+            "constrained": True,
+            "available_capital": round(available_capital_value, 2),
+            "required_capital_before_constraint": required_capital_before,
+            "allocated_capital_after_constraint": round(allocated_capital, 2),
+            "remaining_capital": round(remaining_capital, 2),
+            "line_count_before": len(candidate_lines),
+            "line_count_after": len(constrained_lines),
+            "cutoff_line": cutoff_line,
+            "ranking": ranked_line_objectives,
+        },
+    )
+
+
+def _build_capital_gap_summary(
+    *,
+    layer4_scenarios: list[dict[str, str | int | float]],
+    available_capital: float | None,
+) -> dict[str, float | str | None]:
+    balanced = next(
+        (
+            item
+            for item in layer4_scenarios
+            if str(item.get("scenario", "")).strip().lower() == "balanced"
+        ),
+        None,
+    )
+    required_capital = (
+        float(balanced.get("total_capital_required", 0.0))
+        if balanced is not None
+        else 0.0
+    )
+    if available_capital is None:
+        return {
+            "status": "available_capital_not_set",
+            "available_capital": None,
+            "required_capital": round(required_capital, 2),
+            "deficit_or_surplus": None,
+        }
+
+    deficit_or_surplus = round(float(available_capital) - required_capital, 2)
+    return {
+        "status": "ok",
+        "available_capital": round(float(available_capital), 2),
+        "required_capital": round(required_capital, 2),
+        "deficit_or_surplus": deficit_or_surplus,
+    }
 
 
 def _build_layer4_contract_summary(
@@ -1719,6 +3087,42 @@ def _build_layer4_contract_summary(
     }
 
 
+def _build_layer4_aggregate_deltas(
+    layer4_scenarios: list[dict[str, str | int | float]],
+) -> dict[str, dict[str, float]]:
+    def _scenario(name: str) -> dict[str, str | int | float] | None:
+        scenario_key = name.strip().lower()
+        return next(
+            (
+                item
+                for item in layer4_scenarios
+                if str(item.get("scenario", "")).strip().lower() == scenario_key
+            ),
+            None,
+        )
+
+    conservative = _scenario("conservative")
+    aggressive = _scenario("aggressive")
+
+    conservative_capital = float(conservative.get("total_capital_required", 0.0)) if conservative else 0.0
+    aggressive_capital = float(aggressive.get("total_capital_required", 0.0)) if aggressive else 0.0
+    conservative_revenue = float(conservative.get("expected_revenue", 0.0)) if conservative else 0.0
+    aggressive_revenue = float(aggressive.get("expected_revenue", 0.0)) if aggressive else 0.0
+    conservative_profit = float(conservative.get("expected_gross_profit", 0.0)) if conservative else 0.0
+    aggressive_profit = float(aggressive.get("expected_gross_profit", 0.0)) if aggressive else 0.0
+    conservative_objective = float(conservative.get("objective_score", 0.0)) if conservative else 0.0
+    aggressive_objective = float(aggressive.get("objective_score", 0.0)) if aggressive else 0.0
+
+    return {
+        "aggressive_vs_conservative": {
+            "capital_delta": round(aggressive_capital - conservative_capital, 2),
+            "expected_revenue_delta": round(aggressive_revenue - conservative_revenue, 2),
+            "gross_profit_delta": round(aggressive_profit - conservative_profit, 2),
+            "objective_delta": round(aggressive_objective - conservative_objective, 2),
+        }
+    }
+
+
 def _build_layer5_intervention_signals(
     *,
     risk_level: str,
@@ -1726,18 +3130,32 @@ def _build_layer5_intervention_signals(
     in_flight_effective_qty_total: int,
     unavoidable_stockout_risk_threshold: float = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
     accelerate_production_risk_threshold: float = LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
-) -> dict[str, str | bool | float | list[str]]:
-    aggressive = next(
-        (
-            item
-            for item in layer4_scenarios
-            if str(item.get("scenario", "")).strip().lower() == "aggressive"
-        ),
-        None,
-    )
+    accelerate_action_cost_rate: float = LAYER5_ACCELERATE_ACTION_COST_RATE,
+    price_slowdown_lost_volume_rate: float = LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE,
+    reduce_order_marginal_profit_rate: float = LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+) -> dict[str, str | bool | float | list[str] | dict[str, float | str]]:
+    def _scenario(name: str) -> dict[str, str | int | float] | None:
+        scenario_key = name.strip().lower()
+        return next(
+            (
+                item
+                for item in layer4_scenarios
+                if str(item.get("scenario", "")).strip().lower() == scenario_key
+            ),
+            None,
+        )
 
-    aggressive_stockout_risk = (
-        float(aggressive.get("stockout_risk_proxy", 0.0))
+    conservative = _scenario("conservative")
+    balanced = _scenario("balanced")
+    aggressive = _scenario("aggressive")
+
+    aggressive_stockout_risk = _bounded_unit_float(
+        aggressive.get("stockout_risk_proxy", 0.0)
+        if aggressive is not None
+        else 0.0
+    )
+    aggressive_overstock_risk = _bounded_unit_float(
+        aggressive.get("overstock_risk_proxy", 0.0)
         if aggressive is not None
         else 0.0
     )
@@ -1747,36 +3165,149 @@ def _build_layer5_intervention_signals(
         and aggressive_stockout_risk >= unavoidable_stockout_risk_threshold
     )
 
+    accelerate_action_cost_rate_value = max(float(accelerate_action_cost_rate), 0.0)
+    price_slowdown_lost_volume_rate_value = max(float(price_slowdown_lost_volume_rate), 0.0)
+    reduce_order_marginal_profit_rate_value = max(float(reduce_order_marginal_profit_rate), 0.0)
+
+    aggressive_stockout_penalty = max(
+        float(aggressive.get("stockout_penalty", aggressive_stockout_risk))
+        if aggressive is not None
+        else aggressive_stockout_risk,
+        0.0,
+    )
+    aggressive_overstock_penalty = max(
+        float(aggressive.get("overstock_penalty", aggressive_overstock_risk))
+        if aggressive is not None
+        else aggressive_overstock_risk,
+        0.0,
+    )
+    aggressive_capital = max(
+        float(aggressive.get("total_capital_required", 0.0))
+        if aggressive is not None
+        else 0.0,
+        0.0,
+    )
+    aggressive_profit = max(
+        float(aggressive.get("expected_gross_profit", 0.0))
+        if aggressive is not None
+        else 0.0,
+        0.0,
+    )
+    conservative_stockout_penalty = max(
+        float(conservative.get("stockout_penalty", 0.0))
+        if conservative is not None
+        else 0.0,
+        0.0,
+    )
+    conservative_profit = max(
+        float(conservative.get("expected_gross_profit", 0.0))
+        if conservative is not None
+        else 0.0,
+        0.0,
+    )
+    balanced_profit = max(
+        float(balanced.get("expected_gross_profit", 0.0))
+        if balanced is not None
+        else 0.0,
+        0.0,
+    )
+
+    expected_loss_if_no_action = max(
+        aggressive_stockout_penalty,
+        aggressive_stockout_risk,
+    )
+    action_cost = aggressive_capital * accelerate_action_cost_rate_value
+
+    margin_improvement_from_slowdown = max(
+        aggressive_stockout_penalty - conservative_stockout_penalty,
+        aggressive_stockout_risk,
+    )
+    lost_volume_cost = max(aggressive_profit - conservative_profit, 0.0) * price_slowdown_lost_volume_rate_value
+
+    overstock_penalty = max(aggressive_overstock_penalty, aggressive_overstock_risk)
+    marginal_profit_of_additional_units = max(aggressive_profit - balanced_profit, 0.0)
+
     signals: list[str] = []
     reason = "none"
 
-    if unavoidable_stockout:
-        if in_flight_effective_qty_total <= 0:
-            if aggressive_stockout_risk >= accelerate_production_risk_threshold:
-                signals.append("accelerate_production")
-                reason = "no_effective_in_flight_and_high_stockout_risk"
-            else:
-                signals.append("increase_price_to_slow_velocity")
-                reason = "no_effective_in_flight_but_stockout_risk_persists"
-        elif aggressive_stockout_risk >= accelerate_production_risk_threshold:
+    accelerate_condition = (
+        unavoidable_stockout
+        and aggressive_stockout_risk >= accelerate_production_risk_threshold
+        and expected_loss_if_no_action > action_cost
+    )
+    increase_price_condition = (
+        unavoidable_stockout
+        and margin_improvement_from_slowdown > lost_volume_cost
+    )
+    reduce_order_condition = (
+        overstock_penalty
+        > (marginal_profit_of_additional_units * reduce_order_marginal_profit_rate_value)
+        and aggressive_overstock_risk >= max(aggressive_stockout_risk, 0.2)
+    )
+
+    if in_flight_effective_qty_total <= 0:
+        if accelerate_condition:
             signals.append("accelerate_production")
+        elif increase_price_condition:
             signals.append("increase_price_to_slow_velocity")
-            reason = "in_flight_present_but_severe_stockout_risk"
-        else:
+    else:
+        if accelerate_condition:
+            signals.append("accelerate_production")
+        if increase_price_condition:
             signals.append("increase_price_to_slow_velocity")
-            reason = "in_flight_present_but_stockout_risk_persists"
+    if reduce_order_condition:
+        signals.append("reduce_order_size")
+
+    if signals == ["accelerate_production"]:
+        reason = (
+            "no_effective_in_flight_and_high_stockout_risk"
+            if in_flight_effective_qty_total <= 0
+            else "in_flight_present_but_severe_stockout_risk"
+        )
+    elif signals == ["increase_price_to_slow_velocity"]:
+        reason = (
+            "no_effective_in_flight_but_stockout_risk_persists"
+            if in_flight_effective_qty_total <= 0
+            else "in_flight_present_but_stockout_risk_persists"
+        )
+    elif signals == ["accelerate_production", "increase_price_to_slow_velocity"]:
+        reason = (
+            "no_effective_in_flight_and_high_stockout_risk"
+            if in_flight_effective_qty_total <= 0
+            else "in_flight_present_but_severe_stockout_risk"
+        )
+    elif signals == ["reduce_order_size"]:
+        reason = "overstock_penalty_exceeds_marginal_profit"
+    elif signals:
+        reason = "mixed_risk_and_cost_signals"
 
     return {
         "method": "deterministic_unavoidable_stockout_flags",
         "signal_policy": "critical_risk_thresholds",
+        "economic_policy": "cost_aware_thresholds",
         "unavoidable_stockout": unavoidable_stockout,
         "signals": signals,
         "reason": reason,
         "aggressive_stockout_risk_proxy": round(aggressive_stockout_risk, 4),
+        "aggressive_overstock_risk_proxy": round(aggressive_overstock_risk, 4),
         "risk_threshold": round(unavoidable_stockout_risk_threshold, 4),
         "signal_thresholds": {
             "accelerate_production": round(accelerate_production_risk_threshold, 4),
             "increase_price_to_slow_velocity": round(unavoidable_stockout_risk_threshold, 4),
+            "reduce_order_size": round(reduce_order_marginal_profit_rate_value, 4),
+        },
+        "economic_justification": {
+            "expected_loss_if_no_action": round(expected_loss_if_no_action, 4),
+            "action_cost": round(action_cost, 4),
+            "margin_improvement_from_slowdown": round(margin_improvement_from_slowdown, 4),
+            "lost_volume_cost": round(lost_volume_cost, 4),
+            "overstock_penalty": round(overstock_penalty, 4),
+            "marginal_profit_of_additional_units": round(marginal_profit_of_additional_units, 4),
+            "formulas": {
+                "accelerate_production": "expected_loss_if_no_action > action_cost",
+                "increase_price_to_slow_velocity": "margin_improvement_from_slowdown > lost_volume_cost",
+                "reduce_order_size": "overstock_penalty > marginal_profit_of_additional_units",
+            },
         },
     }
 
@@ -1786,6 +3317,7 @@ def _build_layer5_contract_summary(
     layer5_intervention: dict[str, object],
     unavoidable_stockout_risk_threshold: float,
     accelerate_production_risk_threshold: float,
+    reduce_order_marginal_profit_rate: float = LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
 ) -> dict[str, str | int | dict[str, bool]]:
     def _safe_float(value: object) -> float:
         try:
@@ -1795,6 +3327,7 @@ def _build_layer5_contract_summary(
 
     method = str(layer5_intervention.get("method", ""))
     signal_policy = str(layer5_intervention.get("signal_policy", ""))
+    economic_policy = str(layer5_intervention.get("economic_policy", ""))
     reason = str(layer5_intervention.get("reason", ""))
 
     unavoidable_raw = layer5_intervention.get("unavoidable_stockout")
@@ -1812,6 +3345,7 @@ def _build_layer5_contract_summary(
     price_slowdown_threshold = _safe_float(
         signal_thresholds.get("increase_price_to_slow_velocity")
     )
+    reduce_order_threshold = _safe_float(signal_thresholds.get("reduce_order_size"))
 
     signals_raw = layer5_intervention.get("signals")
     signals_list = signals_raw if isinstance(signals_raw, list) else []
@@ -1820,27 +3354,50 @@ def _build_layer5_contract_summary(
     known_signals = {
         "accelerate_production",
         "increase_price_to_slow_velocity",
+        "reduce_order_size",
     }
     signals_set = set(signals)
 
     expected_threshold = round(unavoidable_stockout_risk_threshold, 4)
     expected_accelerate_threshold = round(accelerate_production_risk_threshold, 4)
+    expected_reduce_order_threshold = round(float(reduce_order_marginal_profit_rate), 4)
     severity_risk_triggered = aggressive_stockout_risk >= accelerate_threshold
+
+    economic_justification_raw = layer5_intervention.get("economic_justification")
+    economic_justification = (
+        economic_justification_raw
+        if isinstance(economic_justification_raw, dict)
+        else {}
+    )
+    overstock_penalty = _safe_float(economic_justification.get("overstock_penalty"))
+    marginal_profit_of_additional_units = _safe_float(
+        economic_justification.get("marginal_profit_of_additional_units")
+    )
+
+    canonical_order = [
+        "accelerate_production",
+        "increase_price_to_slow_velocity",
+        "reduce_order_size",
+    ]
+    canonical_signals_filtered = [signal for signal in canonical_order if signal in signals_set]
 
     checks = {
         "method_matches_expected": method == "deterministic_unavoidable_stockout_flags",
         "signal_policy_matches_expected": signal_policy == "critical_risk_thresholds",
+        "economic_policy_present": economic_policy == "cost_aware_thresholds",
         "unavoidable_stockout_is_bool": unavoidable_stockout_is_bool,
         "aggressive_risk_in_unit_interval": 0.0 <= aggressive_stockout_risk <= 1.0,
         "thresholds_in_unit_interval": (
             0.0 <= risk_threshold <= 1.0
             and 0.0 <= accelerate_threshold <= 1.0
             and 0.0 <= price_slowdown_threshold <= 1.0
+            and 0.0 <= reduce_order_threshold <= 1.0
         ),
         "threshold_sources_match_effective": (
             risk_threshold == expected_threshold
             and accelerate_threshold == expected_accelerate_threshold
             and price_slowdown_threshold == expected_threshold
+            and reduce_order_threshold == expected_reduce_order_threshold
         ),
         "threshold_order_valid": accelerate_threshold >= price_slowdown_threshold,
         "risk_threshold_matches_price_slowdown_threshold": (
@@ -1848,15 +3405,17 @@ def _build_layer5_contract_summary(
         ),
         "signals_known_only": all(signal in known_signals for signal in signals),
         "signals_unique": len(signals) == len(signals_set),
-        "signals_order_is_canonical": (
-            signals == []
-            or signals == ["accelerate_production"]
-            or signals == ["increase_price_to_slow_velocity"]
-            or signals == ["accelerate_production", "increase_price_to_slow_velocity"]
-        ),
+        "signals_order_is_canonical": signals == canonical_signals_filtered,
         "non_unavoidable_has_no_signals_and_none_reason": (
             unavoidable_stockout
             or (not signals and reason == "none")
+            or (
+                "reduce_order_size" in signals_set
+                and reason in {
+                    "overstock_penalty_exceeds_marginal_profit",
+                    "mixed_risk_and_cost_signals",
+                }
+            )
         ),
         "unavoidable_has_signals": (
             not unavoidable_stockout
@@ -1879,6 +3438,14 @@ def _build_layer5_contract_summary(
                 signals == ["accelerate_production", "increase_price_to_slow_velocity"]
                 and reason == "in_flight_present_but_severe_stockout_risk"
             )
+            or (
+                signals == ["reduce_order_size"]
+                and reason == "overstock_penalty_exceeds_marginal_profit"
+            )
+            or (
+                bool(signals)
+                and reason == "mixed_risk_and_cost_signals"
+            )
         ),
         "accelerate_signal_requires_severe_risk": (
             "accelerate_production" not in signals_set
@@ -1887,6 +3454,10 @@ def _build_layer5_contract_summary(
         "price_slowdown_signal_requires_unavoidable_threshold": (
             "increase_price_to_slow_velocity" not in signals_set
             or aggressive_stockout_risk >= price_slowdown_threshold
+        ),
+        "reduce_order_signal_requires_overstock_penalty_gate": (
+            "reduce_order_size" not in signals_set
+            or overstock_penalty > marginal_profit_of_additional_units
         ),
     }
     return {
@@ -2316,6 +3887,303 @@ def _load_wb_bundle_daily_sales(
     return daily_sales_by_bundle, effective_as_of_date
 
 
+def _summarize_from_wb_price_samples(
+    *,
+    samples: list[dict[str, float | int]],
+    anomaly_max_deviation: float,
+) -> dict[str, int | float | bool | None]:
+    raw_samples = len(samples)
+    if raw_samples <= 0:
+        return {
+            "price": None,
+            "raw_samples": 0,
+            "accepted_samples": 0,
+            "anomaly_filtered": 0,
+            "raw_units": 0,
+            "accepted_units": 0,
+            "fallback_used": False,
+        }
+
+    raw_units = 0
+    raw_revenue = 0.0
+    accepted_units = 0
+    accepted_revenue = 0.0
+    accepted_samples = 0
+    anomaly_filtered = 0
+
+    for sample in samples:
+        qty = max(int(sample.get("qty", 0)), 0)
+        revenue = max(float(sample.get("revenue", 0.0)), 0.0)
+        if qty <= 0 or revenue <= 0:
+            continue
+
+        raw_units += qty
+        raw_revenue += revenue
+        unit_price = revenue / float(qty)
+
+        if accepted_units > 0:
+            baseline_price = accepted_revenue / float(max(accepted_units, 1))
+            if baseline_price > 0:
+                deviation = abs(unit_price - baseline_price) / baseline_price
+                if deviation > anomaly_max_deviation:
+                    anomaly_filtered += 1
+                    continue
+
+        accepted_units += qty
+        accepted_revenue += revenue
+        accepted_samples += 1
+
+    fallback_used = False
+    observed_price: float | None = None
+    if accepted_units > 0:
+        observed_price = round(accepted_revenue / float(accepted_units), 4)
+    elif raw_units > 0:
+        observed_price = round(raw_revenue / float(raw_units), 4)
+        fallback_used = True
+
+    return {
+        "price": observed_price,
+        "raw_samples": raw_samples,
+        "accepted_samples": accepted_samples,
+        "anomaly_filtered": anomaly_filtered,
+        "raw_units": raw_units,
+        "accepted_units": accepted_units,
+        "fallback_used": fallback_used,
+    }
+
+
+def _load_from_wb_observed_price_calibration(
+    *,
+    db: Session,
+    article_id: int,
+    bundle_type_ids: list[int],
+    observation_window_days: int,
+    effective_as_of_date: date | None,
+) -> dict[str, object]:
+    empty_summary = _summarize_from_wb_price_samples(
+        samples=[],
+        anomaly_max_deviation=FROM_WB_PRICE_ANOMALY_MAX_DEVIATION,
+    )
+    if effective_as_of_date is None or not bundle_type_ids:
+        return {
+            "source": FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+            "window": {
+                "start_date": None,
+                "end_date": None,
+            },
+            "anomaly_max_deviation": FROM_WB_PRICE_ANOMALY_MAX_DEVIATION,
+            "prices": {
+                "main": None,
+                "assorti": None,
+            },
+            "sample_counts": {
+                "main": {k: v for k, v in empty_summary.items() if k != "price"},
+                "assorti": {k: v for k, v in empty_summary.items() if k != "price"},
+            },
+        }
+
+    start_cutoff = effective_as_of_date - timedelta(days=observation_window_days - 1)
+
+    bundle_type_rows = (
+        db.query(BundleType.id, BundleType.is_assorti)
+        .filter(BundleType.id.in_(bundle_type_ids))
+        .all()
+    )
+    assorti_by_bundle_type = {
+        int(row.id): bool(row.is_assorti)
+        for row in bundle_type_rows
+    }
+
+    price_rows = (
+        db.query(
+            ArticleWbMapping.bundle_type_id,
+            WbSalesDaily.date.label("sales_date"),
+            func.coalesce(func.sum(WbSalesDaily.sales_qty), 0).label("total_sales_qty"),
+            func.coalesce(func.sum(WbSalesDaily.revenue), 0.0).label("total_revenue"),
+        )
+        .join(WbSalesDaily, WbSalesDaily.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(bundle_type_ids),
+            WbSalesDaily.date >= start_cutoff,
+            WbSalesDaily.date <= effective_as_of_date,
+        )
+        .group_by(ArticleWbMapping.bundle_type_id, WbSalesDaily.date)
+        .order_by(WbSalesDaily.date.asc(), ArticleWbMapping.bundle_type_id.asc())
+        .all()
+    )
+
+    samples_by_segment: dict[str, list[dict[str, float | int]]] = {
+        "main": [],
+        "assorti": [],
+    }
+    for row in price_rows:
+        bundle_type_id = int(row.bundle_type_id)
+        segment = "assorti" if assorti_by_bundle_type.get(bundle_type_id, False) else "main"
+        qty = max(int(row.total_sales_qty or 0), 0)
+        revenue = max(float(row.total_revenue or 0.0), 0.0)
+        if qty <= 0 or revenue <= 0:
+            continue
+
+        samples_by_segment[segment].append(
+            {
+                "qty": qty,
+                "revenue": revenue,
+            }
+        )
+
+    main_summary = _summarize_from_wb_price_samples(
+        samples=samples_by_segment["main"],
+        anomaly_max_deviation=FROM_WB_PRICE_ANOMALY_MAX_DEVIATION,
+    )
+    assorti_summary = _summarize_from_wb_price_samples(
+        samples=samples_by_segment["assorti"],
+        anomaly_max_deviation=FROM_WB_PRICE_ANOMALY_MAX_DEVIATION,
+    )
+
+    return {
+        "source": FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+        "window": {
+            "start_date": start_cutoff.isoformat(),
+            "end_date": effective_as_of_date.isoformat(),
+        },
+        "anomaly_max_deviation": FROM_WB_PRICE_ANOMALY_MAX_DEVIATION,
+        "prices": {
+            "main": main_summary["price"],
+            "assorti": assorti_summary["price"],
+        },
+        "sample_counts": {
+            "main": {k: v for k, v in main_summary.items() if k != "price"},
+            "assorti": {k: v for k, v in assorti_summary.items() if k != "price"},
+        },
+    }
+
+
+def _normalize_from_wb_commission_ratio(value: object) -> float | None:
+    normalized = _normalize_non_negative_float(value)
+    if normalized is None:
+        return None
+    if normalized > 1.0:
+        normalized = normalized / 100.0
+    return max(min(normalized, 1.0), 0.0)
+
+
+def _load_from_wb_observed_commission_calibration(
+    *,
+    db: Session,
+) -> dict[str, object]:
+    calibration = {
+        "source": FROM_WB_TARIFFS_COMMISSION_SOURCE,
+        "status": "unavailable",
+        "reason": "no_active_account",
+        "account_id": None,
+        "fetched_rows": 0,
+        "subjects_with_commission": 0,
+        "commission_percent": {
+            "main": None,
+            "assorti": None,
+        },
+        "commission_percent_stats": {
+            "avg": None,
+            "min": None,
+            "max": None,
+        },
+        "kgvp_supplier_percent_stats": {
+            "avg": None,
+            "min": None,
+            "max": None,
+        },
+    }
+
+    account = (
+        db.query(WbIntegrationAccount)
+        .filter(WbIntegrationAccount.is_active.is_(True))
+        .order_by(WbIntegrationAccount.id)
+        .first()
+    )
+    if account is None:
+        return calibration
+
+    calibration["account_id"] = int(account.id)
+    token = (account.api_token or "").strip()
+    if not token:
+        calibration["reason"] = "empty_api_token"
+        return calibration
+
+    try:
+        response = httpx.get(
+            f"{FROM_WB_TARIFFS_API_BASE_URL}{FROM_WB_TARIFFS_COMMISSION_PATH}",
+            headers={"Authorization": token},
+            timeout=FROM_WB_TARIFFS_HTTP_TIMEOUT_SECONDS,
+        )
+    except httpx.RequestError as exc:
+        calibration["reason"] = f"request_error:{exc.__class__.__name__}"
+        return calibration
+
+    if response.status_code == status.HTTP_401_UNAUTHORIZED:
+        calibration["reason"] = "unauthorized"
+        return calibration
+    if response.status_code >= status.HTTP_400_BAD_REQUEST:
+        calibration["reason"] = f"wb_api_http_{response.status_code}"
+        return calibration
+
+    try:
+        payload = response.json()
+    except ValueError:
+        calibration["reason"] = "invalid_json"
+        return calibration
+
+    if not isinstance(payload, dict):
+        calibration["reason"] = "invalid_payload"
+        return calibration
+
+    report_payload = payload.get("report")
+    if not isinstance(report_payload, list):
+        calibration["reason"] = "missing_report"
+        return calibration
+
+    report_rows: list[dict[str, object]] = []
+    for row in report_payload:
+        if isinstance(row, dict):
+            report_rows.append(row)
+    calibration["fetched_rows"] = len(report_rows)
+
+    commission_values: list[float] = []
+    for row in report_rows:
+        commission_ratio = _normalize_from_wb_commission_ratio(row.get("kgvpSupplier"))
+        if commission_ratio is None:
+            continue
+        commission_values.append(commission_ratio)
+
+    calibration["subjects_with_commission"] = len(commission_values)
+    if not commission_values:
+        calibration["status"] = "empty_report"
+        calibration["reason"] = "no_numeric_commission_values"
+        return calibration
+
+    avg_ratio = round(sum(commission_values) / float(len(commission_values)), 4)
+    min_ratio = round(min(commission_values), 4)
+    max_ratio = round(max(commission_values), 4)
+
+    calibration["status"] = "ok"
+    calibration["reason"] = None
+    calibration["commission_percent"] = {
+        "main": avg_ratio,
+        "assorti": avg_ratio,
+    }
+    calibration["commission_percent_stats"] = {
+        "avg": avg_ratio,
+        "min": min_ratio,
+        "max": max_ratio,
+    }
+    calibration["kgvp_supplier_percent_stats"] = {
+        "avg": round(avg_ratio * 100.0, 4),
+        "min": round(min_ratio * 100.0, 4),
+        "max": round(max_ratio * 100.0, 4),
+    }
+    return calibration
+
+
 def build_production_order_proposal_from_wb(
     db: Session,
     request: ProductionOrderProposalFromWbRequest,
@@ -2342,6 +4210,14 @@ def build_production_order_proposal_from_wb(
         observation_window_days=request.observation_window_days,
         as_of_date=request.as_of_date,
     )
+    observed_price_calibration = _load_from_wb_observed_price_calibration(
+        db=db,
+        article_id=request.article_id,
+        bundle_type_ids=bundle_type_ids,
+        observation_window_days=request.observation_window_days,
+        effective_as_of_date=effective_as_of_date,
+    )
+    observed_commission_calibration = _load_from_wb_observed_commission_calibration(db=db)
     wb_stock_by_bundle = _load_wb_bundle_stock(
         db=db,
         article_id=request.article_id,
@@ -2417,7 +4293,59 @@ def build_production_order_proposal_from_wb(
         overrides=request.overrides,
     )
 
-    response = build_production_order_proposal(db=db, request=proposal_request)
+    observed_price_values = observed_price_calibration.get("prices")
+    observed_price_source_raw = observed_price_calibration.get("source")
+    observed_price_source = (
+        observed_price_source_raw
+        if isinstance(observed_price_source_raw, str) and observed_price_source_raw.strip()
+        else FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    )
+
+    observed_commission_values = observed_commission_calibration.get("commission_percent")
+    observed_commission_source_raw = observed_commission_calibration.get("source")
+    observed_commission_source = (
+        observed_commission_source_raw
+        if isinstance(observed_commission_source_raw, str) and observed_commission_source_raw.strip()
+        else FROM_WB_TARIFFS_COMMISSION_SOURCE
+    )
+
+    runtime_economic_overrides: dict[str, float | None] = {}
+    runtime_economic_source_overrides: dict[str, str] = {}
+
+    if isinstance(observed_price_values, dict):
+        price_main = _normalize_non_negative_float(observed_price_values.get("main"))
+        if price_main is not None:
+            runtime_economic_overrides["average_realized_price_main"] = price_main
+            runtime_economic_source_overrides["average_realized_price_main"] = observed_price_source
+
+        price_assorti = _normalize_non_negative_float(observed_price_values.get("assorti"))
+        if price_assorti is not None:
+            runtime_economic_overrides["average_realized_price_assorti"] = price_assorti
+            runtime_economic_source_overrides["average_realized_price_assorti"] = observed_price_source
+
+    if isinstance(observed_commission_values, dict):
+        commission_main = _normalize_from_wb_commission_ratio(observed_commission_values.get("main"))
+        if commission_main is not None:
+            runtime_economic_overrides["wb_commission_percent_main"] = commission_main
+            runtime_economic_source_overrides["wb_commission_percent_main"] = observed_commission_source
+
+        commission_assorti = _normalize_from_wb_commission_ratio(
+            observed_commission_values.get("assorti")
+        )
+        if commission_assorti is not None:
+            runtime_economic_overrides["wb_commission_percent_assorti"] = commission_assorti
+            runtime_economic_source_overrides["wb_commission_percent_assorti"] = observed_commission_source
+
+    runtime_overrides_payload = runtime_economic_overrides or None
+    runtime_source_overrides_payload = runtime_economic_source_overrides or None
+
+    response = build_production_order_proposal(
+        db=db,
+        request=proposal_request,
+        runtime_economic_overrides=runtime_overrides_payload,
+        runtime_economic_source=FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+        runtime_economic_source_overrides=runtime_source_overrides_payload,
+    )
     requested_as_of_text = request.as_of_date.isoformat() if request.as_of_date is not None else "none"
     as_of_text = effective_as_of_date.isoformat() if effective_as_of_date is not None else "none"
     if effective_as_of_date is None:
@@ -2472,6 +4400,8 @@ def build_production_order_proposal_from_wb(
         "daily_sales_by_bundle": daily_sales_snapshot,
         "wb_stock_by_bundle": wb_stock_snapshot,
         "wb_stock_updated_at_by_bundle": wb_stock_updated_at_by_bundle,
+        "economic_observed_prices": observed_price_calibration,
+        "economic_observed_commission": observed_commission_calibration,
         "freshness": {
             "status": freshness_status,
             "sales_age_days": freshness_sales_age_days,
@@ -2498,6 +4428,11 @@ def build_production_order_proposal_from_wb(
             f" daily_sales_by_bundle={daily_sales_snapshot}, "
             f"wb_stock_by_bundle={wb_stock_snapshot}, "
             f"wb_stock_updated_at_by_bundle={wb_stock_updated_at_by_bundle}, "
+            f"economic_observed_prices={observed_price_calibration.get('prices')}, "
+            f"economic_observed_source={observed_price_calibration.get('source')}, "
+            f"economic_observed_commission={observed_commission_calibration.get('commission_percent')}, "
+            f"economic_observed_commission_status={observed_commission_calibration.get('status')}, "
+            f"economic_observed_commission_source={observed_commission_calibration.get('source')}, "
             f"freshness_status={freshness_status}, "
             f"freshness_sales_age_days={freshness_sales_age_days_text}, "
             f"freshness_stock_oldest_age_days={freshness_stock_oldest_age_days_text}, "
@@ -2657,6 +4592,10 @@ def _load_admin_in_flight_defaults(
 def build_production_order_proposal(
     db: Session,
     request: ProductionOrderProposalRequest,
+    *,
+    runtime_economic_overrides: dict[str, float | None] | None = None,
+    runtime_economic_source: str | None = None,
+    runtime_economic_source_overrides: dict[str, str] | None = None,
 ) -> ProductionOrderProposalResponse:
     now = datetime.now(timezone.utc)
 
@@ -2688,6 +4627,14 @@ def build_production_order_proposal(
         article_settings=article_settings,
         global_settings=global_settings,
         overrides=request.overrides,
+    )
+    economic_settings = _resolve_economic_settings(
+        article_settings=article_settings,
+        global_settings=global_settings,
+        overrides=request.overrides,
+        runtime_overrides=runtime_economic_overrides,
+        runtime_source=runtime_economic_source,
+        runtime_source_overrides=runtime_economic_source_overrides,
     )
 
     if not settings.include_in_planning:
@@ -2966,16 +4913,25 @@ def build_production_order_proposal(
         recipe_colors_by_bundle=recipe_colors_by_bundle,
         color_to_sizes=color_to_sizes,
         size_weights=size_weights,
-        current_stock_by_color_size=current_stock_by_color_size,
-        in_flight_effective_by_color_size=dict(in_flight_effective_by_color_size),
+        current_stock_by_color_size=stock_by_color_size,
+        in_flight_effective_by_color_size=in_flight_effective_by_color_size,
         in_flight_eta_days_by_color_size=in_flight_eta_days_by_color_size,
         assorti_by_bundle_type=assorti_by_bundle_type,
         reorder_point_days=reorder_point_days,
         target_coverage_days=settings.target_coverage_days,
+        margin_main_per_unit=economic_settings.margin_main_per_unit,
+        margin_assorti_per_unit=economic_settings.margin_assorti_per_unit,
+        unit_capital_per_unit=economic_settings.unit_capital_per_unit,
     )
     layer2_allocation_decisions, layer2_allocation_summary = _build_layer2_allocation_decisions(
         stock_health_metrics=layer1_stock_health_metrics,
         lead_time_days_total=settings.lead_time_days_total,
+        margin_main_per_unit=economic_settings.margin_main_per_unit,
+        margin_assorti_per_unit=economic_settings.margin_assorti_per_unit,
+        unit_capital_per_unit=economic_settings.unit_capital_per_unit,
+        capital_cost_rate=layer_proxy_settings.layer2_capital_cost_rate,
+        stockout_penalty_weight=layer_proxy_settings.layer2_stockout_penalty_weight,
+        overstock_penalty_weight=layer_proxy_settings.layer2_overstock_penalty_weight,
     )
     layer2_contract = _build_layer2_contract_summary(
         layer2_allocation_decisions=layer2_allocation_decisions,
@@ -3255,6 +5211,24 @@ def build_production_order_proposal(
             )
         )
 
+    capital_rankings = _build_line_objective_capital_rankings(
+        candidate_lines=candidate_lines,
+        layer3_decision_by_line=layer3_decision_by_line,
+        layer1_stock_health_metrics=layer1_stock_health_metrics,
+        margin_main_per_unit=economic_settings.margin_main_per_unit,
+        margin_assorti_per_unit=economic_settings.margin_assorti_per_unit,
+        unit_capital_per_unit=economic_settings.unit_capital_per_unit,
+        capital_cost_rate=layer_proxy_settings.layer2_capital_cost_rate,
+        stockout_penalty_weight=layer_proxy_settings.layer2_stockout_penalty_weight,
+        overstock_penalty_weight=layer_proxy_settings.layer2_overstock_penalty_weight,
+    )
+    candidate_lines, capital_constraint_summary = _apply_capital_constraint_to_candidate_lines(
+        candidate_lines=candidate_lines,
+        ranked_line_objectives=capital_rankings,
+        available_capital=economic_settings.available_capital,
+        unit_capital_per_unit=economic_settings.unit_capital_per_unit,
+    )
+
     candidate_total_units = sum(line.recommended_qty for line in candidate_lines)
     expected_horizon_sales = total_daily_sales * request.planning_horizon_days
     layer4_scenarios = _build_layer4_scenarios(
@@ -3264,8 +5238,21 @@ def build_production_order_proposal(
         reorder_point_days=reorder_point_days,
         expected_horizon_sales=expected_horizon_sales,
         layer3_purchase_shaping=layer3_purchase_shaping,
+        unit_capital_per_unit=economic_settings.unit_capital_per_unit,
+        margin_main_per_unit=economic_settings.margin_main_per_unit,
+        margin_assorti_per_unit=economic_settings.margin_assorti_per_unit,
+        average_realized_price_main=economic_settings.average_realized_price_main,
+        average_realized_price_assorti=economic_settings.average_realized_price_assorti,
+        capital_cost_rate=layer_proxy_settings.layer2_capital_cost_rate,
+        stockout_penalty_weight=layer_proxy_settings.layer2_stockout_penalty_weight,
+        overstock_penalty_weight=layer_proxy_settings.layer2_overstock_penalty_weight,
+    )
+    capital_gap_summary = _build_capital_gap_summary(
+        layer4_scenarios=layer4_scenarios,
+        available_capital=economic_settings.available_capital,
     )
     layer4_contract = _build_layer4_contract_summary(layer4_scenarios)
+    layer4_aggregate_deltas = _build_layer4_aggregate_deltas(layer4_scenarios)
     layer5_intervention = _build_layer5_intervention_signals(
         risk_level=risk_level,
         layer4_scenarios=layer4_scenarios,
@@ -3276,6 +5263,9 @@ def build_production_order_proposal(
         accelerate_production_risk_threshold=(
             layer_proxy_settings.layer5_accelerate_production_risk_threshold
         ),
+        accelerate_action_cost_rate=layer_proxy_settings.layer5_accelerate_action_cost_rate,
+        price_slowdown_lost_volume_rate=layer_proxy_settings.layer5_price_slowdown_lost_volume_rate,
+        reduce_order_marginal_profit_rate=layer_proxy_settings.layer5_reduce_order_marginal_profit_rate,
     )
     layer5_contract = _build_layer5_contract_summary(
         layer5_intervention=layer5_intervention,
@@ -3284,6 +5274,9 @@ def build_production_order_proposal(
         ),
         accelerate_production_risk_threshold=(
             layer_proxy_settings.layer5_accelerate_production_risk_threshold
+        ),
+        reduce_order_marginal_profit_rate=(
+            layer_proxy_settings.layer5_reduce_order_marginal_profit_rate
         ),
     )
     layer5_intervention_meta = {
@@ -3388,8 +5381,11 @@ def build_production_order_proposal(
                 f"contract_status={layer1_contract['status']}."
             ),
             (
-                f"Layer 2 allocation: method={LAYER2_ALLOCATION_METHOD}, "
-                "decision_gate=profit_until_eta, tie_break=hold, "
+                f"Layer 2 allocation: method={LAYER2_ALLOCATION_METHOD_CANONICAL}, "
+                f"legacy_method={LAYER2_ALLOCATION_METHOD}, "
+                f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}, "
+                f"legacy_decision_gate={LAYER2_DECISION_GATE_LEGACY}, "
+                "tie_break=hold, "
                 f"main={layer2_allocation_summary['main']}, "
                 f"assorti={layer2_allocation_summary['assorti']}, "
                 f"hold={layer2_allocation_summary['hold']}, "
@@ -3397,8 +5393,12 @@ def build_production_order_proposal(
                 f"tie_count={layer2_decision_quality['tie_count']}, "
                 "reason_counts="
                 f"{layer2_decision_quality['decision_reason_counts']}, "
+                "objective_reason_counts="
+                f"{layer2_decision_quality['decision_reason_counts_objective_score']}, "
                 "avg_profit_gap_until_eta="
                 f"{layer2_decision_quality['avg_profit_gap_until_eta']}, "
+                "avg_objective_score_gap_until_eta="
+                f"{layer2_decision_quality['avg_objective_score_gap_until_eta']}, "
                 "capital_locked_total="
                 f"{layer2_decision_quality['capital_locked_total']}, "
                 f"contract_status={layer2_contract['status']}."
@@ -3418,9 +5418,9 @@ def build_production_order_proposal(
             ),
             (
                 "Layer 4 scenarios: "
-                f"Conservative(capital={layer4_scenarios[0]['total_capital_required']},risk={layer4_scenarios[0]['stockout_risk_proxy']}), "
-                f"Balanced(capital={layer4_scenarios[1]['total_capital_required']},risk={layer4_scenarios[1]['stockout_risk_proxy']}), "
-                f"Aggressive(capital={layer4_scenarios[2]['total_capital_required']},risk={layer4_scenarios[2]['stockout_risk_proxy']})."
+                f"Conservative(capital={layer4_scenarios[0]['total_capital_required']},gross_profit={layer4_scenarios[0]['expected_gross_profit']},objective={layer4_scenarios[0]['objective_score']},risk={layer4_scenarios[0]['stockout_risk_proxy']}), "
+                f"Balanced(capital={layer4_scenarios[1]['total_capital_required']},gross_profit={layer4_scenarios[1]['expected_gross_profit']},objective={layer4_scenarios[1]['objective_score']},risk={layer4_scenarios[1]['stockout_risk_proxy']}), "
+                f"Aggressive(capital={layer4_scenarios[2]['total_capital_required']},gross_profit={layer4_scenarios[2]['expected_gross_profit']},objective={layer4_scenarios[2]['objective_score']},risk={layer4_scenarios[2]['stockout_risk_proxy']})."
             ),
             (
                 "Layer 4 contract: "
@@ -3428,6 +5428,34 @@ def build_production_order_proposal(
                 f"status={layer4_contract['status']}, "
                 f"order_matches_expected={layer4_contract['order_matches_expected']}, "
                 f"checks={layer4_contract['checks']}."
+            ),
+            (
+                "Layer 4 aggregate deltas: "
+                "aggressive_vs_conservative("
+                "capital_delta="
+                f"{layer4_aggregate_deltas['aggressive_vs_conservative']['capital_delta']},"
+                "gross_profit_delta="
+                f"{layer4_aggregate_deltas['aggressive_vs_conservative']['gross_profit_delta']},"
+                "objective_delta="
+                f"{layer4_aggregate_deltas['aggressive_vs_conservative']['objective_delta']})."
+            ),
+            (
+                "Capital gap: "
+                f"status={capital_gap_summary['status']}, "
+                f"available_capital={capital_gap_summary['available_capital']}, "
+                f"required_capital={capital_gap_summary['required_capital']}, "
+                f"deficit_or_surplus={capital_gap_summary['deficit_or_surplus']}."
+            ),
+            (
+                "Capital constraint: "
+                f"status={capital_constraint_summary['status']}, "
+                f"constrained={capital_constraint_summary['constrained']}, "
+                f"available_capital={capital_constraint_summary['available_capital']}, "
+                "required_capital_before_constraint="
+                f"{capital_constraint_summary['required_capital_before_constraint']}, "
+                "allocated_capital_after_constraint="
+                f"{capital_constraint_summary['allocated_capital_after_constraint']}, "
+                f"cutoff_line={capital_constraint_summary['cutoff_line']}."
             ),
             (
                 "Layer 5 intervention: "
@@ -3438,6 +5466,8 @@ def build_production_order_proposal(
                 f"{layer5_intervention['aggressive_stockout_risk_proxy']}, "
                 f"threshold={layer5_intervention['risk_threshold']}, "
                 f"signal_thresholds={layer5_intervention['signal_thresholds']}, "
+                "economic_justification="
+                f"{layer5_intervention.get('economic_justification', {})}, "
                 f"contract_status={layer5_contract['status']}."
             ),
             (
@@ -3500,20 +5530,44 @@ def build_production_order_proposal(
                     "bundle_types": assorti_classification_by_bundle_type,
                 },
                 "proxies": {
-                    "main_margin": LAYER2_MAIN_MARGIN_PROXY,
-                    "assorti_margin": LAYER2_ASSORTI_MARGIN_PROXY,
-                    "unit_capital": LAYER2_UNIT_CAPITAL_PROXY,
+                    "main_margin": economic_settings.margin_main_per_unit,
+                    "assorti_margin": economic_settings.margin_assorti_per_unit,
+                    "unit_capital": economic_settings.unit_capital_per_unit,
                 },
             },
             "layer_2_allocation": {
-                "method": LAYER2_ALLOCATION_METHOD,
+                "method": LAYER2_ALLOCATION_METHOD_CANONICAL,
+                "method_canonical": LAYER2_ALLOCATION_METHOD_CANONICAL,
+                "legacy_method": LAYER2_ALLOCATION_METHOD,
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
                 "contract": layer2_contract,
                 "decision_quality": layer2_decision_quality,
-                "decision_gate": "profit_until_eta",
+                "decision_gate": LAYER2_DECISION_GATE_CANONICAL,
+                "decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
+                "legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
                 "tie_break": "hold",
                 "gmroi_usage": "diagnostic_only",
+                "objective_formula": (
+                    "expected_gross_profit_until_eta"
+                    "-capital_cost_penalty"
+                    "-stockout_penalty"
+                    "-overstock_penalty"
+                ),
+                "objective_parameters": {
+                    "capital_cost_rate": layer_proxy_settings.layer2_capital_cost_rate,
+                    "stockout_penalty_weight": layer_proxy_settings.layer2_stockout_penalty_weight,
+                    "overstock_penalty_weight": layer_proxy_settings.layer2_overstock_penalty_weight,
+                },
+                "objective_source": {
+                    "capital_cost_rate": layer_proxy_settings.source.get("layer2_capital_cost_rate"),
+                    "stockout_penalty_weight": layer_proxy_settings.source.get(
+                        "layer2_stockout_penalty_weight"
+                    ),
+                    "overstock_penalty_weight": layer_proxy_settings.source.get(
+                        "layer2_overstock_penalty_weight"
+                    ),
+                },
             },
             "layer_3_purchase_shaping": {
                 "method": "allocation_decision_factors",
@@ -3525,20 +5579,45 @@ def build_production_order_proposal(
                 "method": "deterministic_factor_scenarios",
                 "factors": layer4_scenario_factor_items,
                 "contract": layer4_contract,
+                "aggregate_deltas": layer4_aggregate_deltas,
                 "scenarios": layer4_scenarios,
             },
             "layer_5_intervention": layer5_intervention_meta,
+            "capital_gap": capital_gap_summary,
+            "capital_constraint": capital_constraint_summary,
             "alpha_proxy_economics": {
                 "source": LAYER_PROXY_VALUE_SOURCE,
                 "calibration_state": "alpha_proxy_not_calibrated",
+                "economics_formula_version": ECONOMICS_FORMULA_VERSION,
+                "economic_calibration_state": economic_settings.calibration_state,
                 "layer_1_high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
-                "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD,
+                "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD_CANONICAL,
+                "layer_2_allocation_method_canonical": LAYER2_ALLOCATION_METHOD_CANONICAL,
+                "layer_2_legacy_allocation_method": LAYER2_ALLOCATION_METHOD,
+                "layer_2_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
+                "layer_2_decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
+                "layer_2_legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
                 "layer_2_near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
-                "margin_proxy": {
-                    "main": LAYER2_MAIN_MARGIN_PROXY,
-                    "assorti": LAYER2_ASSORTI_MARGIN_PROXY,
+                "layer_2_objective_parameters": {
+                    "capital_cost_rate": layer_proxy_settings.layer2_capital_cost_rate,
+                    "stockout_penalty_weight": layer_proxy_settings.layer2_stockout_penalty_weight,
+                    "overstock_penalty_weight": layer_proxy_settings.layer2_overstock_penalty_weight,
                 },
-                "unit_capital_proxy": LAYER2_UNIT_CAPITAL_PROXY,
+                "margin_proxy": {
+                    "main": economic_settings.margin_main_per_unit,
+                    "assorti": economic_settings.margin_assorti_per_unit,
+                },
+                "unit_capital_proxy": economic_settings.unit_capital_per_unit,
+                "economic_inputs": {
+                    "production_cost_per_unit": economic_settings.production_cost_per_unit,
+                    "logistics_cost_per_unit": economic_settings.logistics_cost_per_unit,
+                    "wb_commission_percent_main": economic_settings.wb_commission_percent_main,
+                    "wb_commission_percent_assorti": economic_settings.wb_commission_percent_assorti,
+                    "average_realized_price_main": economic_settings.average_realized_price_main,
+                    "average_realized_price_assorti": economic_settings.average_realized_price_assorti,
+                    "available_capital": economic_settings.available_capital,
+                },
+                "economic_source": economic_settings.source,
                 "layer_3_purchase_factors": LAYER3_PURCHASE_FACTOR_BY_DECISION,
                 "layer_3_calibration": {
                     "method": LAYER3_CALIBRATION_METHOD,
@@ -3567,6 +5646,18 @@ def build_production_order_proposal(
                     ),
                     "increase_price_to_slow_velocity": (
                         layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+                    ),
+                    "reduce_order_size": layer_proxy_settings.layer5_reduce_order_marginal_profit_rate,
+                },
+                "layer_5_cost_policy_parameters": {
+                    "accelerate_action_cost_rate": (
+                        layer_proxy_settings.layer5_accelerate_action_cost_rate
+                    ),
+                    "price_slowdown_lost_volume_rate": (
+                        layer_proxy_settings.layer5_price_slowdown_lost_volume_rate
+                    ),
+                    "reduce_order_marginal_profit_rate": (
+                        layer_proxy_settings.layer5_reduce_order_marginal_profit_rate
                     ),
                 },
             },
