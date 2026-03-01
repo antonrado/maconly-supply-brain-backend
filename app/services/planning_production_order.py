@@ -130,6 +130,7 @@ LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
     ("Balanced", 1.00),
     ("Aggressive", 1.20),
 )
+CAPITAL_CONSTRAINT_CONTRACT_VERSION = "v1_alpha"
 LAYER5_CONTRACT_VERSION = "v1_alpha"
 LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
 LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = 0.35
@@ -3069,6 +3070,224 @@ def _apply_capital_constraint_to_candidate_lines(
     )
 
 
+def _build_capital_constraint_contract_summary(
+    capital_constraint_summary: dict[str, object],
+) -> dict[str, str | dict[str, bool]]:
+    allowed_statuses = {
+        "available_capital_not_set",
+        "within_budget",
+        "budget_limited_applied",
+    }
+    status = str(capital_constraint_summary.get("status", "")).strip()
+    constrained_raw = capital_constraint_summary.get("constrained")
+
+    status_known = status in allowed_statuses
+    constrained_is_bool = isinstance(constrained_raw, bool)
+    constrained_matches_status = False
+    if constrained_is_bool:
+        if status == "budget_limited_applied":
+            constrained_matches_status = constrained_raw is True
+        elif status in {"available_capital_not_set", "within_budget"}:
+            constrained_matches_status = constrained_raw is False
+
+    def _to_non_negative_float(value: object) -> tuple[bool, float]:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return False, 0.0
+        if number < 0:
+            return False, 0.0
+        return True, number
+
+    required_ok, required_capital = _to_non_negative_float(
+        capital_constraint_summary.get("required_capital_before_constraint")
+    )
+    allocated_ok, allocated_capital = _to_non_negative_float(
+        capital_constraint_summary.get("allocated_capital_after_constraint")
+    )
+
+    available_raw = capital_constraint_summary.get("available_capital")
+    if status == "available_capital_not_set":
+        available_consistent = available_raw is None
+        available_ok = True
+        available_capital = 0.0
+    else:
+        available_ok, available_capital = _to_non_negative_float(available_raw)
+        available_consistent = available_ok
+
+    remaining_raw = capital_constraint_summary.get("remaining_capital")
+    if status == "available_capital_not_set":
+        remaining_consistent = remaining_raw is None
+        remaining_ok = True
+        remaining_capital = 0.0
+    else:
+        remaining_ok, remaining_capital = _to_non_negative_float(remaining_raw)
+        remaining_consistent = remaining_ok
+
+    allocation_not_exceed_required = (
+        required_ok and allocated_ok and allocated_capital <= (required_capital + 1e-4)
+    )
+    allocation_not_exceed_available = (
+        status == "available_capital_not_set"
+        or (
+            available_ok
+            and allocated_ok
+            and allocated_capital <= (available_capital + 1e-4)
+        )
+    )
+    budget_accounting_consistent = (
+        status == "available_capital_not_set"
+        or (
+            available_ok
+            and allocated_ok
+            and remaining_ok
+            and abs((available_capital - allocated_capital) - remaining_capital) <= 0.05
+        )
+    )
+
+    line_counts_non_negative = True
+    line_count_order_valid = True
+    unconstrained_preserves_line_count = True
+    line_count_before = 0
+    line_count_after = 0
+    try:
+        line_count_before = int(capital_constraint_summary.get("line_count_before", 0))
+        line_count_after = int(capital_constraint_summary.get("line_count_after", 0))
+    except (TypeError, ValueError):
+        line_counts_non_negative = False
+        line_count_order_valid = False
+        unconstrained_preserves_line_count = False
+    else:
+        if line_count_before < 0 or line_count_after < 0:
+            line_counts_non_negative = False
+        if line_count_after > line_count_before:
+            line_count_order_valid = False
+        if (
+            status in {"available_capital_not_set", "within_budget"}
+            and line_count_before != line_count_after
+        ):
+            unconstrained_preserves_line_count = False
+
+    ranking_is_list = isinstance(capital_constraint_summary.get("ranking"), list)
+    ranking_unique_line_keys = True
+    ranking_entries_numeric = True
+    ranking_sorted_by_objective_per_capital = True
+    ranking_rows = capital_constraint_summary.get("ranking", [])
+    previous_sort_key: tuple[float, float, int, int] | None = None
+    seen_ranking_keys: set[tuple[int, int]] = set()
+    if ranking_is_list:
+        for ranking_row in ranking_rows:
+            if not isinstance(ranking_row, dict):
+                ranking_entries_numeric = False
+                ranking_sorted_by_objective_per_capital = False
+                continue
+            try:
+                color_id = int(ranking_row.get("color_id"))
+                size_id = int(ranking_row.get("size_id"))
+                objective_score_per_capital = float(
+                    ranking_row.get("objective_score_per_capital", 0.0)
+                )
+                objective_score = float(ranking_row.get("objective_score", 0.0))
+            except (TypeError, ValueError):
+                ranking_entries_numeric = False
+                ranking_sorted_by_objective_per_capital = False
+                continue
+
+            line_key = (color_id, size_id)
+            if line_key in seen_ranking_keys:
+                ranking_unique_line_keys = False
+            seen_ranking_keys.add(line_key)
+
+            sort_key = (
+                -objective_score_per_capital,
+                -objective_score,
+                color_id,
+                size_id,
+            )
+            if previous_sort_key is not None and sort_key < previous_sort_key:
+                ranking_sorted_by_objective_per_capital = False
+            previous_sort_key = sort_key
+    else:
+        ranking_unique_line_keys = False
+        ranking_entries_numeric = False
+        ranking_sorted_by_objective_per_capital = False
+
+    cutoff_line = capital_constraint_summary.get("cutoff_line")
+    cutoff_line_shape_valid = cutoff_line is None or isinstance(cutoff_line, dict)
+    cutoff_line_qty_consistent = True
+    cutoff_line_matches_ranking = True
+    if isinstance(cutoff_line, dict):
+        try:
+            cutoff_color_id = int(cutoff_line.get("color_id"))
+            cutoff_size_id = int(cutoff_line.get("size_id"))
+            cutoff_requested_qty = int(cutoff_line.get("requested_qty", 0))
+            cutoff_allocated_qty = int(cutoff_line.get("allocated_qty", 0))
+        except (TypeError, ValueError):
+            cutoff_line_qty_consistent = False
+            cutoff_line_matches_ranking = False
+        else:
+            if (
+                cutoff_requested_qty < 0
+                or cutoff_allocated_qty < 0
+                or cutoff_allocated_qty > cutoff_requested_qty
+            ):
+                cutoff_line_qty_consistent = False
+            if ranking_is_list:
+                cutoff_line_in_ranking = False
+                for ranking_row in ranking_rows:
+                    if not isinstance(ranking_row, dict):
+                        continue
+                    try:
+                        ranking_color_id = int(ranking_row.get("color_id", -1))
+                        ranking_size_id = int(ranking_row.get("size_id", -1))
+                    except (TypeError, ValueError):
+                        continue
+                    if (
+                        ranking_color_id == cutoff_color_id
+                        and ranking_size_id == cutoff_size_id
+                    ):
+                        cutoff_line_in_ranking = True
+                        break
+                if not cutoff_line_in_ranking:
+                    cutoff_line_matches_ranking = False
+
+    cutoff_line_present_when_limited = (
+        status != "budget_limited_applied"
+        or isinstance(cutoff_line, dict)
+    )
+
+    checks = {
+        "status_known": status_known,
+        "constrained_is_bool": constrained_is_bool,
+        "constrained_matches_status": constrained_matches_status,
+        "required_capital_non_negative": required_ok,
+        "allocated_capital_non_negative": allocated_ok,
+        "available_capital_consistent": available_consistent,
+        "remaining_capital_consistent": remaining_consistent,
+        "allocation_not_exceed_required": allocation_not_exceed_required,
+        "allocation_not_exceed_available": allocation_not_exceed_available,
+        "budget_accounting_consistent": budget_accounting_consistent,
+        "line_counts_non_negative": line_counts_non_negative,
+        "line_count_order_valid": line_count_order_valid,
+        "unconstrained_preserves_line_count": unconstrained_preserves_line_count,
+        "ranking_is_list": ranking_is_list,
+        "ranking_unique_line_keys": ranking_unique_line_keys,
+        "ranking_entries_numeric": ranking_entries_numeric,
+        "ranking_sorted_by_objective_per_capital": (
+            ranking_sorted_by_objective_per_capital
+        ),
+        "cutoff_line_shape_valid": cutoff_line_shape_valid,
+        "cutoff_line_qty_consistent": cutoff_line_qty_consistent,
+        "cutoff_line_matches_ranking": cutoff_line_matches_ranking,
+        "cutoff_line_present_when_limited": cutoff_line_present_when_limited,
+    }
+    return {
+        "version": CAPITAL_CONSTRAINT_CONTRACT_VERSION,
+        "status": "ok" if all(checks.values()) else "violated",
+        "checks": checks,
+    }
+
+
 def _build_capital_gap_summary(
     *,
     layer4_scenarios: list[dict[str, str | int | float]],
@@ -5369,6 +5588,13 @@ def build_production_order_proposal(
         available_capital=economic_settings.available_capital,
         unit_capital_per_unit=economic_settings.unit_capital_per_unit,
     )
+    capital_constraint_contract = _build_capital_constraint_contract_summary(
+        capital_constraint_summary,
+    )
+    capital_constraint_summary = {
+        **capital_constraint_summary,
+        "contract": capital_constraint_contract,
+    }
 
     candidate_total_units = sum(line.recommended_qty for line in candidate_lines)
     expected_horizon_sales = total_daily_sales * request.planning_horizon_days
@@ -5596,7 +5822,8 @@ def build_production_order_proposal(
                 f"{capital_constraint_summary['required_capital_before_constraint']}, "
                 "allocated_capital_after_constraint="
                 f"{capital_constraint_summary['allocated_capital_after_constraint']}, "
-                f"cutoff_line={capital_constraint_summary['cutoff_line']}."
+                f"cutoff_line={capital_constraint_summary['cutoff_line']}, "
+                f"contract_status={capital_constraint_contract['status']}."
             ),
             (
                 "Layer 5 intervention: "

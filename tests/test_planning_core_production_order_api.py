@@ -13,6 +13,7 @@ from app.services.planning_production_order import (
     ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_SOURCE,
+    CAPITAL_CONSTRAINT_CONTRACT_VERSION,
     EXPLAINABILITY_MODE_COMPACT,
     FROM_WB_OBSERVED_ECONOMIC_SOURCE,
     FROM_WB_TARIFFS_COMMISSION_SOURCE,
@@ -48,6 +49,7 @@ from app.services.planning_production_order import (
     _build_layer4_aggregate_deltas,
     _build_layer4_scenarios,
     _build_layer4_contract_summary,
+    _build_capital_constraint_contract_summary,
     _build_layer5_contract_summary,
     _build_layer5_intervention_signals,
     _choose_action,
@@ -764,6 +766,100 @@ def test_capital_constraint_supports_partial_allocation_on_cutoff_line():
     assert cutoff_line["allocated_qty"] == 2
 
 
+def test_capital_constraint_contract_summary_marks_ok_for_valid_budget_limited_payload():
+    summary = {
+        "status": "budget_limited_applied",
+        "constrained": True,
+        "available_capital": 100.0,
+        "required_capital_before_constraint": 150.0,
+        "allocated_capital_after_constraint": 100.0,
+        "remaining_capital": 0.0,
+        "line_count_before": 2,
+        "line_count_after": 1,
+        "cutoff_line": {
+            "rank": 2,
+            "color_id": 11,
+            "size_id": 21,
+            "requested_qty": 10,
+            "allocated_qty": 0,
+            "objective_score_per_capital": 1.0,
+        },
+        "ranking": [
+            {
+                "rank": 1,
+                "color_id": 10,
+                "size_id": 20,
+                "objective_score_per_capital": 2.0,
+                "objective_score": 20.0,
+            },
+            {
+                "rank": 2,
+                "color_id": 11,
+                "size_id": 21,
+                "objective_score_per_capital": 1.0,
+                "objective_score": 10.0,
+            },
+        ],
+    }
+
+    contract = _build_capital_constraint_contract_summary(summary)
+
+    assert contract["version"] == CAPITAL_CONSTRAINT_CONTRACT_VERSION
+    assert contract["status"] == "ok"
+    assert all(contract["checks"].values())
+
+
+def test_capital_constraint_contract_summary_marks_violated_for_budget_and_ranking_mismatches():
+    summary = {
+        "status": "budget_limited_applied",
+        "constrained": False,
+        "available_capital": 50.0,
+        "required_capital_before_constraint": 40.0,
+        "allocated_capital_after_constraint": 60.0,
+        "remaining_capital": 5.0,
+        "line_count_before": 1,
+        "line_count_after": 2,
+        "cutoff_line": {
+            "rank": 3,
+            "color_id": 99,
+            "size_id": 99,
+            "requested_qty": 1,
+            "allocated_qty": 2,
+        },
+        "ranking": [
+            {
+                "rank": 1,
+                "color_id": 10,
+                "size_id": 20,
+                "objective_score_per_capital": 1.0,
+                "objective_score": 10.0,
+            },
+            {
+                "rank": 2,
+                "color_id": 10,
+                "size_id": 20,
+                "objective_score_per_capital": 2.0,
+                "objective_score": 20.0,
+            },
+        ],
+    }
+
+    contract = _build_capital_constraint_contract_summary(summary)
+
+    checks = contract["checks"]
+    assert contract["version"] == CAPITAL_CONSTRAINT_CONTRACT_VERSION
+    assert contract["status"] == "violated"
+    assert checks["constrained_matches_status"] is False
+    assert checks["allocation_not_exceed_required"] is False
+    assert checks["allocation_not_exceed_available"] is False
+    assert checks["budget_accounting_consistent"] is False
+    assert checks["line_count_order_valid"] is False
+    assert checks["ranking_unique_line_keys"] is False
+    assert checks["ranking_sorted_by_objective_per_capital"] is False
+    assert checks["cutoff_line_qty_consistent"] is False
+    assert checks["cutoff_line_matches_ranking"] is False
+
+
 def test_layer2_allocation_requires_explicit_economic_inputs():
     metrics = [
         {
@@ -1465,6 +1561,13 @@ def test_production_order_proposal_reports_budget_limited_capital_constraint_sum
     assert len(ranking) >= len(recommendation["lines"])
     assert recommendation["lines"][0]["color_id"] == ranking[0]["color_id"]
     assert recommendation["lines"][0]["size_id"] == ranking[0]["size_id"]
+
+    contract = capital_constraint["contract"]
+    assert contract["version"] == CAPITAL_CONSTRAINT_CONTRACT_VERSION
+    assert contract["status"] == "ok"
+    assert contract["checks"]["budget_accounting_consistent"] is True
+    assert contract["checks"]["ranking_sorted_by_objective_per_capital"] is True
+
     for line in recommendation["lines"]:
         assert line["source_reason"].endswith("|capital_constraint")
 
@@ -1632,6 +1735,8 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["capital_constraint"]["contract"]["status"] == "ok"
+    assert meta["layer_2_allocation"]["decision_quality"]["decision_count"] > 0
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
@@ -5047,6 +5152,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
+    assert meta["capital_constraint"]["contract"]["status"] == "ok"
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
