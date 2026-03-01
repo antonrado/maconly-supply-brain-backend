@@ -125,6 +125,27 @@ def _build_global_settings_snapshot(db: Session) -> GlobalPlanningSettingsSnapsh
         default_service_level_percent=gps.default_service_level_percent,
         default_fabric_min_batch_qty=gps.default_fabric_min_batch_qty,
         default_elastic_min_batch_qty=gps.default_elastic_min_batch_qty,
+        default_production_order_production_cost_per_unit=(
+            gps.default_production_order_production_cost_per_unit
+        ),
+        default_production_order_logistics_cost_per_unit=(
+            gps.default_production_order_logistics_cost_per_unit
+        ),
+        default_production_order_wb_commission_percent_main=(
+            gps.default_production_order_wb_commission_percent_main
+        ),
+        default_production_order_wb_commission_percent_assorti=(
+            gps.default_production_order_wb_commission_percent_assorti
+        ),
+        default_production_order_average_realized_price_main=(
+            gps.default_production_order_average_realized_price_main
+        ),
+        default_production_order_average_realized_price_assorti=(
+            gps.default_production_order_average_realized_price_assorti
+        ),
+        default_production_order_available_capital=(
+            gps.default_production_order_available_capital
+        ),
     )
 
     return GlobalPlanningSettingsSnapshot(

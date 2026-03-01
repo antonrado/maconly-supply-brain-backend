@@ -130,6 +130,14 @@ Main endpoints:
 
 - `GET /demand` — WB-based demand metrics per article.
 - `GET /order-proposal` — article/SKU-level purchase proposal based on WB demand and planning settings.
+- `POST /wb/sales-daily/sync-live` — pulls operational sales rows from WB Reports API (`/api/v1/supplier/sales`) using the active configured WB integration account token and upserts them into `wb_sales_daily`.
+- `POST /wb/stock/sync-live` — pulls stock rows from WB Reports API (`/api/v1/supplier/stocks`) using the active configured WB integration account token and upserts aggregated totals into `wb_stock`.
+- `POST /wb/commission/sync-live` — pulls WB tariff commissions from `common-api` (`/api/v1/tariffs/commission`) and returns top subject diagnostics plus aggregate commission stats.
+- `POST /wb/supplies/sync-live` — pulls WB supplies statuses from `supplies-api` (`POST /api/v1/supplies`) and returns status distribution plus recent supply snapshots.
+- `POST /wb/article-mapping/sync-live` — derives candidate `(supplierArticle, barcode)` pairs from WB sales feed, matches `supplierArticle -> article.code`, and upserts matched records into `article_wb_mapping` (optionally with `default_bundle_type_id`).
+- `POST /wb/article-mapping/discover-live` — returns top supplier articles from WB sales feed with row counts, unique WB SKU counts, and match diagnostics (`exact` / `normalized` / `none` / `ambiguous_normalized`) to help prepare local `article.code` values before sync.
+- `POST /wb/article/bootstrap-live` — discovers supplier articles from WB sales feed and bootstraps missing local `article` rows (`article.code=supplierArticle`, `article.name=supplierArticle`) with `dry_run` support for safe preview.
+- `POST /wb/from-wb/readiness` — audits whether mapped articles are ready for `/core/production-order/proposal/from-wb` (checks mapping bundle types vs existing `bundle_recipe` coverage, returns blockers like `no_bundle_recipe` and `missing_bundle_recipe_bundle_types`).
 - `POST /core/production-order/proposal` — Planning Core production-order recommendation for a single article with model-B deficit conversion, minima handling, alternatives and explanation.
 - `POST /core/production-order/proposal/from-wb` — Planning Core adapter endpoint that builds production-order inputs from WB-ingested sales/stock (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
 - `GET /core/production-order/settings/{article_id}` — read admin-configured defaults for production-order calculations (size weights, elastic bindings, in-flight supply defaults).

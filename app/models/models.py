@@ -142,6 +142,34 @@ class ArticlePlanningSettings(Base):
         Float,
         nullable=True,
     )
+    production_order_production_cost_per_unit: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_logistics_cost_per_unit: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_wb_commission_percent_main: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_wb_commission_percent_assorti: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_average_realized_price_main: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_average_realized_price_assorti: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    production_order_available_capital: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
 
 
 class ColorPlanningSettings(Base):
@@ -290,6 +318,34 @@ class GlobalPlanningSettings(Base):
         nullable=True,
     )
     default_production_order_layer5_accelerate_production_risk_threshold: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_production_cost_per_unit: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_logistics_cost_per_unit: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_wb_commission_percent_main: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_wb_commission_percent_assorti: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_average_realized_price_main: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_average_realized_price_assorti: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+    default_production_order_available_capital: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
     )

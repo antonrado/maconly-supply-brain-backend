@@ -115,6 +115,27 @@ def create_global_planning_settings(
         default_service_level_percent=kwargs.get("default_service_level_percent", 90),
         default_fabric_min_batch_qty=kwargs.get("default_fabric_min_batch_qty", 7000),
         default_elastic_min_batch_qty=kwargs.get("default_elastic_min_batch_qty", 3000),
+        default_production_order_production_cost_per_unit=kwargs.get(
+            "default_production_order_production_cost_per_unit"
+        ),
+        default_production_order_logistics_cost_per_unit=kwargs.get(
+            "default_production_order_logistics_cost_per_unit"
+        ),
+        default_production_order_wb_commission_percent_main=kwargs.get(
+            "default_production_order_wb_commission_percent_main"
+        ),
+        default_production_order_wb_commission_percent_assorti=kwargs.get(
+            "default_production_order_wb_commission_percent_assorti"
+        ),
+        default_production_order_average_realized_price_main=kwargs.get(
+            "default_production_order_average_realized_price_main"
+        ),
+        default_production_order_average_realized_price_assorti=kwargs.get(
+            "default_production_order_average_realized_price_assorti"
+        ),
+        default_production_order_available_capital=kwargs.get(
+            "default_production_order_available_capital"
+        ),
     )
     session.add(gps)
     session.flush()
@@ -133,6 +154,27 @@ def create_article_planning_settings(
         target_coverage_days=kwargs.get("target_coverage_days"),
         lead_time_days=kwargs.get("lead_time_days"),
         service_level_percent=kwargs.get("service_level_percent"),
+        production_order_production_cost_per_unit=kwargs.get(
+            "production_order_production_cost_per_unit"
+        ),
+        production_order_logistics_cost_per_unit=kwargs.get(
+            "production_order_logistics_cost_per_unit"
+        ),
+        production_order_wb_commission_percent_main=kwargs.get(
+            "production_order_wb_commission_percent_main"
+        ),
+        production_order_wb_commission_percent_assorti=kwargs.get(
+            "production_order_wb_commission_percent_assorti"
+        ),
+        production_order_average_realized_price_main=kwargs.get(
+            "production_order_average_realized_price_main"
+        ),
+        production_order_average_realized_price_assorti=kwargs.get(
+            "production_order_average_realized_price_assorti"
+        ),
+        production_order_available_capital=kwargs.get(
+            "production_order_available_capital"
+        ),
     )
     session.add(aps)
     session.flush()

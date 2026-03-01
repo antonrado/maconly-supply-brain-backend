@@ -165,7 +165,7 @@ For a full local gate that includes deterministic live API checks for production
 ```
 
 What `verify-live` does:
-1. Runs everything in `verify` (context + compile + tests).
+1. Runs everything in `verify` (context + compile + targeted production-order smoke tests).
 2. Runs `po-api-smoke` (auto-sync backend image, seed deterministic smoke data, then assert 200/404/422 API contracts).
 
 ## Interactive rebase / COMMIT_EDITMSG swap recovery

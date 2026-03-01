@@ -301,6 +301,48 @@ def get_production_order_admin_settings(
             and article_settings.production_order_layer5_accelerate_production_risk_threshold is not None
             else None
         ),
+        production_cost_per_unit=(
+            float(article_settings.production_order_production_cost_per_unit)
+            if article_settings is not None
+            and article_settings.production_order_production_cost_per_unit is not None
+            else None
+        ),
+        logistics_cost_per_unit=(
+            float(article_settings.production_order_logistics_cost_per_unit)
+            if article_settings is not None
+            and article_settings.production_order_logistics_cost_per_unit is not None
+            else None
+        ),
+        wb_commission_percent_main=(
+            float(article_settings.production_order_wb_commission_percent_main)
+            if article_settings is not None
+            and article_settings.production_order_wb_commission_percent_main is not None
+            else None
+        ),
+        wb_commission_percent_assorti=(
+            float(article_settings.production_order_wb_commission_percent_assorti)
+            if article_settings is not None
+            and article_settings.production_order_wb_commission_percent_assorti is not None
+            else None
+        ),
+        average_realized_price_main=(
+            float(article_settings.production_order_average_realized_price_main)
+            if article_settings is not None
+            and article_settings.production_order_average_realized_price_main is not None
+            else None
+        ),
+        average_realized_price_assorti=(
+            float(article_settings.production_order_average_realized_price_assorti)
+            if article_settings is not None
+            and article_settings.production_order_average_realized_price_assorti is not None
+            else None
+        ),
+        available_capital=(
+            float(article_settings.production_order_available_capital)
+            if article_settings is not None
+            and article_settings.production_order_available_capital is not None
+            else None
+        ),
     )
 
 
@@ -414,6 +456,27 @@ def upsert_production_order_admin_settings(
     )
     article_settings.production_order_layer5_accelerate_production_risk_threshold = (
         payload.layer5_accelerate_production_risk_threshold
+    )
+    article_settings.production_order_production_cost_per_unit = (
+        payload.production_cost_per_unit
+    )
+    article_settings.production_order_logistics_cost_per_unit = (
+        payload.logistics_cost_per_unit
+    )
+    article_settings.production_order_wb_commission_percent_main = (
+        payload.wb_commission_percent_main
+    )
+    article_settings.production_order_wb_commission_percent_assorti = (
+        payload.wb_commission_percent_assorti
+    )
+    article_settings.production_order_average_realized_price_main = (
+        payload.average_realized_price_main
+    )
+    article_settings.production_order_average_realized_price_assorti = (
+        payload.average_realized_price_assorti
+    )
+    article_settings.production_order_available_capital = (
+        payload.available_capital
     )
 
     db.commit()

@@ -43,6 +43,13 @@ class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
     layer3_overstock_dampen_max: float | None = Field(default=None, ge=0, le=1)
     layer5_unavoidable_stockout_risk_threshold: float | None = Field(default=None, ge=0, le=1)
     layer5_accelerate_production_risk_threshold: float | None = Field(default=None, ge=0, le=1)
+    production_cost_per_unit: float | None = Field(default=None, ge=0)
+    logistics_cost_per_unit: float | None = Field(default=None, ge=0)
+    wb_commission_percent_main: float | None = Field(default=None, ge=0, le=1)
+    wb_commission_percent_assorti: float | None = Field(default=None, ge=0, le=1)
+    average_realized_price_main: float | None = Field(default=None, ge=0)
+    average_realized_price_assorti: float | None = Field(default=None, ge=0)
+    available_capital: float | None = Field(default=None, ge=0)
 
     @field_validator("size_weights")
     @classmethod
@@ -127,3 +134,10 @@ class ProductionOrderAdminSettingsResponse(BaseModel):
     layer3_overstock_dampen_max: float | None = None
     layer5_unavoidable_stockout_risk_threshold: float | None = None
     layer5_accelerate_production_risk_threshold: float | None = None
+    production_cost_per_unit: float | None = None
+    logistics_cost_per_unit: float | None = None
+    wb_commission_percent_main: float | None = None
+    wb_commission_percent_assorti: float | None = None
+    average_realized_price_main: float | None = None
+    average_realized_price_assorti: float | None = None
+    available_capital: float | None = None

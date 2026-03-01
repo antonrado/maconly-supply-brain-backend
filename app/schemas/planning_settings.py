@@ -94,6 +94,13 @@ class GlobalPlanningSettingsBase(BaseModel):
     default_service_level_percent: int = 90
     default_fabric_min_batch_qty: int = 7000
     default_elastic_min_batch_qty: int = 3000
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsCreate(GlobalPlanningSettingsBase):
@@ -106,6 +113,13 @@ class GlobalPlanningSettingsUpdate(BaseModel):
     default_service_level_percent: int | None = None
     default_fabric_min_batch_qty: int | None = None
     default_elastic_min_batch_qty: int | None = None
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsRead(GlobalPlanningSettingsBase):
@@ -188,6 +202,13 @@ class GlobalPlanningSettingsExperimentalSnapshot(BaseModel):
     default_service_level_percent: int | None = None
     default_fabric_min_batch_qty: int | None = None
     default_elastic_min_batch_qty: int | None = None
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsSnapshot(BaseModel):
