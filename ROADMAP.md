@@ -41,7 +41,7 @@
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
 - Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping including objective-score reason field consistency, tie/near-tie flag consistency, profit/GMROI gap consistency, objective-score-gap consistency, capital metric sanity) and projected in compact explainability mode.
 - Layer 2 contract now explicitly verifies objective-component decomposition formula consistency (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) to block silent fallback or malformed objective payloads.
-- Capital-limited line selection evidence is now regression-locked at helper level: objective-per-capital ranking can prioritize lower gross-profit lines when penalties make them economically dominant, and budget allocation follows this ranking (no silent profit-only fallback).
+- Capital-limited line selection evidence is now regression-locked at helper/API level: objective-per-capital ranking can prioritize lower gross-profit lines when penalties make them economically dominant, budget allocation follows this ranking (no silent profit-only fallback), and proposal meta exposes deterministic budget-limited ranking/cutoff behavior.
 - No hard-coded "critical SKU" classifier as primary allocator.
 - Economic Alpha economics precedence is now wired and traceable end-to-end (`request -> admin_defaults -> global_default -> code_default_constants`) with regression coverage for each source tier.
 

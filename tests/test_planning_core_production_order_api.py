@@ -689,6 +689,81 @@ def test_capital_constraint_allocates_budget_by_objective_per_capital_ranking():
     assert cutoff_line["objective_score_per_capital"] < rankings[0]["objective_score_per_capital"]
 
 
+def test_capital_constraint_supports_partial_allocation_on_cutoff_line():
+    candidate_lines = [
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=10,
+            size_id=20,
+            recommended_qty=5,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=11,
+            size_id=21,
+            recommended_qty=5,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=12,
+            size_id=22,
+            recommended_qty=5,
+            source_reason="seed|layer2:main",
+        ),
+    ]
+    ranked = [
+        {
+            "rank": 1,
+            "color_id": 10,
+            "size_id": 20,
+            "objective_score_per_capital": 3.0,
+        },
+        {
+            "rank": 2,
+            "color_id": 11,
+            "size_id": 21,
+            "objective_score_per_capital": 2.0,
+        },
+        {
+            "rank": 3,
+            "color_id": 12,
+            "size_id": 22,
+            "objective_score_per_capital": 1.0,
+        },
+    ]
+
+    constrained_lines, summary = _apply_capital_constraint_to_candidate_lines(
+        candidate_lines=candidate_lines,
+        ranked_line_objectives=ranked,
+        available_capital=120.0,
+        unit_capital_per_unit=10.0,
+    )
+
+    assert summary["status"] == "budget_limited_applied"
+    assert summary["constrained"] is True
+    assert summary["required_capital_before_constraint"] == 150.0
+    assert summary["allocated_capital_after_constraint"] == 120.0
+    assert summary["remaining_capital"] == 0.0
+    assert summary["line_count_before"] == 3
+    assert summary["line_count_after"] == 3
+
+    assert [(line.color_id, line.size_id, line.recommended_qty) for line in constrained_lines] == [
+        (10, 20, 5),
+        (11, 21, 5),
+        (12, 22, 2),
+    ]
+
+    cutoff_line = summary["cutoff_line"]
+    assert cutoff_line is not None
+    assert cutoff_line["rank"] == 3
+    assert cutoff_line["color_id"] == 12
+    assert cutoff_line["size_id"] == 22
+    assert cutoff_line["requested_qty"] == 5
+    assert cutoff_line["allocated_qty"] == 2
+
+
 def test_layer2_allocation_requires_explicit_economic_inputs():
     metrics = [
         {
@@ -1346,6 +1421,56 @@ def test_production_order_proposal_economic_overrides_are_traced_in_meta(client,
         "gross_profit_delta",
         "objective_delta",
     }
+
+
+def test_production_order_proposal_reports_budget_limited_capital_constraint_summary(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+    payload["overrides"]["available_capital"] = 20.0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    recommendation = body["recommendation"]
+    assert recommendation is not None
+    assert recommendation["lines"]
+
+    meta = body["explanation"]["meta"]
+    capital_constraint = meta["capital_constraint"]
+    assert capital_constraint["status"] == "budget_limited_applied"
+    assert capital_constraint["constrained"] is True
+    assert capital_constraint["available_capital"] == 20.0
+    assert (
+        capital_constraint["required_capital_before_constraint"]
+        > capital_constraint["available_capital"]
+    )
+    assert (
+        capital_constraint["allocated_capital_after_constraint"]
+        <= capital_constraint["available_capital"]
+    )
+    assert capital_constraint["line_count_after"] == len(recommendation["lines"])
+    assert capital_constraint["line_count_before"] >= capital_constraint["line_count_after"]
+    assert capital_constraint["remaining_capital"] >= 0.0
+
+    ranking = capital_constraint["ranking"]
+    assert isinstance(ranking, list)
+    assert len(ranking) >= len(recommendation["lines"])
+    assert recommendation["lines"][0]["color_id"] == ranking[0]["color_id"]
+    assert recommendation["lines"][0]["size_id"] == ranking[0]["size_id"]
+    for line in recommendation["lines"]:
+        assert line["source_reason"].endswith("|capital_constraint")
+
+    cutoff_line = capital_constraint["cutoff_line"]
+    assert cutoff_line is not None
+    assert cutoff_line["requested_qty"] >= cutoff_line["allocated_qty"] >= 0
 
 
 def test_production_order_proposal_price_flip_changes_layer2_allocation_decision_end_to_end(client, db_session):

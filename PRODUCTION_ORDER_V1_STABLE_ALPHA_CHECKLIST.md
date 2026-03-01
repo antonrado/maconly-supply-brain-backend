@@ -114,6 +114,7 @@
   - [ ] `code_default_constants`
 - [ ] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
 - [ ] Capital-limited allocation is demonstrably objective-driven in regression tests (higher `objective_score_per_capital` may be selected before higher raw gross profit; no silent profit-only fallback).
+- [ ] Budget-limited proposal responses expose deterministic capital-constraint evidence in meta (`status=budget_limited_applied`, ranking, cutoff line incl. partial allocation when applicable).
 - [ ] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 
 ## 11) Verification gate
