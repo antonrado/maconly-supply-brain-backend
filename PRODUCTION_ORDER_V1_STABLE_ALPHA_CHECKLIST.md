@@ -37,7 +37,9 @@
   - [ ] allocation decision matches profit gate outcome (`main|assorti|hold`)
   - [ ] tie/near-tie flags match profit-gap math
   - [ ] profit-gap and GMROI-gap fields are internally consistent
+  - [ ] objective-score-gap field is internally consistent with objective score pair (`objective_score_gap_until_eta = |objective_score_if_main_until_eta - objective_score_if_assorti_until_eta|`)
   - [ ] capital-locked metric is valid (non-negative numeric)
+  - [ ] objective-component formula is consistent (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`)
 
 ## 5) Layer 3 contract (purchase shaping)
 - [ ] Layer 3 applies deterministic base factors by decision (`main|assorti|hold`).

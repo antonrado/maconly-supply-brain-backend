@@ -39,7 +39,8 @@
 - Layer 2 decision flags (`allocation_decision`, `tie_break_applied`, `near_tie`) are stabilized against floating-point boundary noise by using normalized 4-decimal profit/GMROI diagnostics that are also emitted in explainability payloads.
 - Layer 2 helper interfaces now require explicit economics inputs (`margin_main_per_unit`, `margin_assorti_per_unit`, `unit_capital_per_unit`) to prevent accidental fallback to proxy constants after refactors.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
-- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, capital metric sanity) and projected in compact explainability mode.
+- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping, tie/near-tie flag consistency, profit/GMROI gap consistency, objective-score-gap consistency, capital metric sanity) and projected in compact explainability mode.
+- Layer 2 contract now explicitly verifies objective-component decomposition formula consistency (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) to block silent fallback or malformed objective payloads.
 - No hard-coded "critical SKU" classifier as primary allocator.
 - Economic Alpha economics precedence is now wired and traceable end-to-end (`request -> admin_defaults -> global_default -> code_default_constants`) with regression coverage for each source tier.
 

@@ -1872,6 +1872,8 @@ def _build_layer2_contract_summary(
     objective_components_present = True
     objective_components_numeric = True
     objective_components_consistent_with_scores = True
+    objective_components_match_formula = True
+    objective_score_gap_consistent_with_objective_scores = True
     required_objective_component_keys = (
         "expected_gross_profit",
         "capital_cost_penalty",
@@ -1950,6 +1952,8 @@ def _build_layer2_contract_summary(
             objective_components_valid = True
             objective_components_main_score = 0.0
             objective_components_assorti_score = 0.0
+            objective_components_main_values: dict[str, float] = {}
+            objective_components_assorti_values: dict[str, float] = {}
 
             if objective_main_raw is None or objective_assorti_raw is None:
                 objective_required_fields_present = False
@@ -1957,6 +1961,7 @@ def _build_layer2_contract_summary(
                 objective_scores_valid = False
                 allocation_matches_composite_objective_gate = False
                 objective_components_consistent_with_scores = False
+                objective_score_gap_consistent_with_objective_scores = False
 
             if not isinstance(objective_components_main_raw, dict) or not isinstance(
                 objective_components_assorti_raw,
@@ -1968,6 +1973,7 @@ def _build_layer2_contract_summary(
                 objective_components_valid = False
                 allocation_matches_composite_objective_gate = False
                 objective_components_consistent_with_scores = False
+                objective_components_match_formula = False
             else:
                 for component_key in required_objective_component_keys:
                     if (
@@ -1980,24 +1986,30 @@ def _build_layer2_contract_summary(
                         objective_components_valid = False
                         allocation_matches_composite_objective_gate = False
                         objective_components_consistent_with_scores = False
+                        objective_components_match_formula = False
                         break
 
                 if objective_components_valid:
                     try:
-                        objective_components_main_score = float(
-                            objective_components_main_raw["objective_score"]
-                        )
-                        objective_components_assorti_score = float(
-                            objective_components_assorti_raw["objective_score"]
-                        )
                         for component_key in required_objective_component_keys:
-                            float(objective_components_main_raw[component_key])
-                            float(objective_components_assorti_raw[component_key])
+                            objective_components_main_values[component_key] = float(
+                                objective_components_main_raw[component_key]
+                            )
+                            objective_components_assorti_values[component_key] = float(
+                                objective_components_assorti_raw[component_key]
+                            )
+                        objective_components_main_score = objective_components_main_values[
+                            "objective_score"
+                        ]
+                        objective_components_assorti_score = objective_components_assorti_values[
+                            "objective_score"
+                        ]
                     except (TypeError, ValueError):
                         objective_components_numeric = False
                         objective_components_valid = False
                         allocation_matches_composite_objective_gate = False
                         objective_components_consistent_with_scores = False
+                        objective_components_match_formula = False
 
             try:
                 if objective_scores_valid:
@@ -2008,6 +2020,7 @@ def _build_layer2_contract_summary(
                 objective_scores_valid = False
                 allocation_matches_composite_objective_gate = False
                 objective_components_consistent_with_scores = False
+                objective_score_gap_consistent_with_objective_scores = False
 
             if objective_scores_valid and objective_components_valid:
                 if abs(objective_main - objective_components_main_score) > 1e-4:
@@ -2015,10 +2028,43 @@ def _build_layer2_contract_summary(
                 if abs(objective_assorti - objective_components_assorti_score) > 1e-4:
                     objective_components_consistent_with_scores = False
 
+            if objective_components_valid:
+                objective_components_main_formula_score = (
+                    objective_components_main_values["expected_gross_profit"]
+                    - objective_components_main_values["capital_cost_penalty"]
+                    - objective_components_main_values["stockout_penalty"]
+                    - objective_components_main_values["overstock_penalty"]
+                )
+                objective_components_assorti_formula_score = (
+                    objective_components_assorti_values["expected_gross_profit"]
+                    - objective_components_assorti_values["capital_cost_penalty"]
+                    - objective_components_assorti_values["stockout_penalty"]
+                    - objective_components_assorti_values["overstock_penalty"]
+                )
+                if (
+                    abs(
+                        objective_components_main_formula_score
+                        - objective_components_main_values["objective_score"]
+                    )
+                    > 1e-4
+                ):
+                    objective_components_match_formula = False
+                    allocation_matches_composite_objective_gate = False
+                if (
+                    abs(
+                        objective_components_assorti_formula_score
+                        - objective_components_assorti_values["objective_score"]
+                    )
+                    > 1e-4
+                ):
+                    objective_components_match_formula = False
+                    allocation_matches_composite_objective_gate = False
+
             if not objective_scores_valid:
                 tie_break_hold_when_equal_profit = False
                 tie_break_applied_matches_profit_tie = False
                 near_tie_matches_profit_gap_threshold = False
+                objective_score_gap_consistent_with_objective_scores = False
             else:
                 objective_gap_until_eta_expected = abs(objective_main - objective_assorti)
                 if objective_main > objective_assorti:
@@ -2045,6 +2091,14 @@ def _build_layer2_contract_summary(
                 )
                 if not isinstance(near_tie_raw, bool) or near_tie_raw != near_tie_expected:
                     near_tie_matches_profit_gap_threshold = False
+
+                try:
+                    objective_gap_reported = float(decision_item.get("objective_score_gap_until_eta"))
+                except (TypeError, ValueError):
+                    objective_score_gap_consistent_with_objective_scores = False
+                else:
+                    if abs(objective_gap_reported - objective_gap_until_eta_expected) > 1e-4:
+                        objective_score_gap_consistent_with_objective_scores = False
 
             try:
                 profit_gap_reported_raw = decision_item.get("expected_gross_profit_gap_until_eta")
@@ -2123,6 +2177,10 @@ def _build_layer2_contract_summary(
         "objective_components_present": objective_components_present,
         "objective_components_numeric": objective_components_numeric,
         "objective_components_consistent_with_scores": objective_components_consistent_with_scores,
+        "objective_components_match_formula": objective_components_match_formula,
+        "objective_score_gap_consistent_with_objective_scores": (
+            objective_score_gap_consistent_with_objective_scores
+        ),
     }
     return {
         "version": LAYER2_CONTRACT_VERSION,

@@ -42,6 +42,7 @@ from app.services.planning_production_order import (
     _build_layer2_allocation_decisions,
     _build_layer2_contract_summary,
     _build_layer2_decision_quality_summary,
+    _compute_objective_components,
     _build_line_objective_capital_rankings,
     _build_layer3_contract_summary,
     _build_layer4_aggregate_deltas,
@@ -285,6 +286,8 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "objective_components_present": False,
         "objective_components_numeric": False,
         "objective_components_consistent_with_scores": False,
+        "objective_components_match_formula": False,
+        "objective_score_gap_consistent_with_objective_scores": False,
     }
     assert contract["legacy_aliases"] == {
         "allocation_matches_profit_gate": {
@@ -360,6 +363,74 @@ def test_layer2_allocation_rounding_boundary_stays_contract_consistent():
     assert contract["checks"]["objective_components_present"] is True
     assert contract["checks"]["objective_components_numeric"] is True
     assert contract["checks"]["objective_components_consistent_with_scores"] is True
+    assert contract["checks"]["objective_components_match_formula"] is True
+    assert contract["checks"]["objective_score_gap_consistent_with_objective_scores"] is True
+
+
+def test_objective_components_penalty_monotonicity_and_formula_consistency():
+    base = _compute_objective_components(
+        expected_gross_profit=100.0,
+        capital_locked=100.0,
+        stockout_risk=0.4,
+        overstock_risk=0.3,
+        expected_lost_margin_if_stockout=80.0,
+        inventory_carrying_cost=60.0,
+        capital_cost_rate=0.1,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.0,
+        horizon_factor=1.0,
+    )
+
+    higher_capital_penalty = _compute_objective_components(
+        expected_gross_profit=100.0,
+        capital_locked=100.0,
+        stockout_risk=0.4,
+        overstock_risk=0.3,
+        expected_lost_margin_if_stockout=80.0,
+        inventory_carrying_cost=60.0,
+        capital_cost_rate=0.2,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.0,
+        horizon_factor=1.0,
+    )
+    higher_stockout_penalty = _compute_objective_components(
+        expected_gross_profit=100.0,
+        capital_locked=100.0,
+        stockout_risk=0.4,
+        overstock_risk=0.3,
+        expected_lost_margin_if_stockout=80.0,
+        inventory_carrying_cost=60.0,
+        capital_cost_rate=0.1,
+        stockout_penalty_weight=1.5,
+        overstock_penalty_weight=1.0,
+        horizon_factor=1.0,
+    )
+    higher_overstock_penalty = _compute_objective_components(
+        expected_gross_profit=100.0,
+        capital_locked=100.0,
+        stockout_risk=0.4,
+        overstock_risk=0.3,
+        expected_lost_margin_if_stockout=80.0,
+        inventory_carrying_cost=60.0,
+        capital_cost_rate=0.1,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.5,
+        horizon_factor=1.0,
+    )
+
+    assert base["objective_score"] == pytest.approx(
+        100.0
+        - base["capital_cost_penalty"]
+        - base["stockout_penalty"]
+        - base["overstock_penalty"],
+        abs=1e-9,
+    )
+    assert higher_capital_penalty["capital_cost_penalty"] > base["capital_cost_penalty"]
+    assert higher_capital_penalty["objective_score"] < base["objective_score"]
+    assert higher_stockout_penalty["stockout_penalty"] > base["stockout_penalty"]
+    assert higher_stockout_penalty["objective_score"] < base["objective_score"]
+    assert higher_overstock_penalty["overstock_penalty"] > base["overstock_penalty"]
+    assert higher_overstock_penalty["objective_score"] < base["objective_score"]
 
 
 @pytest.mark.parametrize(
@@ -636,7 +707,111 @@ def test_layer2_contract_summary_marks_violated_when_objective_fields_non_numeri
     assert checks["objective_components_present"] is True
     assert checks["objective_components_numeric"] is False
     assert checks["objective_components_consistent_with_scores"] is False
+    assert checks["objective_components_match_formula"] is False
+    assert checks["objective_score_gap_consistent_with_objective_scores"] is False
     assert checks["allocation_matches_composite_objective_gate"] is False
+
+
+def test_layer2_contract_summary_marks_violated_when_objective_components_break_formula():
+    decisions = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 2.0,
+            "profit_if_assorti_until_eta": 1.0,
+            "profit_gap_until_eta": 1.0,
+            "capital_locked": 10.0,
+            "objective_score_if_main_until_eta": 1.5,
+            "objective_score_if_assorti_until_eta": 1.0,
+            "objective_components_if_main": {
+                "expected_gross_profit": 2.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 1.5,
+            },
+            "objective_components_if_assorti": {
+                "expected_gross_profit": 1.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 1.0,
+            },
+            "gmroi_main": 0.2,
+            "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.1,
+            "allocation_decision": "main",
+            "decision_reason": "profit_main_gt_assorti",
+            "tie_break_applied": False,
+            "near_tie": False,
+        }
+    ]
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary={"main": 1, "assorti": 0, "hold": 0},
+    )
+
+    checks = contract["checks"]
+    assert contract["status"] == "violated"
+    assert checks["objective_required_fields_present"] is True
+    assert checks["objective_score_fields_numeric"] is True
+    assert checks["objective_components_present"] is True
+    assert checks["objective_components_numeric"] is True
+    assert checks["objective_components_consistent_with_scores"] is True
+    assert checks["objective_components_match_formula"] is False
+    assert checks["objective_score_gap_consistent_with_objective_scores"] is False
+    assert checks["allocation_matches_composite_objective_gate"] is False
+
+
+def test_layer2_contract_summary_marks_violated_when_objective_gap_field_inconsistent():
+    decisions = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 2.0,
+            "profit_if_assorti_until_eta": 1.0,
+            "profit_gap_until_eta": 1.0,
+            "capital_locked": 10.0,
+            "objective_score_if_main_until_eta": 2.0,
+            "objective_score_if_assorti_until_eta": 1.0,
+            "objective_components_if_main": {
+                "expected_gross_profit": 2.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 2.0,
+            },
+            "objective_components_if_assorti": {
+                "expected_gross_profit": 1.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 1.0,
+            },
+            "objective_score_gap_until_eta": 0.2,
+            "gmroi_main": 0.2,
+            "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.1,
+            "allocation_decision": "main",
+            "decision_reason": "profit_main_gt_assorti",
+            "tie_break_applied": False,
+            "near_tie": False,
+        }
+    ]
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary={"main": 1, "assorti": 0, "hold": 0},
+    )
+
+    checks = contract["checks"]
+    assert contract["status"] == "violated"
+    assert checks["objective_components_match_formula"] is True
+    assert checks["objective_score_gap_consistent_with_objective_scores"] is False
+    assert checks["allocation_matches_composite_objective_gate"] is True
 
 
 def test_layer2_decision_quality_summary_tracks_missing_objective_fields_without_profit_fallback():
@@ -2059,6 +2234,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "objective_components_present": True,
             "objective_components_numeric": True,
             "objective_components_consistent_with_scores": True,
+            "objective_components_match_formula": True,
+            "objective_score_gap_consistent_with_objective_scores": True,
         },
         "legacy_aliases": {
             "allocation_matches_profit_gate": {
