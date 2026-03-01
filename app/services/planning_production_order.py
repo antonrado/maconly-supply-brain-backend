@@ -1861,6 +1861,7 @@ def _build_layer2_contract_summary(
     tie_break_hold_when_equal_profit = True
     decision_reason_matches_allocation = True
     decision_reason_expected_gross_profit_matches_allocation = True
+    decision_reason_objective_score_matches_allocation = True
     allocation_matches_composite_objective_gate = True
     tie_break_applied_matches_profit_tie = True
     near_tie_matches_profit_gap_threshold = True
@@ -1920,6 +1921,18 @@ def _build_layer2_contract_summary(
                 != expected_decision_reason_expected_gross_profit
             ):
                 decision_reason_expected_gross_profit_matches_allocation = False
+
+        decision_reason_objective_score = str(
+            decision_item.get("decision_reason_objective_score", "")
+        ).strip()
+        expected_decision_reason_objective_score = LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION.get(
+            allocation_decision
+        )
+        if (
+            expected_decision_reason_objective_score is None
+            or decision_reason_objective_score != expected_decision_reason_objective_score
+        ):
+            decision_reason_objective_score_matches_allocation = False
 
         try:
             profit_main_raw = decision_item.get("expected_gross_profit_if_main_until_eta")
@@ -2160,6 +2173,9 @@ def _build_layer2_contract_summary(
         "decision_reason_matches_allocation": decision_reason_matches_allocation,
         "decision_reason_expected_gross_profit_matches_allocation": (
             decision_reason_expected_gross_profit_matches_allocation
+        ),
+        "decision_reason_objective_score_matches_allocation": (
+            decision_reason_objective_score_matches_allocation
         ),
         "allocation_matches_composite_objective_gate": allocation_matches_composite_objective_gate,
         "allocation_matches_profit_gate": allocation_matches_composite_objective_gate,

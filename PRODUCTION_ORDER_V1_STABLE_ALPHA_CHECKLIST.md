@@ -34,6 +34,7 @@
 - [ ] Layer 2 contract block exists in `explanation.meta.layer_2_allocation.contract` with status `ok` for valid flows.
 - [ ] Contract checks include at least:
   - [ ] decision reason mapping matches allocation decision
+  - [ ] objective-score decision reason mapping matches allocation decision (`decision_reason_objective_score`)
   - [ ] allocation decision matches profit gate outcome (`main|assorti|hold`)
   - [ ] tie/near-tie flags match profit-gap math
   - [ ] profit-gap and GMROI-gap fields are internally consistent

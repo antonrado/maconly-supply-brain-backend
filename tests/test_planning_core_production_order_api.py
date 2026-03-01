@@ -272,6 +272,7 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "tie_break_hold_when_equal_profit": False,
         "decision_reason_matches_allocation": False,
         "decision_reason_expected_gross_profit_matches_allocation": True,
+        "decision_reason_objective_score_matches_allocation": False,
         "allocation_matches_composite_objective_gate": False,
         "allocation_matches_profit_gate": False,
         "allocation_matches_expected_gross_profit_gate": False,
@@ -365,6 +366,7 @@ def test_layer2_allocation_rounding_boundary_stays_contract_consistent():
     assert contract["checks"]["objective_components_consistent_with_scores"] is True
     assert contract["checks"]["objective_components_match_formula"] is True
     assert contract["checks"]["objective_score_gap_consistent_with_objective_scores"] is True
+    assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
 
 
 def test_objective_components_penalty_monotonicity_and_formula_consistency():
@@ -602,11 +604,13 @@ def test_layer2_contract_summary_marks_violated_when_allocation_conflicts_with_p
                 "overstock_penalty": 0.0,
                 "objective_score": 1.0,
             },
+            "objective_score_gap_until_eta": 1.0,
             "gmroi_main": 0.2,
             "gmroi_assorti": 0.1,
             "gmroi_gap": 0.1,
             "allocation_decision": "assorti",
             "decision_reason": "profit_assorti_gt_main",
+            "decision_reason_objective_score": "objective_score_assorti_gt_main",
             "tie_break_applied": False,
             "near_tie": True,
         }
@@ -620,6 +624,7 @@ def test_layer2_contract_summary_marks_violated_when_allocation_conflicts_with_p
 
     assert contract["status"] == "violated"
     assert contract["checks"]["decision_reason_matches_allocation"] is True
+    assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
     assert contract["checks"]["allocation_matches_composite_objective_gate"] is False
     assert contract["checks"]["allocation_matches_profit_gate"] is False
 
@@ -709,6 +714,7 @@ def test_layer2_contract_summary_marks_violated_when_objective_fields_non_numeri
     assert checks["objective_components_consistent_with_scores"] is False
     assert checks["objective_components_match_formula"] is False
     assert checks["objective_score_gap_consistent_with_objective_scores"] is False
+    assert checks["decision_reason_objective_score_matches_allocation"] is False
     assert checks["allocation_matches_composite_objective_gate"] is False
 
 
@@ -738,11 +744,13 @@ def test_layer2_contract_summary_marks_violated_when_objective_components_break_
                 "overstock_penalty": 0.0,
                 "objective_score": 1.0,
             },
+            "objective_score_gap_until_eta": 0.5,
             "gmroi_main": 0.2,
             "gmroi_assorti": 0.1,
             "gmroi_gap": 0.1,
             "allocation_decision": "main",
             "decision_reason": "profit_main_gt_assorti",
+            "decision_reason_objective_score": "objective_score_main_gt_assorti",
             "tie_break_applied": False,
             "near_tie": False,
         }
@@ -761,7 +769,8 @@ def test_layer2_contract_summary_marks_violated_when_objective_components_break_
     assert checks["objective_components_numeric"] is True
     assert checks["objective_components_consistent_with_scores"] is True
     assert checks["objective_components_match_formula"] is False
-    assert checks["objective_score_gap_consistent_with_objective_scores"] is False
+    assert checks["objective_score_gap_consistent_with_objective_scores"] is True
+    assert checks["decision_reason_objective_score_matches_allocation"] is True
     assert checks["allocation_matches_composite_objective_gate"] is False
 
 
@@ -797,6 +806,7 @@ def test_layer2_contract_summary_marks_violated_when_objective_gap_field_inconsi
             "gmroi_gap": 0.1,
             "allocation_decision": "main",
             "decision_reason": "profit_main_gt_assorti",
+            "decision_reason_objective_score": "objective_score_main_gt_assorti",
             "tie_break_applied": False,
             "near_tie": False,
         }
@@ -811,6 +821,59 @@ def test_layer2_contract_summary_marks_violated_when_objective_gap_field_inconsi
     assert contract["status"] == "violated"
     assert checks["objective_components_match_formula"] is True
     assert checks["objective_score_gap_consistent_with_objective_scores"] is False
+    assert checks["decision_reason_objective_score_matches_allocation"] is True
+    assert checks["allocation_matches_composite_objective_gate"] is True
+
+
+def test_layer2_contract_summary_marks_violated_when_objective_reason_conflicts_with_allocation():
+    decisions = [
+        {
+            "color_id": 10,
+            "size_id": 20,
+            "eta_days": 1,
+            "profit_if_main_until_eta": 2.0,
+            "profit_if_assorti_until_eta": 1.0,
+            "profit_gap_until_eta": 1.0,
+            "capital_locked": 10.0,
+            "objective_score_if_main_until_eta": 2.0,
+            "objective_score_if_assorti_until_eta": 1.0,
+            "objective_components_if_main": {
+                "expected_gross_profit": 2.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 2.0,
+            },
+            "objective_components_if_assorti": {
+                "expected_gross_profit": 1.0,
+                "capital_cost_penalty": 0.0,
+                "stockout_penalty": 0.0,
+                "overstock_penalty": 0.0,
+                "objective_score": 1.0,
+            },
+            "objective_score_gap_until_eta": 1.0,
+            "gmroi_main": 0.2,
+            "gmroi_assorti": 0.1,
+            "gmroi_gap": 0.1,
+            "allocation_decision": "main",
+            "decision_reason": "profit_main_gt_assorti",
+            "decision_reason_expected_gross_profit": "expected_gross_profit_main_gt_assorti",
+            "decision_reason_objective_score": "objective_score_assorti_gt_main",
+            "tie_break_applied": False,
+            "near_tie": True,
+        }
+    ]
+
+    contract = _build_layer2_contract_summary(
+        layer2_allocation_decisions=decisions,
+        layer2_allocation_summary={"main": 1, "assorti": 0, "hold": 0},
+    )
+
+    checks = contract["checks"]
+    assert contract["status"] == "violated"
+    assert checks["decision_reason_matches_allocation"] is True
+    assert checks["decision_reason_expected_gross_profit_matches_allocation"] is True
+    assert checks["decision_reason_objective_score_matches_allocation"] is False
     assert checks["allocation_matches_composite_objective_gate"] is True
 
 
@@ -2220,6 +2283,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "tie_break_hold_when_equal_profit": True,
             "decision_reason_matches_allocation": True,
             "decision_reason_expected_gross_profit_matches_allocation": True,
+            "decision_reason_objective_score_matches_allocation": True,
             "allocation_matches_composite_objective_gate": True,
             "allocation_matches_profit_gate": True,
             "allocation_matches_expected_gross_profit_gate": True,
