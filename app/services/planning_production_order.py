@@ -3131,6 +3131,71 @@ def _build_layer4_contract_summary(
         for item in layer4_scenarios
     ]
 
+    required_delta_fields = (
+        "capital_delta_vs_balanced",
+        "expected_revenue_delta_vs_balanced",
+        "expected_gross_profit_delta_vs_balanced",
+        "gross_profit_delta_vs_balanced",
+        "objective_score_delta_vs_balanced",
+    )
+    balanced = next(
+        (
+            item
+            for item in layer4_scenarios
+            if str(item.get("scenario", "")).strip().lower() == "balanced"
+        ),
+        None,
+    )
+    scenario_delta_fields_present = True
+    scenario_deltas_match_balanced = True
+    if balanced is None:
+        scenario_delta_fields_present = False
+        scenario_deltas_match_balanced = False
+        balanced_capital = 0.0
+        balanced_revenue = 0.0
+        balanced_profit = 0.0
+        balanced_objective = 0.0
+    else:
+        balanced_capital = float(balanced.get("total_capital_required", 0.0))
+        balanced_revenue = float(balanced.get("expected_revenue", 0.0))
+        balanced_profit = float(balanced.get("expected_gross_profit", 0.0))
+        balanced_objective = float(balanced.get("objective_score", 0.0))
+
+    for scenario_item in layer4_scenarios:
+        if any(field_name not in scenario_item for field_name in required_delta_fields):
+            scenario_delta_fields_present = False
+            scenario_deltas_match_balanced = False
+            continue
+
+        if balanced is None:
+            scenario_deltas_match_balanced = False
+            continue
+
+        try:
+            capital = float(scenario_item.get("total_capital_required", 0.0))
+            revenue = float(scenario_item.get("expected_revenue", 0.0))
+            profit = float(scenario_item.get("expected_gross_profit", 0.0))
+            objective = float(scenario_item.get("objective_score", 0.0))
+            capital_delta = float(scenario_item.get("capital_delta_vs_balanced"))
+            revenue_delta = float(scenario_item.get("expected_revenue_delta_vs_balanced"))
+            profit_delta = float(scenario_item.get("expected_gross_profit_delta_vs_balanced"))
+            profit_delta_alias = float(scenario_item.get("gross_profit_delta_vs_balanced"))
+            objective_delta = float(scenario_item.get("objective_score_delta_vs_balanced"))
+        except (TypeError, ValueError):
+            scenario_deltas_match_balanced = False
+            continue
+
+        if abs(capital_delta - (capital - balanced_capital)) > 1e-4:
+            scenario_deltas_match_balanced = False
+        if abs(revenue_delta - (revenue - balanced_revenue)) > 1e-4:
+            scenario_deltas_match_balanced = False
+        if abs(profit_delta - (profit - balanced_profit)) > 1e-4:
+            scenario_deltas_match_balanced = False
+        if abs(profit_delta_alias - profit_delta) > 1e-4:
+            scenario_deltas_match_balanced = False
+        if abs(objective_delta - (objective - balanced_objective)) > 1e-4:
+            scenario_deltas_match_balanced = False
+
     checks = {
         "capital_non_decreasing": all(
             current >= previous
@@ -3148,6 +3213,8 @@ def _build_layer4_contract_summary(
             current >= previous
             for previous, current in zip(purchase_units, purchase_units[1:])
         ),
+        "scenario_delta_fields_present": scenario_delta_fields_present,
+        "scenario_deltas_match_balanced": scenario_deltas_match_balanced,
     }
 
     contract_ok = order_matches_expected and all(checks.values())

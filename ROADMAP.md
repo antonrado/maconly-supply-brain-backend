@@ -41,6 +41,7 @@
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
 - Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping including objective-score reason field consistency, tie/near-tie flag consistency, profit/GMROI gap consistency, objective-score-gap consistency, capital metric sanity) and projected in compact explainability mode.
 - Layer 2 contract now explicitly verifies objective-component decomposition formula consistency (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) to block silent fallback or malformed objective payloads.
+- Capital-limited line selection evidence is now regression-locked at helper level: objective-per-capital ranking can prioritize lower gross-profit lines when penalties make them economically dominant, and budget allocation follows this ranking (no silent profit-only fallback).
 - No hard-coded "critical SKU" classifier as primary allocator.
 - Economic Alpha economics precedence is now wired and traceable end-to-end (`request -> admin_defaults -> global_default -> code_default_constants`) with regression coverage for each source tier.
 
@@ -56,6 +57,7 @@
 - Deterministic scenarios are wired in explanation meta: Conservative / Balanced / Aggressive.
 - Per-scenario outputs now include money fields (`expected_revenue`, `expected_gross_profit`, `expected_margin_percent`, `expected_turnover_days`) plus risk proxies (`stockout_probability_proxy`, `stockout_risk_proxy`, `overstock_risk_proxy`) and assorti sustainability proxy/impact.
 - Capital-gap transparency is now emitted (`available_capital`, `required_capital`, `deficit_or_surplus`) without auto-policy enforcement.
+- Layer 4 contract now includes scenario-delta runtime checks (delta field presence + balanced-baseline consistency across capital/revenue/profit/objective, including gross-profit delta alias consistency) to prevent silent explainability drift.
 - Finalize calibration rules and intervention handoff contract.
 
 ### 2.7 Economic Alpha calibration (active, highest priority)

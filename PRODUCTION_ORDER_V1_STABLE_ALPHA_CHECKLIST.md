@@ -56,6 +56,7 @@
 - [ ] Scenario factor list is exposed in `explanation.meta.layer_4_scenarios.factors`.
 - [ ] Layer 4 contract summary exists in `explanation.meta.layer_4_scenarios.contract`.
 - [ ] Contract checks verify order and monotonic invariants.
+- [ ] Layer 4 contract checks also verify scenario delta integrity against `Balanced` baseline (`capital/revenue/profit/objective` delta consistency + `gross_profit_delta_vs_balanced` alias consistency).
 - [ ] Per-scenario money outputs are present:
   - [ ] `expected_revenue`
   - [ ] `expected_gross_profit`
@@ -112,6 +113,7 @@
   - [ ] `global_default`
   - [ ] `code_default_constants`
 - [ ] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
+- [ ] Capital-limited allocation is demonstrably objective-driven in regression tests (higher `objective_score_per_capital` may be selected before higher raw gross profit; no silent profit-only fallback).
 - [ ] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 
 ## 11) Verification gate

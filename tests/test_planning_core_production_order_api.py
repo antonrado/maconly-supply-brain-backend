@@ -557,6 +557,138 @@ def test_layer2_allocation_objective_dominates_when_profit_gate_disagrees(
         )
 
 
+def test_line_objective_capital_rankings_prioritize_objective_per_capital_over_profit():
+    candidate_lines = [
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=10,
+            size_id=20,
+            recommended_qty=12,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=11,
+            size_id=21,
+            recommended_qty=10,
+            source_reason="seed|layer2:main",
+        ),
+    ]
+
+    rankings = _build_line_objective_capital_rankings(
+        candidate_lines=candidate_lines,
+        layer3_decision_by_line={
+            (10, 20): "main",
+            (11, 21): "main",
+        },
+        layer1_stock_health_metrics=[
+            {
+                "color_id": 10,
+                "size_id": 20,
+                "stockout_risk": 0.0,
+                "overstock_risk": 0.7,
+            },
+            {
+                "color_id": 11,
+                "size_id": 21,
+                "stockout_risk": 0.0,
+                "overstock_risk": 0.0,
+            },
+        ],
+        margin_main_per_unit=6.0,
+        margin_assorti_per_unit=3.0,
+        unit_capital_per_unit=10.0,
+        capital_cost_rate=0.05,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.0,
+    )
+
+    assert len(rankings) == 2
+    assert (rankings[0]["color_id"], rankings[0]["size_id"]) == (11, 21)
+    assert (rankings[1]["color_id"], rankings[1]["size_id"]) == (10, 20)
+    assert rankings[0]["rank"] == 1
+    assert rankings[1]["rank"] == 2
+    assert rankings[0]["expected_gross_profit"] < rankings[1]["expected_gross_profit"]
+    assert rankings[0]["objective_score_per_capital"] > rankings[1]["objective_score_per_capital"]
+
+
+def test_capital_constraint_allocates_budget_by_objective_per_capital_ranking():
+    candidate_lines = [
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=10,
+            size_id=20,
+            recommended_qty=12,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=11,
+            size_id=21,
+            recommended_qty=10,
+            source_reason="seed|layer2:main",
+        ),
+    ]
+
+    rankings = _build_line_objective_capital_rankings(
+        candidate_lines=candidate_lines,
+        layer3_decision_by_line={
+            (10, 20): "main",
+            (11, 21): "main",
+        },
+        layer1_stock_health_metrics=[
+            {
+                "color_id": 10,
+                "size_id": 20,
+                "stockout_risk": 0.0,
+                "overstock_risk": 0.7,
+            },
+            {
+                "color_id": 11,
+                "size_id": 21,
+                "stockout_risk": 0.0,
+                "overstock_risk": 0.0,
+            },
+        ],
+        margin_main_per_unit=6.0,
+        margin_assorti_per_unit=3.0,
+        unit_capital_per_unit=10.0,
+        capital_cost_rate=0.05,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.0,
+    )
+
+    constrained_lines, summary = _apply_capital_constraint_to_candidate_lines(
+        candidate_lines=candidate_lines,
+        ranked_line_objectives=rankings,
+        available_capital=100.0,
+        unit_capital_per_unit=10.0,
+    )
+
+    assert summary["status"] == "budget_limited_applied"
+    assert summary["constrained"] is True
+    assert summary["available_capital"] == 100.0
+    assert summary["required_capital_before_constraint"] == 220.0
+    assert summary["allocated_capital_after_constraint"] == 100.0
+    assert summary["remaining_capital"] == 0.0
+    assert summary["line_count_before"] == 2
+    assert summary["line_count_after"] == 1
+
+    assert len(constrained_lines) == 1
+    selected_line = constrained_lines[0]
+    assert (selected_line.color_id, selected_line.size_id) == (11, 21)
+    assert selected_line.recommended_qty == 10
+    assert selected_line.source_reason.endswith("|capital_constraint")
+
+    cutoff_line = summary["cutoff_line"]
+    assert cutoff_line is not None
+    assert cutoff_line["color_id"] == 10
+    assert cutoff_line["size_id"] == 20
+    assert cutoff_line["requested_qty"] == 12
+    assert cutoff_line["allocated_qty"] == 0
+    assert cutoff_line["objective_score_per_capital"] < rankings[0]["objective_score_per_capital"]
+
+
 def test_layer2_allocation_requires_explicit_economic_inputs():
     metrics = [
         {
@@ -2379,6 +2511,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
         "stockout_risk_non_increasing": True,
         "turnover_non_increasing": True,
         "purchase_units_non_decreasing": True,
+        "scenario_delta_fields_present": True,
+        "scenario_deltas_match_balanced": True,
     }
     assert set(layer4["aggregate_deltas"]["aggressive_vs_conservative"].keys()) == {
         "capital_delta",
@@ -3333,8 +3467,44 @@ def test_layer4_contract_summary_marks_violated_when_order_and_monotonicity_brea
             "stockout_risk_non_increasing": False,
             "turnover_non_increasing": False,
             "purchase_units_non_decreasing": False,
+            "scenario_delta_fields_present": False,
+            "scenario_deltas_match_balanced": False,
         },
     }
+
+
+def test_layer4_contract_summary_marks_violated_when_scenario_deltas_break_balanced_baseline():
+    scenarios = _build_layer4_scenarios(
+        base_purchase_units=100,
+        available_bundles_for_cover=120,
+        total_daily_sales=5.0,
+        reorder_point_days=40,
+        expected_horizon_sales=450.0,
+        layer3_purchase_shaping={
+            "main_lines": 1,
+            "assorti_lines": 1,
+            "hold_lines": 0,
+        },
+        unit_capital_per_unit=2.0,
+        margin_main_per_unit=1.5,
+        margin_assorti_per_unit=1.0,
+        average_realized_price_main=3.5,
+        average_realized_price_assorti=3.0,
+    )
+    scenarios[2]["objective_score_delta_vs_balanced"] = round(
+        float(scenarios[2]["objective_score_delta_vs_balanced"]) + 1.0,
+        2,
+    )
+
+    contract = _build_layer4_contract_summary(scenarios)
+
+    assert contract["status"] == "violated"
+    assert contract["checks"]["capital_non_decreasing"] is True
+    assert contract["checks"]["stockout_risk_non_increasing"] is True
+    assert contract["checks"]["turnover_non_increasing"] is True
+    assert contract["checks"]["purchase_units_non_decreasing"] is True
+    assert contract["checks"]["scenario_delta_fields_present"] is True
+    assert contract["checks"]["scenario_deltas_match_balanced"] is False
 
 
 def test_layer4_scenarios_include_economic_money_fields():
