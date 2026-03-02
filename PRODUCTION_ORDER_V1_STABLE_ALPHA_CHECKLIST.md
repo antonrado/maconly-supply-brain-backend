@@ -36,7 +36,7 @@
   - [ ] decision reason mapping matches allocation decision
   - [ ] objective-score decision reason mapping matches allocation decision (`decision_reason_objective_score`)
   - [ ] allocation decision matches composite objective gate outcome (`main|assorti|hold`) with legacy alias compatibility
-  - [ ] tie/near-tie flags match profit-gap math
+  - [ ] tie/near-tie flags match objective-gap math with legacy profit-gap alias compatibility
   - [ ] profit-gap and GMROI-gap fields are internally consistent
   - [ ] objective-score-gap field is internally consistent with objective score pair (`objective_score_gap_until_eta = |objective_score_if_main_until_eta - objective_score_if_assorti_until_eta|`)
   - [ ] capital-locked metric is valid (non-negative numeric)

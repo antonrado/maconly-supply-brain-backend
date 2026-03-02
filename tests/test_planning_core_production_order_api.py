@@ -25,6 +25,7 @@ from app.services.planning_production_order import (
     LAYER2_DECISION_GATE_CANONICAL,
     LAYER2_DECISION_GATE_LEGACY,
     LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+    LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
     LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
     LAYER2_OVERSTOCK_PENALTY_WEIGHT,
     LAYER2_STOCKOUT_PENALTY_WEIGHT,
@@ -271,6 +272,7 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "non_negative_profit_metrics": False,
         "non_negative_gmroi_metrics": False,
         "eta_days_positive": False,
+        "tie_break_hold_when_equal_objective": False,
         "tie_break_hold_when_equal_profit": False,
         "decision_reason_matches_allocation": False,
         "decision_reason_expected_gross_profit_matches_allocation": True,
@@ -278,7 +280,9 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         "allocation_matches_composite_objective_gate": False,
         "allocation_matches_profit_gate": False,
         "allocation_matches_expected_gross_profit_gate": False,
+        "tie_break_applied_matches_objective_tie": False,
         "tie_break_applied_matches_profit_tie": False,
+        "near_tie_matches_objective_gap_threshold": False,
         "near_tie_matches_profit_gap_threshold": False,
         "profit_gap_consistent_with_profits": False,
         "expected_gross_profit_gap_consistent_with_expected_gross_profits": False,
@@ -299,6 +303,18 @@ def test_layer2_contract_summary_marks_violated_for_tie_break_and_summary_mismat
         },
         "allocation_matches_expected_gross_profit_gate": {
             "alias_for": "allocation_matches_composite_objective_gate",
+            "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+        },
+        "tie_break_hold_when_equal_profit": {
+            "alias_for": "tie_break_hold_when_equal_objective",
+            "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+        },
+        "tie_break_applied_matches_profit_tie": {
+            "alias_for": "tie_break_applied_matches_objective_tie",
+            "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+        },
+        "near_tie_matches_profit_gap_threshold": {
+            "alias_for": "near_tie_matches_objective_gap_threshold",
             "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
         },
     }
@@ -355,11 +371,14 @@ def test_layer2_allocation_rounding_boundary_stays_contract_consistent():
     )
 
     assert contract["status"] == "ok"
+    assert contract["checks"]["tie_break_hold_when_equal_objective"] is True
     assert contract["checks"]["tie_break_hold_when_equal_profit"] is True
     assert contract["checks"]["allocation_matches_composite_objective_gate"] is True
     assert contract["checks"]["allocation_matches_profit_gate"] is True
     assert contract["checks"]["allocation_matches_expected_gross_profit_gate"] is True
+    assert contract["checks"]["tie_break_applied_matches_objective_tie"] is True
     assert contract["checks"]["tie_break_applied_matches_profit_tie"] is True
+    assert contract["checks"]["near_tie_matches_objective_gap_threshold"] is True
     assert contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
     assert contract["checks"]["objective_required_fields_present"] is True
     assert contract["checks"]["objective_score_fields_numeric"] is True
@@ -1336,7 +1355,7 @@ def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts
 
     summary = _build_layer2_decision_quality_summary(
         layer2_allocation_decisions=decisions,
-        near_tie_profit_gap_threshold=0.5,
+        near_tie_objective_gap_threshold=0.5,
     )
 
     assert summary["primary_gate"] == LAYER2_DECISION_GATE_CANONICAL
@@ -1357,6 +1376,7 @@ def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts
     assert summary["decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert summary["decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
     assert summary["legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert summary["near_tie_objective_gap_threshold"] == 0.5
     assert summary["near_tie_profit_gap_threshold"] == 0.5
     assert summary["decision_count"] == 3
     assert summary["tie_count"] == 1
@@ -1837,13 +1857,19 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
+    assert layer2_compact_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_compact_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
     assert layer2_compact_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert layer2_compact_contract_checks["capital_locked_metric_valid"] is True
     assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is False
     assert meta["layer_2_allocation"]["decision_quality"]["composite_objective_gate_primary"] is True
+    assert (
+        meta["layer_2_allocation"]["decision_quality"]["near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert (
         meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
@@ -1870,6 +1896,10 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     }
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert (
+        alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert (
         alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
@@ -1929,7 +1959,9 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
@@ -2033,7 +2065,9 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
@@ -2700,6 +2734,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert decision_quality["decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert decision_quality["decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
     assert decision_quality["legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        decision_quality["near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert decision_quality["near_tie_profit_gap_threshold"] == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
     assert decision_quality["decision_count"] == 4
     assert decision_quality["tie_count"] == 0
@@ -2739,6 +2777,7 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "non_negative_profit_metrics": True,
             "non_negative_gmroi_metrics": True,
             "eta_days_positive": True,
+            "tie_break_hold_when_equal_objective": True,
             "tie_break_hold_when_equal_profit": True,
             "decision_reason_matches_allocation": True,
             "decision_reason_expected_gross_profit_matches_allocation": True,
@@ -2746,7 +2785,9 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "allocation_matches_composite_objective_gate": True,
             "allocation_matches_profit_gate": True,
             "allocation_matches_expected_gross_profit_gate": True,
+            "tie_break_applied_matches_objective_tie": True,
             "tie_break_applied_matches_profit_tie": True,
+            "near_tie_matches_objective_gap_threshold": True,
             "near_tie_matches_profit_gap_threshold": True,
             "profit_gap_consistent_with_profits": True,
             "expected_gross_profit_gap_consistent_with_expected_gross_profits": True,
@@ -2767,6 +2808,18 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             },
             "allocation_matches_expected_gross_profit_gate": {
                 "alias_for": "allocation_matches_composite_objective_gate",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "tie_break_hold_when_equal_profit": {
+                "alias_for": "tie_break_hold_when_equal_objective",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "tie_break_applied_matches_profit_tie": {
+                "alias_for": "tie_break_applied_matches_objective_tie",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "near_tie_matches_profit_gap_threshold": {
+                "alias_for": "near_tie_matches_objective_gap_threshold",
                 "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
             },
         },
@@ -2922,6 +2975,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
     assert alpha_proxy["layer_2_decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert alpha_proxy["layer_2_legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert (
         alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
@@ -4825,7 +4882,9 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     layer2_contract_checks = body["explanation"]["meta"]["layer_2_allocation"]["contract"]["checks"]
     assert layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
@@ -5257,13 +5316,19 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
+    assert layer2_compact_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert layer2_compact_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_compact_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert layer2_compact_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
     assert layer2_compact_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert layer2_compact_contract_checks["capital_locked_metric_valid"] is True
     assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is False
     assert meta["layer_2_allocation"]["decision_quality"]["composite_objective_gate_primary"] is True
+    assert (
+        meta["layer_2_allocation"]["decision_quality"]["near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert (
         meta["layer_2_allocation"]["decision_quality"]["near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
@@ -5290,6 +5355,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     }
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert (
+        alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
     assert (
         alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD

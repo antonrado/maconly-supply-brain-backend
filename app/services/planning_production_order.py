@@ -87,7 +87,8 @@ ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN = 0.0
 ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI = 0.0
 ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN = 1.8
 ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI = 1.65
-LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = 1.0
+LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD = 1.0
+LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
 LAYER2_CAPITAL_COST_RATE = 0.08
 LAYER2_STOCKOUT_PENALTY_WEIGHT = 1.0
 LAYER2_OVERSTOCK_PENALTY_WEIGHT = 1.0
@@ -1736,7 +1737,7 @@ def _build_layer2_allocation_decisions(
         ]
 
         tie_break_applied = objective_score_gap_until_eta <= 1e-9
-        near_tie = objective_score_gap_until_eta <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+        near_tie = objective_score_gap_until_eta <= LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
 
         summary[allocation_decision] += 1
 
@@ -1859,13 +1860,13 @@ def _build_layer2_contract_summary(
     non_negative_profit_metrics = True
     non_negative_gmroi_metrics = True
     eta_days_positive = True
-    tie_break_hold_when_equal_profit = True
+    tie_break_hold_when_equal_objective = True
     decision_reason_matches_allocation = True
     decision_reason_expected_gross_profit_matches_allocation = True
     decision_reason_objective_score_matches_allocation = True
     allocation_matches_composite_objective_gate = True
-    tie_break_applied_matches_profit_tie = True
-    near_tie_matches_profit_gap_threshold = True
+    tie_break_applied_matches_objective_tie = True
+    near_tie_matches_objective_gap_threshold = True
     profit_gap_consistent_with_profits = True
     gmroi_gap_consistent_with_gmroi = True
     capital_locked_metric_valid = True
@@ -1946,10 +1947,10 @@ def _build_layer2_contract_summary(
             profit_assorti = float(profit_assorti_raw)
         except (TypeError, ValueError):
             non_negative_profit_metrics = False
-            tie_break_hold_when_equal_profit = False
+            tie_break_hold_when_equal_objective = False
             allocation_matches_composite_objective_gate = False
-            tie_break_applied_matches_profit_tie = False
-            near_tie_matches_profit_gap_threshold = False
+            tie_break_applied_matches_objective_tie = False
+            near_tie_matches_objective_gap_threshold = False
             profit_gap_consistent_with_profits = False
         else:
             profit_gap_until_eta_expected = abs(profit_main - profit_assorti)
@@ -2075,9 +2076,9 @@ def _build_layer2_contract_summary(
                     allocation_matches_composite_objective_gate = False
 
             if not objective_scores_valid:
-                tie_break_hold_when_equal_profit = False
-                tie_break_applied_matches_profit_tie = False
-                near_tie_matches_profit_gap_threshold = False
+                tie_break_hold_when_equal_objective = False
+                tie_break_applied_matches_objective_tie = False
+                near_tie_matches_objective_gap_threshold = False
                 objective_score_gap_consistent_with_objective_scores = False
             else:
                 objective_gap_until_eta_expected = abs(objective_main - objective_assorti)
@@ -2092,19 +2093,19 @@ def _build_layer2_contract_summary(
                     allocation_matches_composite_objective_gate = False
 
                 if objective_gap_until_eta_expected <= 1e-9 and allocation_decision != "hold":
-                    tie_break_hold_when_equal_profit = False
+                    tie_break_hold_when_equal_objective = False
 
                 tie_break_applied_raw = decision_item.get("tie_break_applied")
                 tie_expected = objective_gap_until_eta_expected <= 1e-9
                 if not isinstance(tie_break_applied_raw, bool) or tie_break_applied_raw != tie_expected:
-                    tie_break_applied_matches_profit_tie = False
+                    tie_break_applied_matches_objective_tie = False
 
                 near_tie_raw = decision_item.get("near_tie")
                 near_tie_expected = (
-                    objective_gap_until_eta_expected <= LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+                    objective_gap_until_eta_expected <= LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
                 )
                 if not isinstance(near_tie_raw, bool) or near_tie_raw != near_tie_expected:
-                    near_tie_matches_profit_gap_threshold = False
+                    near_tie_matches_objective_gap_threshold = False
 
                 try:
                     objective_gap_reported = float(decision_item.get("objective_score_gap_until_eta"))
@@ -2170,7 +2171,8 @@ def _build_layer2_contract_summary(
         "non_negative_profit_metrics": non_negative_profit_metrics,
         "non_negative_gmroi_metrics": non_negative_gmroi_metrics,
         "eta_days_positive": eta_days_positive,
-        "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_profit,
+        "tie_break_hold_when_equal_objective": tie_break_hold_when_equal_objective,
+        "tie_break_hold_when_equal_profit": tie_break_hold_when_equal_objective,
         "decision_reason_matches_allocation": decision_reason_matches_allocation,
         "decision_reason_expected_gross_profit_matches_allocation": (
             decision_reason_expected_gross_profit_matches_allocation
@@ -2181,8 +2183,10 @@ def _build_layer2_contract_summary(
         "allocation_matches_composite_objective_gate": allocation_matches_composite_objective_gate,
         "allocation_matches_profit_gate": allocation_matches_composite_objective_gate,
         "allocation_matches_expected_gross_profit_gate": allocation_matches_composite_objective_gate,
-        "tie_break_applied_matches_profit_tie": tie_break_applied_matches_profit_tie,
-        "near_tie_matches_profit_gap_threshold": near_tie_matches_profit_gap_threshold,
+        "tie_break_applied_matches_objective_tie": tie_break_applied_matches_objective_tie,
+        "tie_break_applied_matches_profit_tie": tie_break_applied_matches_objective_tie,
+        "near_tie_matches_objective_gap_threshold": near_tie_matches_objective_gap_threshold,
+        "near_tie_matches_profit_gap_threshold": near_tie_matches_objective_gap_threshold,
         "profit_gap_consistent_with_profits": profit_gap_consistent_with_profits,
         "expected_gross_profit_gap_consistent_with_expected_gross_profits": (
             profit_gap_consistent_with_profits
@@ -2215,14 +2219,31 @@ def _build_layer2_contract_summary(
                 "alias_for": "allocation_matches_composite_objective_gate",
                 "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
             },
+            "tie_break_hold_when_equal_profit": {
+                "alias_for": "tie_break_hold_when_equal_objective",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "tie_break_applied_matches_profit_tie": {
+                "alias_for": "tie_break_applied_matches_objective_tie",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
+            "near_tie_matches_profit_gap_threshold": {
+                "alias_for": "near_tie_matches_objective_gap_threshold",
+                "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+            },
         },
     }
 
 
 def _build_layer2_decision_quality_summary(
     layer2_allocation_decisions: list[dict[str, int | float | str]],
-    near_tie_profit_gap_threshold: float = LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
+    near_tie_objective_gap_threshold: float = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
+    near_tie_profit_gap_threshold: float | None = None,
 ) -> dict[str, bool | int | float | str | dict[str, int]]:
+    resolved_near_tie_objective_gap_threshold = float(near_tie_objective_gap_threshold)
+    if near_tie_profit_gap_threshold is not None:
+        resolved_near_tie_objective_gap_threshold = float(near_tie_profit_gap_threshold)
+
     tie_count = 0
     near_tie_count = 0
     total_profit_gap = 0.0
@@ -2322,7 +2343,7 @@ def _build_layer2_decision_quality_summary(
         near_tie = (
             near_tie_raw
             if isinstance(near_tie_raw, bool)
-            else objective_gap <= near_tie_profit_gap_threshold
+            else objective_gap <= resolved_near_tie_objective_gap_threshold
         )
         if tie_break_applied:
             tie_count += 1
@@ -2374,7 +2395,8 @@ def _build_layer2_decision_quality_summary(
         "decision_gate": LAYER2_DECISION_GATE_CANONICAL,
         "decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
         "legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
-        "near_tie_profit_gap_threshold": round(float(near_tie_profit_gap_threshold), 4),
+        "near_tie_objective_gap_threshold": round(resolved_near_tie_objective_gap_threshold, 4),
+        "near_tie_profit_gap_threshold": round(resolved_near_tie_objective_gap_threshold, 4),
         "decision_count": decision_count,
         "tie_count": tie_count,
         "near_tie_count": near_tie_count,
@@ -5983,7 +6005,8 @@ def build_production_order_proposal(
                 "layer_2_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
                 "layer_2_decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
                 "layer_2_legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
-                "layer_2_near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD,
+                "layer_2_near_tie_objective_gap_threshold": LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
+                "layer_2_near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
                 "layer_2_objective_parameters": {
                     "capital_cost_rate": layer_proxy_settings.layer2_capital_cost_rate,
                     "stockout_penalty_weight": layer_proxy_settings.layer2_stockout_penalty_weight,
