@@ -145,8 +145,11 @@ def _ensure_global_settings(db) -> None:
                 default_service_level_percent=90,
                 default_fabric_min_batch_qty=7000,
                 default_elastic_min_batch_qty=3000,
+                default_production_order_available_capital=10000,
             )
         )
+    elif getattr(global_settings, "default_production_order_available_capital", None) is None:
+        global_settings.default_production_order_available_capital = 10000
 
 
 def _ensure_article_settings(db, article_id: int) -> None:
@@ -323,6 +326,7 @@ def main() -> None:
                 "overrides": {
                     "fabric_min_batch_qty_default": 0,
                     "elastic_min_batch_qty_default": 0,
+                    "available_capital": 10000,
                     "allow_order_with_buffer": False,
                 },
             },
@@ -336,6 +340,7 @@ def main() -> None:
                 "overrides": {
                     "fabric_min_batch_qty_default": 0,
                     "elastic_min_batch_qty_default": 0,
+                    "available_capital": 10000,
                     "allow_order_with_buffer": False,
                 },
             },

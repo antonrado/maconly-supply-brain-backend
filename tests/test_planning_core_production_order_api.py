@@ -13,7 +13,10 @@ from app.services.planning_production_order import (
     ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_SOURCE,
+    CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
     CAPITAL_CONSTRAINT_CONTRACT_VERSION,
+    ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+    ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED,
     EXPLAINABILITY_MODE_COMPACT,
     FROM_WB_OBSERVED_ECONOMIC_SOURCE,
     FROM_WB_TARIFFS_COMMISSION_SOURCE,
@@ -146,6 +149,7 @@ def _seed_article_bundle_base(db_session, include_in_planning: bool = True):
             default_service_level_percent=90,
             default_fabric_min_batch_qty=7000,
             default_elastic_min_batch_qty=3000,
+            default_production_order_available_capital=1000000,
         )
     )
 
@@ -212,6 +216,7 @@ def _build_payload(article_id: int, bundle_type_id: int, size_s_id: int, size_m_
             },
             "fabric_min_batch_qty_default": 7000,
             "elastic_min_batch_qty_default": 3000,
+            "available_capital": 1000000.0,
             "allow_order_with_buffer": True,
         },
     }
@@ -3473,12 +3478,13 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     payload["overrides"].pop("wb_commission_percent_assorti", None)
     payload["overrides"].pop("average_realized_price_main", None)
     payload["overrides"].pop("average_realized_price_assorti", None)
-    payload["overrides"].pop("available_capital", None)
 
     response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
     assert response.status_code == 200, response.text
 
-    alpha_proxy = response.json()["explanation"]["meta"]["alpha_proxy_economics"]
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["economics_formula_version"] == "v1_economic_alpha"
     assert alpha_proxy["economic_calibration_state"] == "economic_inputs_default_formula"
     assert alpha_proxy["economic_source"] == {
@@ -3488,7 +3494,7 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
         "wb_commission_percent_assorti": "code_default_constants",
         "average_realized_price_main": "code_default_constants",
         "average_realized_price_assorti": "code_default_constants",
-        "available_capital": "not_set",
+        "available_capital": "request",
     }
     assert alpha_proxy["economic_inputs"] == {
         "production_cost_per_unit": 0.8,
@@ -3497,10 +3503,48 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
         "wb_commission_percent_assorti": 0.0,
         "average_realized_price_main": 1.8,
         "average_realized_price_assorti": 1.65,
-        "available_capital": None,
+        "available_capital": 1000000.0,
     }
     assert alpha_proxy["margin_proxy"] == {"main": 0.8, "assorti": 0.65}
     assert alpha_proxy["unit_capital_proxy"] == 1.0
+
+    economics_trust = meta["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_UNTRUSTED
+    assert economics_trust["code_default_key_fields_count"] >= 2
+    assert economics_trust["code_default_dominance_ratio"] > 0
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert economics_trust["warnings"][0]["severity"] == "HIGH"
+    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+
+
+def test_production_order_proposal_requires_available_capital_in_strict_mode(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_available_capital = None
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_available_capital = None
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"].pop("available_capital", None)
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 422, response.text
+
+    detail = response.json()["detail"]
+    assert detail["capital_constraint_status"] == CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
+    assert detail["severity"] == "HIGH"
+    assert "Provide overrides.available_capital" in detail["action"]
 
 
 def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
@@ -4949,6 +4993,68 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     }
     assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
+
+
+def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_available_capital = None
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_available_capital = None
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-CAP-STRICT",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-CAP-STRICT",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-CAP-STRICT",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 422, response.text
+
+    detail = response.json()["detail"]
+    assert detail["capital_constraint_status"] == CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
+    assert detail["severity"] == "HIGH"
 
 
 def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_economics(client, db_session):

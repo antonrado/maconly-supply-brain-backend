@@ -106,13 +106,15 @@
   - [x] `logistics_cost_per_unit`
   - [x] `wb_commission_percent_main|assorti`
   - [x] `average_realized_price_main|assorti`
-  - [x] `available_capital` (awareness-only input)
+  - [x] `available_capital` (strict capital governance input: required via `request|admin_defaults|global_default`, missing source rejected)
 - [x] `explanation.meta.alpha_proxy_economics` contains economics source tracing (`economic_source`) and effective inputs (`economic_inputs`).
+- [x] Trusted-economics diagnostics are emitted in full/compact explainability (`explanation.meta.economics_trust`, `explanation.meta.warnings`) and mirrored in `alpha_proxy_economics` (`economics_trust_level`, trust payload, warning block).
 - [x] Source-tier precedence evidence is regression-locked for Economic Alpha inputs:
   - [x] `request`
   - [x] `admin_defaults`
   - [x] `global_default`
   - [x] `code_default_constants`
+- [x] Capital governance strict behavior is regression-locked for direct/from-WB flows: unresolved `available_capital` now returns deterministic `422` with actionable detail and explicit status `missing_available_capital_strict`.
 - [x] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
 - [x] Capital-limited allocation is demonstrably objective-driven in regression tests (higher `objective_score_per_capital` may be selected before higher raw gross profit; no silent profit-only fallback).
 - [x] Budget-limited proposal responses expose deterministic capital-constraint evidence in meta (`status=budget_limited_applied`, ranking, cutoff line incl. partial allocation when applicable).

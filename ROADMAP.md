@@ -74,6 +74,9 @@
   3. Layer 4 full money outputs + capital-gap diagnostics,
   4. targeted decomposition of layer helpers into modules without facade behavior drift.
 - Release evidence now includes deterministic end-to-end allocation flip under identical units-until-ETA where only realized price inputs are swapped (`main -> assorti`), executed in the integration gate test set used by `verify`/`verify-live`.
+- Trusted-economics diagnostics are now a release-block requirement: expose per-key-field economics source, code-default dominance ratio, and trust level (`trusted|partial|untrusted`) with explicit warning block in full/compact explainability.
+- Capital governance is now strict for proposal execution: unresolved `available_capital` (no `request|admin_defaults|global_default` source) returns deterministic `422` with actionable detail and explicit `capital_constraint_status=missing_available_capital_strict`.
+- Value-proof sequencing is now explicit: lock trusted economics + capital safety + multi-regime e2e evidence first; defer large modular refactor work until these proofs are stable.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.

@@ -87,6 +87,21 @@ ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN = 0.0
 ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI = 0.0
 ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN = 1.8
 ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI = 1.65
+ECONOMICS_TRUST_LEVEL_TRUSTED = "trusted"
+ECONOMICS_TRUST_LEVEL_PARTIAL = "partial"
+ECONOMICS_TRUST_LEVEL_UNTRUSTED = "untrusted"
+ECONOMICS_TRUST_KEY_FIELDS: tuple[str, ...] = (
+    "wb_commission_percent_main",
+    "wb_commission_percent_assorti",
+    "production_cost_per_unit",
+    "logistics_cost_per_unit",
+    "average_realized_price_main",
+    "average_realized_price_assorti",
+)
+ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD = 2
+ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED = "economics_untrusted_defaults_dominant"
+ECONOMICS_TRUST_WARNING_CODE_PARTIAL = "economics_partial_defaults_present"
+CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT = "missing_available_capital_strict"
 LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD = 1.0
 LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
 LAYER2_CAPITAL_COST_RATE = 0.08
@@ -811,6 +826,68 @@ def _resolve_economic_settings(
     )
 
 
+def _build_economics_trust_diagnostics(economic_source: dict[str, str]) -> dict[str, object]:
+    key_field_sources = {
+        field_name: str(economic_source.get(field_name, "unknown"))
+        for field_name in ECONOMICS_TRUST_KEY_FIELDS
+    }
+    code_default_key_fields = sorted(
+        field_name
+        for field_name, source in key_field_sources.items()
+        if source == LAYER_PROXY_VALUE_SOURCE
+    )
+    code_default_key_fields_count = len(code_default_key_fields)
+    key_fields_total = len(ECONOMICS_TRUST_KEY_FIELDS)
+    code_default_dominance_ratio = (
+        round(code_default_key_fields_count / key_fields_total, 4)
+        if key_fields_total > 0
+        else 0.0
+    )
+
+    if code_default_key_fields_count >= ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD:
+        trust_level = ECONOMICS_TRUST_LEVEL_UNTRUSTED
+    elif code_default_key_fields_count == 0:
+        trust_level = ECONOMICS_TRUST_LEVEL_TRUSTED
+    else:
+        trust_level = ECONOMICS_TRUST_LEVEL_PARTIAL
+
+    warnings: list[dict[str, object]] = []
+    if trust_level == ECONOMICS_TRUST_LEVEL_UNTRUSTED:
+        warnings.append(
+            {
+                "code": ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED,
+                "severity": "HIGH",
+                "message": (
+                    "Economics trust level is untrusted because key economics inputs are dominated "
+                    "by code defaults."
+                ),
+                "code_default_key_fields": code_default_key_fields,
+            }
+        )
+    elif trust_level == ECONOMICS_TRUST_LEVEL_PARTIAL:
+        warnings.append(
+            {
+                "code": ECONOMICS_TRUST_WARNING_CODE_PARTIAL,
+                "severity": "MEDIUM",
+                "message": (
+                    "Economics trust level is partial because some key economics inputs still use "
+                    "code defaults."
+                ),
+                "code_default_key_fields": code_default_key_fields,
+            }
+        )
+
+    return {
+        "economics_trust_level": trust_level,
+        "key_fields": list(ECONOMICS_TRUST_KEY_FIELDS),
+        "key_field_sources": key_field_sources,
+        "code_default_key_fields": code_default_key_fields,
+        "code_default_key_fields_count": code_default_key_fields_count,
+        "code_default_dominance_ratio": code_default_dominance_ratio,
+        "warnings": warnings,
+    }
+
+
 def _resolve_layer_proxy_settings(
     *,
     article_settings: ArticlePlanningSettings | None,
@@ -1126,6 +1203,7 @@ def _compact_explanation_steps(steps: list[str]) -> tuple[list[str], int]:
         "WB ingestion adapter",
         "Спрос по наборам",
         "Источник параметров",
+        "Economics trust",
         "Assorti classification",
         "Layer 1 stock health",
         "Layer 2 allocation",
@@ -1170,6 +1248,8 @@ def _sum_numeric_mapping_values(value: object) -> float:
 
 def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object]:
     compact_meta: dict[str, object] = {
+        "warnings": meta.get("warnings", []),
+        "economics_trust": meta.get("economics_trust", {}),
         "sources": meta.get("sources", {}),
         "reorder_policy": meta.get("reorder_policy", {}),
         "economic_buffer": meta.get("economic_buffer", {}),
@@ -5094,6 +5174,26 @@ def build_production_order_proposal(
             explanation=explanation,
         )
 
+    economics_trust = _build_economics_trust_diagnostics(economic_settings.source)
+    economics_warnings = list(economics_trust.get("warnings", []))
+    if economic_settings.available_capital is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "message": (
+                    "available_capital is required for production-order proposal in strict capital "
+                    "governance mode"
+                ),
+                "capital_constraint_status": CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
+                "severity": "HIGH",
+                "action": (
+                    "Provide overrides.available_capital or configure article/global available_capital "
+                    "defaults."
+                ),
+                "economics_trust_level": economics_trust.get("economics_trust_level"),
+            },
+        )
+
     bundle_type_ids = sorted({item.bundle_type_id for item in request.bundle_daily_sales})
 
     recipes = (
@@ -5804,6 +5904,17 @@ def build_production_order_proposal(
                 f"in_flight={in_flight_source}, bundle_stock={bundle_stock_source}."
             ),
             (
+                "Economics trust: "
+                f"level={economics_trust['economics_trust_level']}, "
+                "code_default_key_fields="
+                f"{economics_trust['code_default_key_fields']}, "
+                "code_default_key_fields_count="
+                f"{economics_trust['code_default_key_fields_count']}, "
+                "code_default_dominance_ratio="
+                f"{economics_trust['code_default_dominance_ratio']}, "
+                f"warnings={economics_warnings}."
+            ),
+            (
                 "Assorti classification: "
                 f"source={ASSORTI_CLASSIFICATION_SOURCE}, "
                 f"fallback_admin_ids={sorted(admin_assorti_bundle_type_ids)}, "
@@ -5933,6 +6044,8 @@ def build_production_order_proposal(
             ),
         ],
         meta={
+            "warnings": economics_warnings,
+            "economics_trust": economics_trust,
             "sources": {
                 "size_weights": size_weights_source,
                 "in_flight": in_flight_source,
@@ -6031,6 +6144,8 @@ def build_production_order_proposal(
                 "calibration_state": "alpha_proxy_not_calibrated",
                 "economics_formula_version": ECONOMICS_FORMULA_VERSION,
                 "economic_calibration_state": economic_settings.calibration_state,
+                "economics_trust_level": economics_trust.get("economics_trust_level"),
+                "economics_trust": economics_trust,
                 "layer_1_high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
                 "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD_CANONICAL,
                 "layer_2_allocation_method_canonical": LAYER2_ALLOCATION_METHOD_CANONICAL,
