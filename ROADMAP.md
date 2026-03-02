@@ -77,6 +77,9 @@
 - Trusted-economics diagnostics are now a release-block requirement: expose per-key-field economics source, code-default dominance ratio, and trust level (`trusted|partial|untrusted`) with explicit warning block in full/compact explainability.
 - Capital governance is now strict for proposal execution: unresolved `available_capital` (no `request|admin_defaults|global_default` source) returns deterministic `422` with actionable detail and explicit `capital_constraint_status=missing_available_capital_strict`.
 - Value-proof sequencing is now explicit: lock trusted economics + capital safety + multi-regime e2e evidence first; defer large modular refactor work until these proofs are stable.
+- Multi-regime release evidence is now explicit and regression-locked: `stockout_dominates`, `overstock_dominates`, and `commission_price_conflict` e2e cases must prove objective-vs-profit disagreement and expected Layer 5 signal behavior.
+- Penalty-weight calibration evidence is now mandatory and documented: freeze Layer 2 defaults (`capital_cost_rate=0.08`, `stockout_penalty_weight=1.0`, `overstock_penalty_weight=1.0`), track approximate flip boundaries in the casebook, and assert emitted `objective_parameters` + `objective_source` in regression payloads.
+- Modular decomposition remains intentionally deferred to bug-fix-only scope until R1-R4 economics evidence stays stable through verification gates.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.

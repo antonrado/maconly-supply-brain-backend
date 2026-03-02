@@ -116,6 +116,8 @@
   - [x] `code_default_constants`
 - [x] Capital governance strict behavior is regression-locked for direct/from-WB flows: unresolved `available_capital` now returns deterministic `422` with actionable detail and explicit status `missing_available_capital_strict`.
 - [x] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
+- [x] Multi-regime end-to-end evidence is regression-locked for three distinct economics regimes (`stockout_dominates`, `overstock_dominates`, `commission_price_conflict`) proving objective-vs-profit disagreement and expected Layer 5 intervention signals.
+- [x] Layer 2 penalty-weight calibration evidence is documented with flip boundaries and frozen defaults, and regressions assert emitted `objective_parameters` + `objective_source` in explainability payloads.
 - [x] Capital-limited allocation is demonstrably objective-driven in regression tests (higher `objective_score_per_capital` may be selected before higher raw gross profit; no silent profit-only fallback).
 - [x] Budget-limited proposal responses expose deterministic capital-constraint evidence in meta (`status=budget_limited_applied`, ranking, cutoff line incl. partial allocation when applicable).
 - [x] For equal objective metrics, shared-capital ranking tie-break is deterministic and availability-priority aligned (`stockout_risk` higher first, then `overstock_risk` lower).

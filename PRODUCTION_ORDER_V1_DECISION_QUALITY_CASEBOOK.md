@@ -140,7 +140,34 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
   - `reason=none`
 - Recommendation action: `wait`
 
+## Objective-vs-profit regime evidence (R3 release block)
+
+The following deterministic e2e regimes are locked to prove that allocation is driven by the composite objective (not raw expected gross profit) and that Layer 5 emits the expected intervention signal for each economic regime.
+
+| Case | Profit winner (until ETA) | Objective winner (until ETA) | Expected Layer 5 signal | Regression |
+| --- | --- | --- | --- | --- |
+| `stockout_dominates` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
+| `overstock_dominates` | `assorti` | `main` | `reduce_order_size` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
+| `commission_price_conflict` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
+
+Additional gate assertion in this regression:
+- Layer 2 emitted objective parameters are frozen and explicitly asserted in response payloads:
+  - `capital_cost_rate=0.08`
+  - `stockout_penalty_weight=1.0`
+  - `overstock_penalty_weight=1.0`
+  - with source tracing `code_default_constants` in both `explanation.meta.layer_2_allocation` and `explanation.meta.alpha_proxy_economics`.
+
+## Penalty-weight calibration table (R4)
+
+Calibration is documented against deterministic helper/e2e profiles. "Flip boundary" means the approximate coefficient value where objective winner changes (all other coefficients kept at current defaults).
+
+| Coefficient | Frozen value | Flip boundary profile | Approx flip boundary | Decision below boundary | Decision above boundary | Freeze rationale |
+| --- | --- | --- | --- | --- | --- | --- |
+| `stockout_penalty_weight` | `1.0` | Stockout profile (`current_stock=20`, `velocity_main=3.0`, `velocity_assorti=1.5`, `stockout_risk=0.9`) | `~0.8467` | `main` | `assorti` | Keep materially above boundary so stockout-loss penalty dominates pure margin in high-risk windows. |
+| `overstock_penalty_weight` | `1.0` | Overstock profile (`current_stock=200`, `in_flight=50`, `overstock_risk=0.95`) | `~0.0281` | `main` | `assorti` | Keep materially above boundary so carrying-cost penalty dominates in severe overstock. |
+| `stockout_penalty_weight` | `1.0` | Commission/price conflict profile (high risk, `profit_main > profit_assorti` but higher stockout-loss on main) | `~0.043` (full-case flip; mixed zone starts near `~0.038`) | `main` | `assorti` | Keep materially above boundary so risk penalty still dominates commission/price-only spread under timeline stress. |
+
 ## Release-gate traceability
 - This casebook is intended to be locked by regression tests in `tests/test_planning_core_production_order_api.py`.
 - Coverage includes deterministic helper snapshots (`test_decision_quality_case_studies_are_deterministic`) and full helper-chain coverage from computed Layer 1 metrics (`test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5`).
-- Regressions verify deterministic outputs, recommendation action integrity, and scenario capital deltas for all three cases.
+- Regressions verify deterministic outputs, recommendation action integrity, scenario capital deltas, objective-vs-profit regime disagreement evidence, emitted objective-parameter tracing, and Layer 5 signal behavior.
