@@ -9,10 +9,10 @@ This casebook captures deterministic decision behavior for three canonical SKU p
 All cases follow v1 boundaries: deterministic math only, layered architecture (`L1 -> L5`), no ML, no solver optimization.
 
 ## Deterministic assumptions
-- Layer 2 decision gate: profit comparison until ETA (`main` vs `assorti`), tie-break `hold`.
+- Layer 2 decision gate: composite objective comparison until ETA (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`), tie-break `hold`.
 - Layer 3 applies quantity shaping/calibration and does not replace Layer 2 gate semantics.
 - Layer 5 emits intervention signals only; recommendation action is resolved separately.
-- Capital impact proxy uses `LAYER2_UNIT_CAPITAL_PROXY` in Layer 4 scenarios.
+- Capital impact uses runtime effective `unit_capital_per_unit` from deterministic economics precedence (`request -> admin_defaults -> global_default -> code_default_constants`) in Layer 4 scenarios.
 
 ## Case A - Stockout risk
 ### Input metrics
@@ -123,7 +123,7 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
   - `overstock_risk=0.95`
   - `capital_locked=120.0`
 - Layer 2:
-  - `allocation_decision=hold` (profit tie)
+  - `allocation_decision=hold` (objective tie)
   - `profit_if_main_until_eta=17.0`
   - `profit_if_assorti_until_eta=17.0`
 - Layer 3:

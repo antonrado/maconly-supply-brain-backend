@@ -32,14 +32,14 @@
 - Decision-quality case-study regression now includes full helper-chain `L1 -> L5` deterministic coverage to lock computed Layer 1 metric stability together with downstream allocation/shaping/scenario/intervention behavior.
 
 ### 2.2 Layer 2 - Allocation comparison engine (in progress)
-- Deterministic scenario comparison remains the primary decision gate; active migration target is `expected_gross_profit_until_eta` computed from traceable economics inputs (realized price, commission, production cost, logistics cost).
+- Deterministic composite-objective comparison is the primary decision gate (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`, `decision_gate=composite_objective_until_eta`) computed from traceable economics inputs (realized price, commission, production cost, logistics cost).
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
 - Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
-- Layer 2 default presentation now uses canonical expected-gross-profit naming (`method`, `decision_gate`) while keeping explicit legacy aliases (`legacy_method`, `legacy_decision_gate`) to support transition without facade drift.
+- Layer 2 default presentation now uses canonical composite-objective naming (`method=time_window_composite_objective_with_gmroi_diagnostics`, `decision_gate=composite_objective_until_eta`) while keeping explicit legacy aliases (`legacy_method=time_window_profit_proxy_with_gmroi_diagnostics`, `legacy_decision_gate=profit_until_eta`) to support transition without facade drift.
 - Layer 2 decision flags (`allocation_decision`, `tie_break_applied`, `near_tie`) are stabilized against floating-point boundary noise by using normalized 4-decimal profit/GMROI diagnostics that are also emitted in explainability payloads.
 - Layer 2 helper interfaces now require explicit economics inputs (`margin_main_per_unit`, `margin_assorti_per_unit`, `unit_capital_per_unit`) to prevent accidental fallback to proxy constants after refactors.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
-- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-profit-gate consistency, tie-break invariants, decision-reason mapping including objective-score reason field consistency, tie/near-tie flag consistency, profit/GMROI gap consistency, objective-score-gap consistency, capital metric sanity) and projected in compact explainability mode.
+- Layer 2 contract summary is now exposed (version/checks/status; summary-vs-decisions consistency, allocation-vs-composite-objective-gate consistency with legacy alias compatibility, tie-break invariants, decision-reason mapping including objective-score reason field consistency, tie/near-tie flag consistency, profit/GMROI gap consistency, objective-score-gap consistency, capital metric sanity) and projected in compact explainability mode.
 - Layer 2 contract now explicitly verifies objective-component decomposition formula consistency (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) to block silent fallback or malformed objective payloads.
 - Capital-limited line selection evidence is now regression-locked at helper/API level: objective-per-capital ranking can prioritize lower gross-profit lines when penalties make them economically dominant, budget allocation follows this ranking (no silent profit-only fallback), and proposal meta exposes deterministic budget-limited ranking/cutoff behavior.
 - Shared-capital tie-break now prioritizes availability risk deterministically when objective metrics are equal (`stockout_risk` higher first, then `overstock_risk` lower) to align constrained allocation with out-of-stock protection policy.
@@ -106,7 +106,7 @@
 - Documentation update is automatic after each accepted decision and must include at least `ROADMAP.md`, `STATUS.md`, and the relevant acceptance artifact (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR) to avoid omissions.
 
 ## Immediate high-leverage follow-ups
-1. Finalize Layer 2 naming/contract wording transition from proxy-profit labels to expected-gross-profit labels without breaking stable API behavior.
+1. Finalize Layer 2 naming/contract wording transition from legacy profit/expected-gross-profit aliases to canonical composite-objective labels without breaking stable API behavior.
 2. Lock regressions that prove allocation sensitivity to economics changes and preserve deterministic outputs.
 3. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
 4. Keep explainability/contract expansion limited to behavior-critical checks while economics calibration evidence is finalized.

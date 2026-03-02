@@ -25,9 +25,9 @@
   - [ ] missing/default main fallback
 
 ## 4) Layer 2 contract (allocation)
-- [ ] Allocation decision is profit-comparison based (`profit_if_main_until_eta` vs `profit_if_assorti_until_eta`), not rule-based classification.
-- [ ] Canonical expected-gross-profit aliases are present in Layer 2 decisions/diagnostics during transition (`expected_gross_profit_*` fields and canonical reason counts).
-- [ ] Decision gate default presentation is `expected_gross_profit_until_eta` with explicit legacy alias `profit_until_eta`.
+- [ ] Allocation decision is composite-objective based (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`), not rule-based classification.
+- [ ] Canonical objective-score diagnostics are present in Layer 2 decisions/diagnostics during transition, while expected-gross-profit aliases remain available (`expected_gross_profit_*` fields and canonical/objective reason counts).
+- [ ] Decision gate default presentation is `composite_objective_until_eta` with explicit legacy alias `profit_until_eta`.
 - [ ] Tie-break is `hold`.
 - [ ] GMROI is diagnostic-only.
 - [ ] `explanation.meta.layer_2_allocation.summary` and `decisions` are present in full mode.
@@ -35,7 +35,7 @@
 - [ ] Contract checks include at least:
   - [ ] decision reason mapping matches allocation decision
   - [ ] objective-score decision reason mapping matches allocation decision (`decision_reason_objective_score`)
-  - [ ] allocation decision matches profit gate outcome (`main|assorti|hold`)
+  - [ ] allocation decision matches composite objective gate outcome (`main|assorti|hold`) with legacy alias compatibility
   - [ ] tie/near-tie flags match profit-gap math
   - [ ] profit-gap and GMROI-gap fields are internally consistent
   - [ ] objective-score-gap field is internally consistent with objective score pair (`objective_score_gap_until_eta = |objective_score_if_main_until_eta - objective_score_if_assorti_until_eta|`)
