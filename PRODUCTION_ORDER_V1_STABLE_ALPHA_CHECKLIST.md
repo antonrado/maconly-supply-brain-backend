@@ -1,28 +1,28 @@
 # Production Order v1 Stable Alpha - Acceptance Checklist
 
 ## 1) Scope and boundaries
-- [ ] Layered deterministic pipeline is active for production-order proposal (`Layer 1 -> 2 -> 3 -> 4 -> 5`).
-- [ ] Out-of-scope constraints are respected: no ML, no solver optimization, no multi-warehouse logic, no dynamic pricing model rollout.
+- [x] Layered deterministic pipeline is active for production-order proposal (`Layer 1 -> 2 -> 3 -> 4 -> 5`).
+- [x] Out-of-scope constraints are respected: no ML, no solver optimization, no multi-warehouse logic, no dynamic pricing model rollout.
 
 ## 2) API contract stability
-- [ ] `POST /api/v1/planning/core/production-order/proposal` returns stable structured response.
-- [ ] `POST /api/v1/planning/core/production-order/proposal/from-wb` returns stable structured response.
-- [ ] Request validation rejects malformed payloads with deterministic 4xx errors.
-- [ ] Unknown `article_id` is rejected deterministically with `404 Article not found` for both direct and from-WB endpoints.
-- [ ] Live connectivity smoke check passes via `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 po-api-smoke` (health `200`, seeded direct/from-WB happy-path requests `200`, schema validations `422`).
+- [x] `POST /api/v1/planning/core/production-order/proposal` returns stable structured response.
+- [x] `POST /api/v1/planning/core/production-order/proposal/from-wb` returns stable structured response.
+- [x] Request validation rejects malformed payloads with deterministic 4xx errors.
+- [x] Unknown `article_id` is rejected deterministically with `404 Article not found` for both direct and from-WB endpoints.
+- [x] Live connectivity smoke check passes via `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 po-api-smoke` (health `200`, seeded direct/from-WB happy-path requests `200`, schema validations `422`).
 
 ## 3) Layer 1 contract (stock health)
-- [ ] Layer 1 emits per-SKU metrics in `explanation.meta.layer_1_stock_health.metrics`.
-- [ ] Layer 1 contract block exists in `explanation.meta.layer_1_stock_health.contract` with status `ok` for valid flows.
-- [ ] Contract checks include at least:
-  - [ ] unique color-size keys
-  - [ ] risk bounds validation
-  - [ ] non-negative quantity/velocity/coverage invariants
-- [ ] Assorti classification precedence is deterministic and traceable:
-  - [ ] `bundle_type.is_assorti`
-  - [ ] admin fallback mapping
-  - [ ] global fallback mapping
-  - [ ] missing/default main fallback
+- [x] Layer 1 emits per-SKU metrics in `explanation.meta.layer_1_stock_health.metrics`.
+- [x] Layer 1 contract block exists in `explanation.meta.layer_1_stock_health.contract` with status `ok` for valid flows.
+- [x] Contract checks include at least:
+  - [x] unique color-size keys
+  - [x] risk bounds validation
+  - [x] non-negative quantity/velocity/coverage invariants
+- [x] Assorti classification precedence is deterministic and traceable:
+  - [x] `bundle_type.is_assorti`
+  - [x] admin fallback mapping
+  - [x] global fallback mapping
+  - [x] missing/default main fallback
 
 ## 4) Layer 2 contract (allocation)
 - [x] Allocation decision is composite-objective based (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`), not rule-based classification.
@@ -128,8 +128,8 @@
 - [x] Working tree is clean after final commit.
 
 ## 12) Decision documentation discipline (mandatory)
-- [ ] Each accepted architectural/product decision is documented in the same work block (no deferred doc updates).
-- [ ] `ROADMAP.md` is updated to reflect plan-level impact of the accepted decision.
-- [ ] `STATUS.md` is updated to reflect implementation/runtime state of the accepted decision.
-- [ ] Relevant acceptance artifact is updated for the accepted decision (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR).
-- [ ] Documentation update behavior is explicit: after each accepted decision, documentation updates are applied automatically to prevent omissions.
+- [x] Each accepted architectural/product decision is documented in the same work block (no deferred doc updates).
+- [x] `ROADMAP.md` is updated to reflect plan-level impact of the accepted decision.
+- [x] `STATUS.md` is updated to reflect implementation/runtime state of the accepted decision.
+- [x] Relevant acceptance artifact is updated for the accepted decision (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR).
+- [x] Documentation update behavior is explicit: after each accepted decision, documentation updates are applied automatically to prevent omissions.
