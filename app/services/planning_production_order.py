@@ -2914,6 +2914,7 @@ def _build_line_objective_capital_rankings(
             if capital_required > 0
             else objective_score
         )
+        risk_priority_score = stockout_risk - overstock_risk
 
         rows.append(
             {
@@ -2927,6 +2928,7 @@ def _build_line_objective_capital_rankings(
                 "expected_gross_profit": round(expected_gross_profit, 4),
                 "objective_score": round(objective_score, 4),
                 "objective_score_per_capital": round(objective_score_per_capital, 6),
+                "risk_priority_score": round(risk_priority_score, 6),
             }
         )
 
@@ -2935,6 +2937,8 @@ def _build_line_objective_capital_rankings(
         key=lambda item: (
             -float(item["objective_score_per_capital"]),
             -float(item["objective_score"]),
+            -float(item.get("stockout_risk", 0.0)),
+            float(item.get("overstock_risk", 0.0)),
             int(item["color_id"]),
             int(item["size_id"]),
         ),
@@ -3188,6 +3192,8 @@ def _build_capital_constraint_contract_summary(
                     ranking_row.get("objective_score_per_capital", 0.0)
                 )
                 objective_score = float(ranking_row.get("objective_score", 0.0))
+                stockout_risk = float(ranking_row.get("stockout_risk", 0.0))
+                overstock_risk = float(ranking_row.get("overstock_risk", 0.0))
             except (TypeError, ValueError):
                 ranking_entries_numeric = False
                 ranking_sorted_by_objective_per_capital = False
@@ -3201,6 +3207,8 @@ def _build_capital_constraint_contract_summary(
             sort_key = (
                 -objective_score_per_capital,
                 -objective_score,
+                -stockout_risk,
+                overstock_risk,
                 color_id,
                 size_id,
             )

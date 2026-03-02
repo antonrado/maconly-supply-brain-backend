@@ -614,6 +614,85 @@ def test_line_objective_capital_rankings_prioritize_objective_per_capital_over_p
     assert rankings[0]["objective_score_per_capital"] > rankings[1]["objective_score_per_capital"]
 
 
+def test_line_objective_capital_rankings_prioritize_stockout_when_objective_ties():
+    candidate_lines = [
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=10,
+            size_id=20,
+            recommended_qty=10,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=11,
+            size_id=21,
+            recommended_qty=10,
+            source_reason="seed|layer2:main",
+        ),
+        planning_production_order_service.ProductionOrderRecommendationLine(
+            article_id=1,
+            color_id=12,
+            size_id=22,
+            recommended_qty=10,
+            source_reason="seed|layer2:main",
+        ),
+    ]
+
+    rankings = _build_line_objective_capital_rankings(
+        candidate_lines=candidate_lines,
+        layer3_decision_by_line={
+            (10, 20): "main",
+            (11, 21): "main",
+            (12, 22): "main",
+        },
+        layer1_stock_health_metrics=[
+            {
+                "color_id": 10,
+                "size_id": 20,
+                "stockout_risk": 0.8,
+                "overstock_risk": 0.1,
+            },
+            {
+                "color_id": 11,
+                "size_id": 21,
+                "stockout_risk": 0.8,
+                "overstock_risk": 0.5,
+            },
+            {
+                "color_id": 12,
+                "size_id": 22,
+                "stockout_risk": 0.3,
+                "overstock_risk": 0.1,
+            },
+        ],
+        margin_main_per_unit=0.0,
+        margin_assorti_per_unit=0.0,
+        unit_capital_per_unit=0.0,
+        capital_cost_rate=0.05,
+        stockout_penalty_weight=1.0,
+        overstock_penalty_weight=1.0,
+    )
+
+    assert [
+        (item["color_id"], item["size_id"])
+        for item in rankings
+    ] == [
+        (10, 20),
+        (11, 21),
+        (12, 22),
+    ]
+    assert rankings[0]["objective_score"] == rankings[1]["objective_score"] == rankings[2]["objective_score"]
+    assert (
+        rankings[0]["objective_score_per_capital"]
+        == rankings[1]["objective_score_per_capital"]
+        == rankings[2]["objective_score_per_capital"]
+    )
+    assert rankings[0]["stockout_risk"] == rankings[1]["stockout_risk"] > rankings[2]["stockout_risk"]
+    assert rankings[0]["overstock_risk"] < rankings[1]["overstock_risk"]
+    assert rankings[0]["risk_priority_score"] > rankings[1]["risk_priority_score"] > rankings[2]["risk_priority_score"]
+
+
 def test_capital_constraint_allocates_budget_by_objective_per_capital_ranking():
     candidate_lines = [
         planning_production_order_service.ProductionOrderRecommendationLine(
