@@ -30,7 +30,7 @@
 - Assorti classification precedence is deterministic and traceable: `bundle_type.is_assorti` (primary) -> article admin mapping fallback -> global mapping fallback -> main default.
 - Layer sequence is strict:
   1. Layer 1 - deterministic stock-health metrics by SKU.
-  2. Layer 2 - deterministic allocation comparison (`main` vs `assorti`) using time-window profit as decision gate; GMROI proxy is diagnostic-only and tie-break is `hold`.
+  2. Layer 2 - deterministic allocation comparison (`main` vs `assorti`) using canonical composite-objective decision gate with legacy profit/expected-gross-profit alias compatibility; GMROI proxy is diagnostic-only and tie-break is `hold`.
   3. Layer 3 - purchase recommendation derived from Layer 1+2 outputs.
   4. Layer 4 - deterministic scenarios (Conservative/Balanced/Aggressive).
   5. Layer 5 - intervention flags only (no dynamic pricing model).
