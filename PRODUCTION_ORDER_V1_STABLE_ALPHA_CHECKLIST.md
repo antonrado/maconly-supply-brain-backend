@@ -52,19 +52,19 @@
   - [x] calibration method, bounds, and factor summary
 
 ## 6) Layer 4 contract (scenarios)
-- [ ] Scenarios include `Conservative`, `Balanced`, `Aggressive`.
-- [ ] Scenario factor list is exposed in `explanation.meta.layer_4_scenarios.factors`.
-- [ ] Layer 4 contract summary exists in `explanation.meta.layer_4_scenarios.contract`.
-- [ ] Contract checks verify order and monotonic invariants.
-- [ ] Layer 4 contract checks also verify scenario delta integrity against `Balanced` baseline (`capital/revenue/profit/objective` delta consistency + `gross_profit_delta_vs_balanced` alias consistency).
-- [ ] Per-scenario money outputs are present:
-  - [ ] `expected_revenue`
-  - [ ] `expected_gross_profit`
-  - [ ] `expected_margin_percent`
-  - [ ] `expected_turnover_days`
-  - [ ] `stockout_probability_proxy`
-  - [ ] `overstock_risk_proxy`
-- [ ] Capital-gap transparency exists in `explanation.meta.capital_gap` (`available_capital`, `required_capital`, `deficit_or_surplus`) and is signal-only (no auto-policy override).
+- [x] Scenarios include `Conservative`, `Balanced`, `Aggressive`.
+- [x] Scenario factor list is exposed in `explanation.meta.layer_4_scenarios.factors`.
+- [x] Layer 4 contract summary exists in `explanation.meta.layer_4_scenarios.contract`.
+- [x] Contract checks verify order and monotonic invariants.
+- [x] Layer 4 contract checks also verify scenario delta integrity against `Balanced` baseline (`capital/revenue/profit/objective` delta consistency + `gross_profit_delta_vs_balanced` alias consistency).
+- [x] Per-scenario money outputs are present:
+  - [x] `expected_revenue`
+  - [x] `expected_gross_profit`
+  - [x] `expected_margin_percent`
+  - [x] `expected_turnover_days`
+  - [x] `stockout_probability_proxy`
+  - [x] `overstock_risk_proxy`
+- [x] Capital-gap transparency exists in `explanation.meta.capital_gap` (`available_capital`, `required_capital`, `deficit_or_surplus`) and is signal-only (no auto-policy override).
 
 ## 7) Layer 5 contract (interventions)
 - [x] Layer 5 uses explicit threshold policy with traceable thresholds in `explanation.meta.layer_5_intervention.signal_thresholds`.
@@ -80,10 +80,10 @@
 - [x] `compact` preserves contract blocks for Layers 1-5 and `alpha_proxy_economics`.
 
 ## 9) From-WB ingestion/freshness
-- [ ] Freshness mode (`warn|strict`) behavior is deterministic and covered.
-- [ ] Freshness threshold source precedence (`request > admin_defaults > global_default`) is traceable.
-- [ ] Observed realized-price calibration from WB revenue window is traceable in `meta.from_wb.economic_observed_prices` and deterministic anomaly filtering (`max deviation=30%`) is covered.
-- [ ] `meta.from_wb` contains stable as-of trace and compact/full-consistent diagnostics.
+- [x] Freshness mode (`warn|strict`) behavior is deterministic and covered.
+- [x] Freshness threshold source precedence (`request > admin_defaults > global_default`) is traceable.
+- [x] Observed realized-price calibration from WB revenue window is traceable in `meta.from_wb.economic_observed_prices` and deterministic anomaly filtering (`max deviation=30%`) is covered.
+- [x] `meta.from_wb` contains stable as-of trace and compact/full-consistent diagnostics.
 
 ## 10) Decision quality evidence (mandatory for stable alpha)
 - [x] Casebook artifact is maintained in `PRODUCTION_ORDER_V1_DECISION_QUALITY_CASEBOOK.md`.
@@ -120,12 +120,12 @@
 - [x] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 
 ## 11) Verification gate
-- [ ] Run verification suite and confirm green:
+- [x] Run verification suite and confirm green:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify-live` (targeted local gate: verify + production-order live API smoke checks)
-- [ ] Regression tests include Layer 1-5 contracts + explainability compact/full coverage.
-- [ ] Decision quality case studies are documented and reviewable for external sanity check.
-- [ ] Working tree is clean after final commit.
+- [x] Regression tests include Layer 1-5 contracts + explainability compact/full coverage.
+- [x] Decision quality case studies are documented and reviewable for external sanity check.
+- [x] Working tree is clean after final commit.
 
 ## 12) Decision documentation discipline (mandatory)
 - [ ] Each accepted architectural/product decision is documented in the same work block (no deferred doc updates).
