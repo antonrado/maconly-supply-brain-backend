@@ -1372,6 +1372,24 @@ def test_layer2_decision_quality_summary_tracks_ties_near_ties_and_reason_counts
             "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
         },
     }
+    legacy_alias_deprecation_plan = summary["legacy_alias_deprecation_plan"]
+    assert (
+        legacy_alias_deprecation_plan["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
+    assert (
+        legacy_alias_deprecation_plan["canonical_decision_gate"]
+        == LAYER2_DECISION_GATE_CANONICAL
+    )
+    assert legacy_alias_deprecation_plan["policy"] == "non_breaking_aliases_during_transition_window"
+    assert legacy_alias_deprecation_plan["legacy_decision_gate_aliases"] == [
+        LAYER2_DECISION_GATE_LEGACY,
+        "expected_gross_profit_until_eta",
+    ]
+    assert (
+        legacy_alias_deprecation_plan["field_alias_replacements"]["near_tie_profit_gap_threshold"]
+        == "near_tie_objective_gap_threshold"
+    )
     assert summary["gmroi_usage"] == "diagnostic_only"
     assert summary["decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert summary["decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
@@ -1586,6 +1604,10 @@ def test_production_order_proposal_economic_overrides_are_traced_in_meta(client,
     assert alpha_proxy["layer_2_decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert alpha_proxy["layer_2_decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
     assert alpha_proxy["layer_2_legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        alpha_proxy["layer_2_legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
 
     layer2_meta = meta["layer_2_allocation"]
     assert layer2_meta["method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
@@ -1594,6 +1616,10 @@ def test_production_order_proposal_economic_overrides_are_traced_in_meta(client,
     assert layer2_meta["decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert layer2_meta["decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
     assert layer2_meta["legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    layer2_legacy_alias_plan = layer2_meta["legacy_alias_deprecation_plan"]
+    assert layer2_legacy_alias_plan["deprecated_after"] == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    assert layer2_meta["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
+    assert alpha_proxy["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     layer2_summary = meta["layer_2_allocation"]["summary"]
     assert layer2_summary["main"] > 0
     assert layer2_summary["assorti"] == 0
@@ -1854,6 +1880,10 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
         is True
     )
     assert meta["layer_2_allocation"]["decision_quality"]["decision_count"] > 0
+    assert (
+        meta["layer_2_allocation"]["legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True
@@ -2975,6 +3005,10 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
     assert alpha_proxy["layer_2_decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
     assert alpha_proxy["layer_2_legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        alpha_proxy["layer_2_legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
     assert (
         alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
         == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
@@ -5314,6 +5348,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert (
         meta["capital_constraint"]["contract"]["checks"]["ranking_risk_priority_consistent"]
         is True
+    )
+    assert (
+        meta["layer_2_allocation"]["legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
     )
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True

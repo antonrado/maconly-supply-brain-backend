@@ -93,6 +93,26 @@ LAYER2_CAPITAL_COST_RATE = 0.08
 LAYER2_STOCKOUT_PENALTY_WEIGHT = 1.0
 LAYER2_OVERSTOCK_PENALTY_WEIGHT = 1.0
 LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW = "2026-12-31"
+LAYER2_EXPECTED_GROSS_PROFIT_GATE_LEGACY = "expected_gross_profit_until_eta"
+LAYER2_LEGACY_ALIAS_DEPRECATION_POLICY = "non_breaking_aliases_during_transition_window"
+LAYER2_LEGACY_DECISION_GATE_ALIASES: tuple[str, ...] = (
+    LAYER2_DECISION_GATE_LEGACY,
+    LAYER2_EXPECTED_GROSS_PROFIT_GATE_LEGACY,
+)
+LAYER2_LEGACY_ALIAS_FIELD_REPLACEMENTS: dict[str, str] = {
+    "allocation_matches_profit_gate": "allocation_matches_composite_objective_gate",
+    "allocation_matches_expected_gross_profit_gate": "allocation_matches_composite_objective_gate",
+    "tie_break_hold_when_equal_profit": "tie_break_hold_when_equal_objective",
+    "tie_break_applied_matches_profit_tie": "tie_break_applied_matches_objective_tie",
+    "near_tie_matches_profit_gap_threshold": "near_tie_matches_objective_gap_threshold",
+    "profit_gate_primary": "composite_objective_gate_primary",
+    "expected_gross_profit_gate_primary": "composite_objective_gate_primary",
+    "near_tie_profit_gap_threshold": "near_tie_objective_gap_threshold",
+    "legacy_method": "method_canonical",
+    "legacy_decision_gate": "decision_gate_canonical",
+    "layer_2_legacy_allocation_method": "layer_2_allocation_method_canonical",
+    "layer_2_legacy_decision_gate": "layer_2_decision_gate_canonical",
+}
 LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD = 0.5
 LAYER1_CONTRACT_VERSION = "v1_alpha"
 LAYER2_CONTRACT_VERSION = "v1_alpha"
@@ -192,6 +212,16 @@ def _ceil_to_int(value: float) -> int:
     if value > as_int:
         return as_int + 1
     return as_int
+
+
+def _build_layer2_legacy_alias_deprecation_plan() -> dict[str, object]:
+    return {
+        "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+        "policy": LAYER2_LEGACY_ALIAS_DEPRECATION_POLICY,
+        "canonical_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
+        "legacy_decision_gate_aliases": list(LAYER2_LEGACY_DECISION_GATE_ALIASES),
+        "field_alias_replacements": dict(LAYER2_LEGACY_ALIAS_FIELD_REPLACEMENTS),
+    }
 
 
 def _normalize_weights(size_ids: list[int], raw_weights: dict[int, float]) -> dict[int, float]:
@@ -1174,6 +1204,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
             "method": layer2_raw.get("method"),
             "method_canonical": layer2_raw.get("method_canonical"),
             "legacy_method": layer2_raw.get("legacy_method"),
+            "legacy_alias_deprecation_plan": layer2_raw.get("legacy_alias_deprecation_plan", {}),
             "summary": layer2_raw.get("summary", {}),
             "contract": layer2_raw.get("contract", {}),
             "decision_quality": layer2_raw.get("decision_quality", {}),
@@ -2239,7 +2270,7 @@ def _build_layer2_decision_quality_summary(
     layer2_allocation_decisions: list[dict[str, int | float | str]],
     near_tie_objective_gap_threshold: float = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
     near_tie_profit_gap_threshold: float | None = None,
-) -> dict[str, bool | int | float | str | dict[str, int]]:
+) -> dict[str, object]:
     resolved_near_tie_objective_gap_threshold = float(near_tie_objective_gap_threshold)
     if near_tie_profit_gap_threshold is not None:
         resolved_near_tie_objective_gap_threshold = float(near_tie_profit_gap_threshold)
@@ -2389,6 +2420,7 @@ def _build_layer2_decision_quality_summary(
                 "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
             },
         },
+        "legacy_alias_deprecation_plan": _build_layer2_legacy_alias_deprecation_plan(),
         "profit_gate_primary": False,
         "expected_gross_profit_gate_primary": False,
         "gmroi_usage": "diagnostic_only",
@@ -5947,6 +5979,7 @@ def build_production_order_proposal(
                 "method": LAYER2_ALLOCATION_METHOD_CANONICAL,
                 "method_canonical": LAYER2_ALLOCATION_METHOD_CANONICAL,
                 "legacy_method": LAYER2_ALLOCATION_METHOD,
+                "legacy_alias_deprecation_plan": _build_layer2_legacy_alias_deprecation_plan(),
                 "decisions": layer2_allocation_decisions,
                 "summary": layer2_allocation_summary,
                 "contract": layer2_contract,
@@ -6005,6 +6038,7 @@ def build_production_order_proposal(
                 "layer_2_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
                 "layer_2_decision_gate_canonical": LAYER2_DECISION_GATE_CANONICAL,
                 "layer_2_legacy_decision_gate": LAYER2_DECISION_GATE_LEGACY,
+                "layer_2_legacy_alias_deprecation_plan": _build_layer2_legacy_alias_deprecation_plan(),
                 "layer_2_near_tie_objective_gap_threshold": LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
                 "layer_2_near_tie_profit_gap_threshold": LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD,
                 "layer_2_objective_parameters": {

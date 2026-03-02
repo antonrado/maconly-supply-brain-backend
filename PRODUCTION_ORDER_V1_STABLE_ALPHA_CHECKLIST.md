@@ -28,6 +28,7 @@
 - [x] Allocation decision is composite-objective based (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`), not rule-based classification.
 - [x] Canonical objective-score diagnostics are present in Layer 2 decisions/diagnostics during transition, while expected-gross-profit aliases remain available (`expected_gross_profit_*` fields and canonical/objective reason counts).
 - [x] Decision gate default presentation is `composite_objective_until_eta` with explicit legacy alias `profit_until_eta`.
+- [x] Layer 2 emits explicit legacy-alias deprecation-plan diagnostics in decision-quality/meta/alpha-proxy payloads (canonical replacement map + `deprecated_after`) without breaking legacy fields.
 - [x] Tie-break is `hold`.
 - [x] GMROI is diagnostic-only.
 - [x] `explanation.meta.layer_2_allocation.summary` and `decisions` are present in full mode.

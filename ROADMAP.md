@@ -36,6 +36,7 @@
 - GMROI proxy is computed for diagnostics/audit; deterministic tie-break is `hold`.
 - Layer 2 now emits explicit decision-quality diagnostics (near-tie/tie counts, decision reason distribution, avg profit/GMROI gaps, capital-locked aggregates) in explainability meta.
 - Layer 2 default presentation now uses canonical composite-objective naming (`method=time_window_composite_objective_with_gmroi_diagnostics`, `decision_gate=composite_objective_until_eta`) while keeping explicit legacy aliases (`legacy_method=time_window_profit_proxy_with_gmroi_diagnostics`, `legacy_decision_gate=profit_until_eta`) to support transition without facade drift.
+- Layer 2 now emits explicit legacy-alias deprecation-plan diagnostics (`deprecated_after`, legacy gate aliases, canonical field replacement map) in decision-quality and explainability meta/alpha-proxy blocks while keeping aliases non-breaking during the transition window.
 - Layer 2 decision flags (`allocation_decision`, `tie_break_applied`, `near_tie`) are stabilized against floating-point boundary noise by using normalized 4-decimal profit/GMROI diagnostics that are also emitted in explainability payloads.
 - Layer 2 helper interfaces now require explicit economics inputs (`margin_main_per_unit`, `margin_assorti_per_unit`, `unit_capital_per_unit`) to prevent accidental fallback to proxy constants after refactors.
 - Explicit decision (`main` / `assorti` / `hold`) per SKU.
