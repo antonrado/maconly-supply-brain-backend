@@ -870,6 +870,9 @@ def test_capital_constraint_contract_summary_marks_ok_for_valid_budget_limited_p
                 "size_id": 20,
                 "objective_score_per_capital": 2.0,
                 "objective_score": 20.0,
+                "stockout_risk": 0.8,
+                "overstock_risk": 0.1,
+                "risk_priority_score": 0.7,
             },
             {
                 "rank": 2,
@@ -877,6 +880,9 @@ def test_capital_constraint_contract_summary_marks_ok_for_valid_budget_limited_p
                 "size_id": 21,
                 "objective_score_per_capital": 1.0,
                 "objective_score": 10.0,
+                "stockout_risk": 0.4,
+                "overstock_risk": 0.3,
+                "risk_priority_score": 0.1,
             },
         ],
     }
@@ -912,6 +918,9 @@ def test_capital_constraint_contract_summary_marks_violated_for_budget_and_ranki
                 "size_id": 20,
                 "objective_score_per_capital": 1.0,
                 "objective_score": 10.0,
+                "stockout_risk": 0.5,
+                "overstock_risk": 0.2,
+                "risk_priority_score": 0.3,
             },
             {
                 "rank": 2,
@@ -919,6 +928,9 @@ def test_capital_constraint_contract_summary_marks_violated_for_budget_and_ranki
                 "size_id": 20,
                 "objective_score_per_capital": 2.0,
                 "objective_score": 20.0,
+                "stockout_risk": 0.5,
+                "overstock_risk": 0.2,
+                "risk_priority_score": 0.9,
             },
         ],
     }
@@ -935,6 +947,7 @@ def test_capital_constraint_contract_summary_marks_violated_for_budget_and_ranki
     assert checks["line_count_order_valid"] is False
     assert checks["ranking_unique_line_keys"] is False
     assert checks["ranking_sorted_by_objective_per_capital"] is False
+    assert checks["ranking_risk_priority_consistent"] is False
     assert checks["cutoff_line_qty_consistent"] is False
     assert checks["cutoff_line_matches_ranking"] is False
 
@@ -1646,6 +1659,7 @@ def test_production_order_proposal_reports_budget_limited_capital_constraint_sum
     assert contract["status"] == "ok"
     assert contract["checks"]["budget_accounting_consistent"] is True
     assert contract["checks"]["ranking_sorted_by_objective_per_capital"] is True
+    assert contract["checks"]["ranking_risk_priority_consistent"] is True
 
     for line in recommendation["lines"]:
         assert line["source_reason"].endswith("|capital_constraint")
@@ -1815,6 +1829,10 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     assert meta["capital_constraint"]["contract"]["status"] == "ok"
+    assert (
+        meta["capital_constraint"]["contract"]["checks"]["ranking_risk_priority_consistent"]
+        is True
+    )
     assert meta["layer_2_allocation"]["decision_quality"]["decision_count"] > 0
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
@@ -5232,6 +5250,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     assert meta["capital_constraint"]["contract"]["status"] == "ok"
+    assert (
+        meta["capital_constraint"]["contract"]["checks"]["ranking_risk_priority_consistent"]
+        is True
+    )
     layer2_compact_contract_checks = meta["layer_2_allocation"]["contract"]["checks"]
     assert layer2_compact_contract_checks["decision_reason_matches_allocation"] is True
     assert layer2_compact_contract_checks["allocation_matches_profit_gate"] is True

@@ -43,7 +43,7 @@
 - Layer 2 contract now explicitly verifies objective-component decomposition formula consistency (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) to block silent fallback or malformed objective payloads.
 - Capital-limited line selection evidence is now regression-locked at helper/API level: objective-per-capital ranking can prioritize lower gross-profit lines when penalties make them economically dominant, budget allocation follows this ranking (no silent profit-only fallback), and proposal meta exposes deterministic budget-limited ranking/cutoff behavior.
 - Shared-capital tie-break now prioritizes availability risk deterministically when objective metrics are equal (`stockout_risk` higher first, then `overstock_risk` lower) to align constrained allocation with out-of-stock protection policy.
-- Capital-constraint meta now includes runtime contract summary (`version/checks/status`) validating budget accounting, line-count invariants, ranking sort/uniqueness, and cutoff-line consistency to guard against silent ranking/accounting drift.
+- Capital-constraint meta now includes runtime contract summary (`version/checks/status`) validating budget accounting, line-count invariants, ranking sort/uniqueness, risk-priority score consistency, and cutoff-line consistency to guard against silent ranking/accounting drift.
 - No hard-coded "critical SKU" classifier as primary allocator.
 - Economic Alpha economics precedence is now wired and traceable end-to-end (`request -> admin_defaults -> global_default -> code_default_constants`) with regression coverage for each source tier.
 

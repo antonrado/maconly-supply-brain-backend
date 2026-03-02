@@ -116,7 +116,7 @@
 - [ ] Capital-limited allocation is demonstrably objective-driven in regression tests (higher `objective_score_per_capital` may be selected before higher raw gross profit; no silent profit-only fallback).
 - [ ] Budget-limited proposal responses expose deterministic capital-constraint evidence in meta (`status=budget_limited_applied`, ranking, cutoff line incl. partial allocation when applicable).
 - [ ] For equal objective metrics, shared-capital ranking tie-break is deterministic and availability-priority aligned (`stockout_risk` higher first, then `overstock_risk` lower).
-- [ ] Capital-constraint meta includes runtime contract block (`version/checks/status`) and valid flows keep `capital_constraint.contract.status=ok` in full/compact responses.
+- [ ] Capital-constraint meta includes runtime contract block (`version/checks/status`) and valid flows keep `capital_constraint.contract.status=ok` in full/compact responses, including ranking risk-priority consistency (`risk_priority_score = stockout_risk - overstock_risk`).
 - [ ] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 
 ## 11) Verification gate

@@ -3176,14 +3176,16 @@ def _build_capital_constraint_contract_summary(
     ranking_unique_line_keys = True
     ranking_entries_numeric = True
     ranking_sorted_by_objective_per_capital = True
+    ranking_risk_priority_consistent = True
     ranking_rows = capital_constraint_summary.get("ranking", [])
-    previous_sort_key: tuple[float, float, int, int] | None = None
+    previous_sort_key: tuple[float, float, float, float, int, int] | None = None
     seen_ranking_keys: set[tuple[int, int]] = set()
     if ranking_is_list:
         for ranking_row in ranking_rows:
             if not isinstance(ranking_row, dict):
                 ranking_entries_numeric = False
                 ranking_sorted_by_objective_per_capital = False
+                ranking_risk_priority_consistent = False
                 continue
             try:
                 color_id = int(ranking_row.get("color_id"))
@@ -3194,9 +3196,11 @@ def _build_capital_constraint_contract_summary(
                 objective_score = float(ranking_row.get("objective_score", 0.0))
                 stockout_risk = float(ranking_row.get("stockout_risk", 0.0))
                 overstock_risk = float(ranking_row.get("overstock_risk", 0.0))
+                risk_priority_score = float(ranking_row.get("risk_priority_score"))
             except (TypeError, ValueError):
                 ranking_entries_numeric = False
                 ranking_sorted_by_objective_per_capital = False
+                ranking_risk_priority_consistent = False
                 continue
 
             line_key = (color_id, size_id)
@@ -3215,10 +3219,15 @@ def _build_capital_constraint_contract_summary(
             if previous_sort_key is not None and sort_key < previous_sort_key:
                 ranking_sorted_by_objective_per_capital = False
             previous_sort_key = sort_key
+
+            expected_risk_priority_score = stockout_risk - overstock_risk
+            if abs(risk_priority_score - expected_risk_priority_score) > 1e-4:
+                ranking_risk_priority_consistent = False
     else:
         ranking_unique_line_keys = False
         ranking_entries_numeric = False
         ranking_sorted_by_objective_per_capital = False
+        ranking_risk_priority_consistent = False
 
     cutoff_line = capital_constraint_summary.get("cutoff_line")
     cutoff_line_shape_valid = cutoff_line is None or isinstance(cutoff_line, dict)
@@ -3284,6 +3293,7 @@ def _build_capital_constraint_contract_summary(
         "ranking_sorted_by_objective_per_capital": (
             ranking_sorted_by_objective_per_capital
         ),
+        "ranking_risk_priority_consistent": ranking_risk_priority_consistent,
         "cutoff_line_shape_valid": cutoff_line_shape_valid,
         "cutoff_line_qty_consistent": cutoff_line_qty_consistent,
         "cutoff_line_matches_ranking": cutoff_line_matches_ranking,
