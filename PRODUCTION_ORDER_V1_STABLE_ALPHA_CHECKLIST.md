@@ -43,13 +43,13 @@
   - [x] objective-component formula is consistent (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`)
 
 ## 5) Layer 3 contract (purchase shaping)
-- [ ] Layer 3 applies deterministic base factors by decision (`main|assorti|hold`).
-- [ ] Risk-weighted calibration is applied deterministically (stockout boost + overstock dampening + bounded factors).
-- [ ] Layer 3 shapes reorder quantities and does not replace Layer 2 allocation gate semantics.
-- [ ] Calibration override evidence confirms Layer 3 can change shaped qty/reorder units while Layer 2 allocation summary/decisions stay unchanged.
-- [ ] Layer 3 diagnostics are present in `explanation.meta.layer_3_purchase_shaping`:
-  - [ ] `qty_before`, `qty_after_base`, `qty_after`, `qty_delta_vs_base`
-  - [ ] calibration method, bounds, and factor summary
+- [x] Layer 3 applies deterministic base factors by decision (`main|assorti|hold`).
+- [x] Risk-weighted calibration is applied deterministically (stockout boost + overstock dampening + bounded factors).
+- [x] Layer 3 shapes reorder quantities and does not replace Layer 2 allocation gate semantics.
+- [x] Calibration override evidence confirms Layer 3 can change shaped qty/reorder units while Layer 2 allocation summary/decisions stay unchanged.
+- [x] Layer 3 diagnostics are present in `explanation.meta.layer_3_purchase_shaping`:
+  - [x] `qty_before`, `qty_after_base`, `qty_after`, `qty_delta_vs_base`
+  - [x] calibration method, bounds, and factor summary
 
 ## 6) Layer 4 contract (scenarios)
 - [ ] Scenarios include `Conservative`, `Balanced`, `Aggressive`.
@@ -67,17 +67,17 @@
 - [ ] Capital-gap transparency exists in `explanation.meta.capital_gap` (`available_capital`, `required_capital`, `deficit_or_surplus`) and is signal-only (no auto-policy override).
 
 ## 7) Layer 5 contract (interventions)
-- [ ] Layer 5 uses explicit threshold policy with traceable thresholds in `explanation.meta.layer_5_intervention.signal_thresholds`.
-- [ ] Policy output is deterministic and includes `signal_policy`, `reason`, and `signals`.
-- [ ] Severe risk + in-flight path may return dual signals as designed.
-- [ ] Layer 5 remains signal-only and does not directly enforce recommendation action.
+- [x] Layer 5 uses explicit threshold policy with traceable thresholds in `explanation.meta.layer_5_intervention.signal_thresholds`.
+- [x] Policy output is deterministic and includes `signal_policy`, `reason`, and `signals`.
+- [x] Severe risk + in-flight path may return dual signals as designed.
+- [x] Layer 5 remains signal-only and does not directly enforce recommendation action.
 
 ## 8) Explainability contract
-- [ ] `explainability_mode` supports `full|compact` for direct and from-WB requests.
-- [ ] `full` preserves detailed steps and detailed meta arrays/maps.
-- [ ] `compact` preserves deterministic decisions while trimming payload-heavy explanation blocks.
-- [ ] `explanation.meta.explainability` is present in compact mode and reports omitted step count.
-- [ ] `compact` preserves contract blocks for Layers 1-5 and `alpha_proxy_economics`.
+- [x] `explainability_mode` supports `full|compact` for direct and from-WB requests.
+- [x] `full` preserves detailed steps and detailed meta arrays/maps.
+- [x] `compact` preserves deterministic decisions while trimming payload-heavy explanation blocks.
+- [x] `explanation.meta.explainability` is present in compact mode and reports omitted step count.
+- [x] `compact` preserves contract blocks for Layers 1-5 and `alpha_proxy_economics`.
 
 ## 9) From-WB ingestion/freshness
 - [ ] Freshness mode (`warn|strict`) behavior is deterministic and covered.
