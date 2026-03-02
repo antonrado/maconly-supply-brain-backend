@@ -4625,7 +4625,9 @@ def test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5
     assert layer2_contract["status"] == "ok"
     assert layer2_contract["checks"]["decision_reason_matches_allocation"] is True
     assert layer2_contract["checks"]["allocation_matches_profit_gate"] is True
+    assert layer2_contract["checks"]["tie_break_applied_matches_objective_tie"] is True
     assert layer2_contract["checks"]["tie_break_applied_matches_profit_tie"] is True
+    assert layer2_contract["checks"]["near_tie_matches_objective_gap_threshold"] is True
     assert layer2_contract["checks"]["near_tie_matches_profit_gap_threshold"] is True
     assert layer2_contract["checks"]["profit_gap_consistent_with_profits"] is True
     assert layer2_contract["checks"]["gmroi_gap_consistent_with_gmroi"] is True
@@ -5470,7 +5472,9 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
@@ -5597,7 +5601,9 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert compact_layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert compact_layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
+    assert compact_layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
     assert compact_layer2_contract_checks["near_tie_matches_profit_gap_threshold"] is True
     assert compact_layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True

@@ -69,7 +69,7 @@
 - from-WB adapter now feeds observed realized prices from WB revenue window into runtime economics source `from_wb_observed_window` (request still has top precedence), with deterministic anomaly filtering (`30%` max deviation) and diagnostics projected in explainability meta.
 - Execution order inside this block:
   1. economics input traceability (`request -> admin_defaults -> global_default -> code_default_constants`),
-  2. Layer 2 gross-profit gate upgrade,
+  2. Layer 2 composite-objective gate hardening with legacy alias compatibility,
   3. Layer 4 full money outputs + capital-gap diagnostics,
   4. targeted decomposition of layer helpers into modules without facade behavior drift.
 - Release evidence now includes deterministic end-to-end allocation flip under identical units-until-ETA where only realized price inputs are swapped (`main -> assorti`), executed in the integration gate test set used by `verify`/`verify-live`.
@@ -106,7 +106,7 @@
 - Documentation update is automatic after each accepted decision and must include at least `ROADMAP.md`, `STATUS.md`, and the relevant acceptance artifact (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR) to avoid omissions.
 
 ## Immediate high-leverage follow-ups
-1. Finalize Layer 2 naming/contract wording transition from legacy profit/expected-gross-profit aliases to canonical composite-objective labels without breaking stable API behavior.
+1. Finalize Layer 2 legacy-alias deprecation plan (`profit` / `expected_gross_profit` compatibility fields) after the deprecation window, without breaking stable API behavior during transition.
 2. Lock regressions that prove allocation sensitivity to economics changes and preserve deterministic outputs.
 3. Keep Layer 5 signal-only semantics explicit (no direct recommendation-action enforcement from intervention signals).
 4. Keep explainability/contract expansion limited to behavior-critical checks while economics calibration evidence is finalized.

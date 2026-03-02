@@ -24,7 +24,8 @@ Transition Production Order from proxy-only economics to formula-based money cal
 - `gross_margin_assorti = average_realized_price_assorti - (average_realized_price_assorti * wb_commission_percent_assorti) - production_cost_per_unit - logistics_cost_per_unit`
 
 ## Release requirements
-1. Layer 2 gate migration target: compare expected gross profit until ETA (main vs assorti) with deterministic tie-break `hold`.
+1. Layer 2 gate canonical target: compare composite objective until ETA (`objective_score_if_main_until_eta` vs `objective_score_if_assorti_until_eta`) with deterministic tie-break `hold`, where objective is:
+   `expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`.
 2. Layer 4 scenarios must expose money outputs per scenario:
    - `expected_revenue`
    - `expected_gross_profit`
@@ -53,12 +54,16 @@ Transition Production Order from proxy-only economics to formula-based money cal
   `alembic/versions/0014_add_production_order_economics_defaults.py`.
 - Layer 4 now emits money fields and risk proxies per scenario.
 - Capital-gap transparency is emitted in `explanation.meta.capital_gap`.
-- Layer 2 now emits canonical expected-gross-profit aliases in parallel with legacy
-  profit naming (decision fields, reason counts, decision-gate labels) to keep
-  transition safe for existing clients.
-- Layer 2 default presentation now uses canonical expected-gross-profit wording
-  (`method`, `decision_gate`) while explicit legacy aliases remain available
-  (`legacy_method`, `legacy_decision_gate`) for transition safety.
+- Layer 2 now emits canonical composite-objective diagnostics in parallel with
+  compatibility aliases for expected-gross-profit/profit naming (decision fields,
+  reason counts, decision-gate labels) to keep transition safe for existing clients.
+- Layer 2 default presentation now uses canonical composite-objective wording
+  (`method=time_window_composite_objective_with_gmroi_diagnostics`,
+  `decision_gate=composite_objective_until_eta`) while explicit legacy aliases
+  remain available (`legacy_method`, `legacy_decision_gate`) for transition safety.
+- Layer 2 near-tie diagnostics/contracts now use canonical objective-gap threshold
+  naming with backward-compatible legacy alias (`near_tie_objective_gap_threshold`
+  + `near_tie_profit_gap_threshold`).
 - from-WB adapter now derives observed realized prices from WB revenue window and applies
   them as runtime economics source `from_wb_observed_window` with deterministic anomaly
   filtering (`max deviation=30%`) and explainability diagnostics.
