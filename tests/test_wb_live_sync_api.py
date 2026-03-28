@@ -38,7 +38,48 @@ def client(db_session):
 def test_wb_live_sales_sync_requires_active_account(client):
     response = client.post("/api/v1/wb/sales-daily/sync-live", json={})
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "No active WB integration account configured"
+    assert response.json()["detail"] == {
+        "code": "no_active_wb_integration_account",
+        "message": "No active WB integration account configured",
+        "next_steps": ["create_or_activate_wb_integration_account"],
+    }
+
+
+def test_wb_live_sales_sync_rejects_unknown_active_account_id_with_structured_detail(client):
+    response = client.post(
+        "/api/v1/wb/sales-daily/sync-live",
+        json={"account_id": 999999},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_integration_account_not_found",
+        "message": "Active WB integration account not found",
+        "account_id": 999999,
+        "next_steps": ["use_existing_active_wb_account_id"],
+    }
+
+
+def test_wb_live_sales_sync_rejects_empty_api_token_with_structured_detail(client, db_session):
+    account = WbIntegrationAccount(
+        name="WB Empty Token",
+        supplier_id=None,
+        api_token="   ",
+        is_active=True,
+    )
+    db_session.add(account)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/wb/sales-daily/sync-live",
+        json={"account_id": account.id},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_integration_account_empty_api_token",
+        "message": "WB integration account has empty api_token",
+        "account_id": account.id,
+        "next_steps": ["set_wb_integration_account_api_token"],
+    }
 
 
 def test_wb_live_sales_sync_ingests_daily_rows(client, db_session, monkeypatch):

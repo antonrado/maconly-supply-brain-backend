@@ -58,6 +58,23 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _build_wb_account_resolution_detail(
+    *,
+    code: str,
+    message: str,
+    next_steps: list[str],
+    account_id: int | None = None,
+) -> dict[str, object]:
+    detail = {
+        "code": code,
+        "message": message,
+        "next_steps": list(next_steps),
+    }
+    if account_id is not None:
+        detail["account_id"] = int(account_id)
+    return detail
+
+
 def _resolve_wb_integration_account(
     db: Session,
     *,
@@ -72,18 +89,32 @@ def _resolve_wb_integration_account(
         if account_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Active WB integration account id={account_id} not found",
+                detail=_build_wb_account_resolution_detail(
+                    code="wb_integration_account_not_found",
+                    message="Active WB integration account not found",
+                    account_id=account_id,
+                    next_steps=["use_existing_active_wb_account_id"],
+                ),
             )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No active WB integration account configured",
+            detail=_build_wb_account_resolution_detail(
+                code="no_active_wb_integration_account",
+                message="No active WB integration account configured",
+                next_steps=["create_or_activate_wb_integration_account"],
+            ),
         )
 
     token = (account.api_token or "").strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"WB integration account id={account.id} has empty api_token",
+            detail=_build_wb_account_resolution_detail(
+                code="wb_integration_account_empty_api_token",
+                message="WB integration account has empty api_token",
+                account_id=account.id,
+                next_steps=["set_wb_integration_account_api_token"],
+            ),
         )
 
     return account
