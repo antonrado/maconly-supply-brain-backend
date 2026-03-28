@@ -115,6 +115,24 @@ def get_demand(
     )
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
+def _build_no_planning_settings_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "no_planning_settings_found",
+        "message": "No planning settings found for this article",
+        "article_id": int(article_id),
+        "next_steps": ["configure_article_planning_settings"],
+    }
+
+
 def _build_global_settings_snapshot(db: Session) -> GlobalPlanningSettingsSnapshot | None:
     gps = db.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).first()
     if gps is None:
@@ -261,7 +279,7 @@ def get_planning_config_snapshot(
         if article is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Article not found",
+                detail=_build_article_not_found_detail(article_id=article_id),
             )
 
         snapshot = _build_article_snapshot(db, article)
@@ -274,7 +292,7 @@ def get_planning_config_snapshot(
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No planning settings found for this article",
+                detail=_build_no_planning_settings_found_detail(article_id=article_id),
             )
 
         articles.append(snapshot)

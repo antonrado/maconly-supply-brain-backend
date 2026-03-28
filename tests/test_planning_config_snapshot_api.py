@@ -167,7 +167,12 @@ def test_planning_config_snapshot_article_not_found(client):
     )
     assert resp.status_code == 404
     body = resp.json()
-    assert body["detail"] == "Article not found"
+    assert body["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999,
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_planning_config_snapshot_article_without_settings_returns_404(client, db_session):
@@ -179,7 +184,12 @@ def test_planning_config_snapshot_article_without_settings_returns_404(client, d
     )
     assert resp.status_code == 404
     body = resp.json()
-    assert body["detail"] == "No planning settings found for this article"
+    assert body["detail"] == {
+        "code": "no_planning_settings_found",
+        "message": "No planning settings found for this article",
+        "article_id": article.id,
+        "next_steps": ["configure_article_planning_settings"],
+    }
 
 
 def test_planning_config_snapshot_without_article_id_lists_active_planning_settings(client, db_session):
