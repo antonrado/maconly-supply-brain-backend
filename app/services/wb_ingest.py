@@ -399,7 +399,11 @@ def _wb_get_json_object(
     if not isinstance(payload, dict):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="WB API response format is invalid: expected object",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_invalid_object_format",
+                message="WB API response format is invalid: expected object",
+                next_steps=["inspect_wb_api_response_format"],
+            ),
         )
     return payload
 

@@ -663,6 +663,32 @@ def test_normalize_wb_json_rows_raises_structured_invalid_rows_format_detail():
     }
 
 
+def test_wb_get_json_object_raises_structured_invalid_object_format_detail(monkeypatch):
+    class FakeResponse:
+        def json(self):
+            return ["not", "an", "object"]
+
+    monkeypatch.setattr(
+        wb_ingest,
+        "_wb_request",
+        lambda **kwargs: FakeResponse(),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._wb_get_json_object(
+            base_url="https://example.test",
+            path="/fake",
+            token="t",
+        )
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == {
+        "code": "wb_api_invalid_object_format",
+        "message": "WB API response format is invalid: expected object",
+        "next_steps": ["inspect_wb_api_response_format"],
+    }
+
+
 def test_wb_from_wb_readiness_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/wb/from-wb/readiness",
