@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
+
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -552,6 +554,8 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     article_ready = Article(code="READY-1", name="Ready")
     article_no_recipe = Article(code="BLOCK-NO-RECIPE", name="No recipe")
     article_missing_bundle = Article(code="BLOCK-MISSING", name="Missing bundle")
+    article_no_sales = Article(code="BLOCK-NO-SALES", name="No sales")
+    article_no_stock = Article(code="BLOCK-NO-STOCK", name="No stock")
 
     bt_main = BundleType(code="BT-MAIN", name="Main", is_assorti=False)
     bt_alt = BundleType(code="BT-ALT", name="Alt", is_assorti=True)
@@ -562,6 +566,8 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
         article_ready,
         article_no_recipe,
         article_missing_bundle,
+        article_no_sales,
+        article_no_stock,
         bt_main,
         bt_alt,
         color_a,
@@ -574,6 +580,8 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
             ArticleWbMapping(article_id=article_ready.id, wb_sku="WB-R-1", bundle_type_id=bt_main.id),
             ArticleWbMapping(article_id=article_no_recipe.id, wb_sku="WB-NR-1", bundle_type_id=bt_main.id),
             ArticleWbMapping(article_id=article_missing_bundle.id, wb_sku="WB-MB-1", bundle_type_id=bt_alt.id),
+            ArticleWbMapping(article_id=article_no_sales.id, wb_sku="WB-NS-1", bundle_type_id=bt_main.id),
+            ArticleWbMapping(article_id=article_no_stock.id, wb_sku="WB-NST-1", bundle_type_id=bt_main.id),
         ]
     )
     db_session.add_all(
@@ -590,7 +598,56 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
                 color_id=color_b.id,
                 position=1,
             ),
+            BundleRecipe(
+                article_id=article_no_sales.id,
+                bundle_type_id=bt_main.id,
+                color_id=color_a.id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=article_no_stock.id,
+                bundle_type_id=bt_main.id,
+                color_id=color_b.id,
+                position=1,
+            ),
         ]
+    )
+    seed_created_at = datetime.now(timezone.utc)
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-R-1",
+            date=date(2026, 1, 10),
+            sales_qty=5,
+            revenue=None,
+            created_at=seed_created_at,
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-R-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=7,
+            updated_at=seed_created_at,
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-NS-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=3,
+            updated_at=seed_created_at,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-NST-1",
+            date=date(2026, 1, 10),
+            sales_qty=4,
+            revenue=None,
+            created_at=seed_created_at,
+        )
     )
     db_session.flush()
 
@@ -598,21 +655,35 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     assert response.status_code == 200, response.text
     body = response.json()
 
-    assert body["total_articles_considered"] == 3
+    assert body["total_articles_considered"] == 5
     assert body["ready_articles"] == 1
-    assert body["not_ready_articles"] == 2
+    assert body["not_ready_articles"] == 4
 
     items = {row["article_code"]: row for row in body["items"]}
 
     assert items["READY-1"]["ready_for_from_wb"] is True
     assert items["READY-1"]["blocker"] is None
+    assert items["READY-1"]["mapped_wb_skus_with_sales"] == 1
+    assert items["READY-1"]["mapped_wb_skus_with_stock"] == 1
 
     assert items["BLOCK-NO-RECIPE"]["ready_for_from_wb"] is False
     assert items["BLOCK-NO-RECIPE"]["blocker"] == "no_bundle_recipe"
+    assert items["BLOCK-NO-RECIPE"]["mapped_wb_skus_with_sales"] == 0
+    assert items["BLOCK-NO-RECIPE"]["mapped_wb_skus_with_stock"] == 0
 
     assert items["BLOCK-MISSING"]["ready_for_from_wb"] is False
     assert items["BLOCK-MISSING"]["blocker"] == "missing_bundle_recipe_bundle_types"
     assert items["BLOCK-MISSING"]["missing_recipe_bundle_type_ids"] == [bt_alt.id]
+
+    assert items["BLOCK-NO-SALES"]["ready_for_from_wb"] is False
+    assert items["BLOCK-NO-SALES"]["blocker"] == "no_wb_sales_data"
+    assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_sales"] == 0
+    assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_stock"] == 1
+
+    assert items["BLOCK-NO-STOCK"]["ready_for_from_wb"] is False
+    assert items["BLOCK-NO-STOCK"]["blocker"] == "no_wb_stock_data"
+    assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_sales"] == 1
+    assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_stock"] == 0
 
 
 def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeypatch):

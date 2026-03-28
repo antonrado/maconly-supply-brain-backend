@@ -910,6 +910,8 @@ def get_from_wb_readiness_summary(
                     article_id=article_id,
                     article_code=article_code,
                     mapped_wb_skus=0,
+                    mapped_wb_skus_with_sales=0,
+                    mapped_wb_skus_with_stock=0,
                     mapped_bundle_type_ids=[],
                     recipe_bundle_type_ids=[],
                     missing_recipe_bundle_type_ids=[],
@@ -958,6 +960,32 @@ def get_from_wb_readiness_summary(
     for recipe_article_id, recipe_bundle_type_id in recipe_rows:
         recipe_bundle_types_by_article[int(recipe_article_id)].add(int(recipe_bundle_type_id))
 
+    sales_rows = (
+        db.query(ArticleWbMapping.article_id, ArticleWbMapping.wb_sku)
+        .join(WbSalesDaily, WbSalesDaily.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(ArticleWbMapping.article_id.in_(selected_article_ids))
+        .distinct()
+        .all()
+    )
+    sales_wb_skus_by_article: dict[int, set[str]] = defaultdict(set)
+    for sales_article_id, sales_wb_sku in sales_rows:
+        sales_wb_sku_text = str(sales_wb_sku or "").strip()
+        if sales_wb_sku_text:
+            sales_wb_skus_by_article[int(sales_article_id)].add(sales_wb_sku_text)
+
+    stock_rows = (
+        db.query(ArticleWbMapping.article_id, ArticleWbMapping.wb_sku)
+        .join(WbStock, WbStock.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(ArticleWbMapping.article_id.in_(selected_article_ids))
+        .distinct()
+        .all()
+    )
+    stock_wb_skus_by_article: dict[int, set[str]] = defaultdict(set)
+    for stock_article_id, stock_wb_sku in stock_rows:
+        stock_wb_sku_text = str(stock_wb_sku or "").strip()
+        if stock_wb_sku_text:
+            stock_wb_skus_by_article[int(stock_article_id)].add(stock_wb_sku_text)
+
     items: list[WbFromWbReadinessItem] = []
     ready_articles = 0
     not_ready_articles = 0
@@ -973,6 +1001,8 @@ def get_from_wb_readiness_summary(
             else []
         )
         recipe_bundle_types = sorted(recipe_bundle_types_by_article.get(current_article_id, set()))
+        mapped_wb_skus_with_sales = len(sales_wb_skus_by_article.get(current_article_id, set()))
+        mapped_wb_skus_with_stock = len(stock_wb_skus_by_article.get(current_article_id, set()))
 
         missing_recipe_bundle_type_ids = [
             bundle_type for bundle_type in mapped_bundle_types if bundle_type not in recipe_bundle_types
@@ -986,6 +1016,12 @@ def get_from_wb_readiness_summary(
             blocker = "no_bundle_recipe"
         elif missing_recipe_bundle_type_ids:
             blocker = "missing_bundle_recipe_bundle_types"
+        elif mapped_wb_skus_with_sales <= 0 and mapped_wb_skus_with_stock <= 0:
+            blocker = "no_wb_sales_or_stock_data"
+        elif mapped_wb_skus_with_sales <= 0:
+            blocker = "no_wb_sales_data"
+        elif mapped_wb_skus_with_stock <= 0:
+            blocker = "no_wb_stock_data"
         else:
             ready_for_from_wb = True
 
@@ -1000,6 +1036,8 @@ def get_from_wb_readiness_summary(
                 article_id=current_article_id,
                 article_code=str(bucket.get("article_code") or ""),
                 mapped_wb_skus=mapped_wb_skus_count,
+                mapped_wb_skus_with_sales=mapped_wb_skus_with_sales,
+                mapped_wb_skus_with_stock=mapped_wb_skus_with_stock,
                 mapped_bundle_type_ids=mapped_bundle_types,
                 recipe_bundle_type_ids=recipe_bundle_types,
                 missing_recipe_bundle_type_ids=missing_recipe_bundle_type_ids,

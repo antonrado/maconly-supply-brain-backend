@@ -166,6 +166,8 @@ class WbFromWbReadinessItem(BaseModel):
     article_id: int
     article_code: str
     mapped_wb_skus: int
+    mapped_wb_skus_with_sales: int
+    mapped_wb_skus_with_stock: int
     mapped_bundle_type_ids: list[int]
     recipe_bundle_type_ids: list[int]
     missing_recipe_bundle_type_ids: list[int]
