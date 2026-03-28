@@ -65,6 +65,7 @@ def test_legacy_core_proposal_stub_exposes_deprecation_headers(client, monkeypat
     assert response.headers["Deprecation"] == "true"
     assert response.headers["X-Planning-Fidelity"] == "stub_legacy_low_fidelity"
     assert response.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert response.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
     body = response.json()
     assert body["status"] == "ok"
 
@@ -200,6 +201,7 @@ def test_end_to_end_happy_path_wb_to_po(client, db_session):
     assert resp_proposal.headers["Deprecation"] == "true"
     assert resp_proposal.headers["X-Planning-Fidelity"] == "legacy_live_low_fidelity"
     assert resp_proposal.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert resp_proposal.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
     proposal = resp_proposal.json()
 
     assert proposal["target_date"] == target_date.isoformat()
@@ -277,6 +279,7 @@ def test_end_to_end_zero_demand_creates_empty_po(client, db_session):
     assert resp_proposal.headers["Deprecation"] == "true"
     assert resp_proposal.headers["X-Planning-Fidelity"] == "legacy_live_low_fidelity"
     assert resp_proposal.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert resp_proposal.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
     proposal = resp_proposal.json()
 
     assert proposal["items"] == []

@@ -30,6 +30,7 @@ router = APIRouter()
 LEGACY_CORE_PROPOSAL_DEPRECATION = "true"
 LEGACY_CORE_PROPOSAL_SUCCESSOR = "/api/v1/planning/core/production-order/proposal"
 LEGACY_CORE_PROPOSAL_FIDELITY = "stub_legacy_low_fidelity"
+LEGACY_CORE_PROPOSAL_PHASE = "deprecated_runtime_supported"
 
 
 @router.get("/core/health")
@@ -62,6 +63,7 @@ async def create_planning_core_proposal(
     response.headers["Deprecation"] = LEGACY_CORE_PROPOSAL_DEPRECATION
     response.headers["X-Planning-Fidelity"] = LEGACY_CORE_PROPOSAL_FIDELITY
     response.headers["X-Planning-Successor"] = LEGACY_CORE_PROPOSAL_SUCCESSOR
+    response.headers["X-Planning-Legacy-Phase"] = LEGACY_CORE_PROPOSAL_PHASE
 
     service = PlanningService()
     proposal = service.build_proposal(request.sales_window_days, request.horizon_days)
