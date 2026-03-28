@@ -173,6 +173,7 @@ class WbFromWbReadinessItem(BaseModel):
     missing_recipe_bundle_type_ids: list[int]
     ready_for_from_wb: bool
     blocker: str | None = None
+    next_steps: list[str] = Field(default_factory=list)
 
 
 class WbFromWbReadinessSummary(BaseModel):

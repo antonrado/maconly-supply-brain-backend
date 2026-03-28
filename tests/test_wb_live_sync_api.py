@@ -665,25 +665,30 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     assert items["READY-1"]["blocker"] is None
     assert items["READY-1"]["mapped_wb_skus_with_sales"] == 1
     assert items["READY-1"]["mapped_wb_skus_with_stock"] == 1
+    assert items["READY-1"]["next_steps"] == []
 
     assert items["BLOCK-NO-RECIPE"]["ready_for_from_wb"] is False
     assert items["BLOCK-NO-RECIPE"]["blocker"] == "no_bundle_recipe"
     assert items["BLOCK-NO-RECIPE"]["mapped_wb_skus_with_sales"] == 0
     assert items["BLOCK-NO-RECIPE"]["mapped_wb_skus_with_stock"] == 0
+    assert items["BLOCK-NO-RECIPE"]["next_steps"] == ["create_bundle_recipe_for_mapped_bundle_types"]
 
     assert items["BLOCK-MISSING"]["ready_for_from_wb"] is False
     assert items["BLOCK-MISSING"]["blocker"] == "missing_bundle_recipe_bundle_types"
     assert items["BLOCK-MISSING"]["missing_recipe_bundle_type_ids"] == [bt_alt.id]
+    assert items["BLOCK-MISSING"]["next_steps"] == ["add_bundle_recipe_for_missing_bundle_type_ids"]
 
     assert items["BLOCK-NO-SALES"]["ready_for_from_wb"] is False
     assert items["BLOCK-NO-SALES"]["blocker"] == "no_wb_sales_data"
     assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_sales"] == 0
     assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_stock"] == 1
+    assert items["BLOCK-NO-SALES"]["next_steps"] == ["run_wb_sales_daily_sync_live"]
 
     assert items["BLOCK-NO-STOCK"]["ready_for_from_wb"] is False
     assert items["BLOCK-NO-STOCK"]["blocker"] == "no_wb_stock_data"
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_sales"] == 1
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_stock"] == 0
+    assert items["BLOCK-NO-STOCK"]["next_steps"] == ["run_wb_stock_sync_live"]
 
 
 def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeypatch):
