@@ -95,6 +95,7 @@
 - WB transport/response failures should also stay machine-readable: request/network failures, rate limits, unauthorized tokens, invalid JSON, and invalid rows-format payloads now return structured WB error details with deterministic `code`, `next_steps`, and upstream metadata where available.
 - Operator-facing article lookup failures should stay aligned too: direct proposal, `from-wb` proposal, production-order settings, and WB readiness now return the same structured `404` `article_not_found` detail (`code/message/article_id/next_steps`) instead of raw strings.
 - Planning config snapshot should stay machine-readable on misses as well: missing article and missing article-level planning configuration now return structured `404` details (`article_not_found` / `no_planning_settings_found`) with `article_id` and deterministic `next_steps` instead of raw strings.
+- Read-only article endpoints should follow the same pattern: `article-dashboard` and `article-bundle-snapshot` now return structured `article_not_found` detail (`code/message/article_id/next_steps`) instead of raw strings.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.

@@ -182,7 +182,12 @@ def test_article_bundle_snapshot_article_not_found(client):
     )
     assert resp.status_code == 404
     body = resp.json()
-    assert body["detail"] == "Article not found"
+    assert body["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999,
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_article_bundle_snapshot_no_bundle_recipes(client, db_session):
