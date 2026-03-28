@@ -84,6 +84,7 @@ curl.exe -i http://localhost:8000/api/v1/planning/core/health
 ```
 
 ### Proposal (PowerShell-safe JSON)
+Legacy stub endpoint example (`/api/v1/planning/core/proposal`, deprecated / low-fidelity):
 Create body file:
 ```powershell
 '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
@@ -92,6 +93,11 @@ Create body file:
 Send request:
 ```powershell
 curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+```
+
+Primary production-order path:
+```powershell
+curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/production-order/proposal -H "Content-Type: application/json" --data-binary "@po_request.json"
 ```
 
 ## Monitoring snapshot count (DB)

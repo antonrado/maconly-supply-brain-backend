@@ -17,8 +17,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `tests/test_monitoring_risk_focus_api.py`
 - Planning Core v1 endpoints are mounted and return structured responses:
   - `GET /api/v1/planning/core/health`
-  - `POST /api/v1/planning/core/proposal`
-- Planning proposal service currently has minimal DB-backed hook: reads SKU rows and returns deterministic `lines` with `recommended_units=0` and `reason="data_hook_only"`.
+  - `POST /api/v1/planning/core/proposal` (legacy stub / low-fidelity / deprecated)
+- Planning proposal service currently has minimal DB-backed hook: reads SKU rows and returns deterministic `lines` with `recommended_units=0` and `reason="data_hook_only"`; it is not the primary production-order path.
 - Planning Core production-order proposal endpoint added:
   - `POST /api/v1/planning/core/production-order/proposal`
   - `POST /api/v1/planning/core/production-order/proposal/from-wb`
@@ -42,6 +42,16 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Layer 2 now emits explicit legacy-alias deprecation-plan diagnostics (`deprecated_after`, policy, legacy gate aliases, canonical replacement map) in `decision_quality`, `explanation.meta.layer_2_allocation`, and `explanation.meta.alpha_proxy_economics.layer_2_legacy_alias_deprecation_plan` while keeping aliases non-breaking during the transition window.
   - Economic Alpha now emits trusted-economics diagnostics in both full/compact explainability (`explanation.meta.economics_trust`, `explanation.meta.warnings`) and in `alpha_proxy_economics` (`economics_trust_level`, trust payload): per-key-field source map, code-default key-field count, and code-default dominance ratio drive deterministic trust levels (`trusted|partial|untrusted`) with explicit warning codes/severity.
   - Production-order capital governance is now strict at API runtime: if `available_capital` cannot be resolved from `request|admin_defaults|global_default`, proposal calculation fails with deterministic `422` and actionable detail (`capital_constraint_status=missing_available_capital_strict`, `severity=HIGH`) for both direct and from-WB flows.
+  - Narrow R5 modularization has started in facade-preserving mode: the shared economics helper cluster now lives in `app/services/planning_production_order_economics.py`, while `app/services/planning_production_order.py` preserves the existing external service surface and test imports via re-exported names.
+  - The second narrow R5 extraction slice is now complete for compact explainability projection: `app/services/planning_production_order_explainability.py` owns compact-step/meta shaping, while `app/services/planning_production_order.py` continues to preserve compatibility imports and runtime behavior.
+  - The third narrow R5 extraction slice is now complete for assorti classification support: `app/services/planning_production_order_assorti.py` owns assorti mapping parse/load helpers and source constants, while `app/services/planning_production_order.py` preserves compatibility imports and deterministic Layer 1 explainability semantics.
+  - The fourth narrow R5 extraction slice is now complete for layer-proxy settings resolution: `app/services/planning_production_order_layer_proxy.py` owns proxy default coefficients, precedence/source tracing, and threshold-clamp behavior, while `app/services/planning_production_order.py` preserves compatibility imports and runtime response semantics.
+  - Core production-order response now emits explicit physical stock-scope contract fields at the top level (`physical_scope`) and mirrors the same machine-readable block in `explanation.meta.physical_scope`; compact mode preserves the block unchanged.
+  - Core production-order response now emits deterministic arrival-horizon projection at the top level (`arrival_projection`) and mirrors it in `explanation.meta.arrival_projection`; projection basis includes ready bundles, competition-aware raw bundle capacity, and effective in-flight capacity at arrival.
+  - Arrival-horizon projection now participates in the live recommendation guardrail on the production-order facade: `safe_cover_until_arrival` can deterministically force `recommendation.action=wait`, while `shortage_before_arrival` can escalate action risk without changing the stable risk-level contract into a deep simulator.
+  - Constraint-based supply alignment has now completed Phase 1 on the production-order path: explicit per-article resource allocation (`color x size`) is emitted via `constraints_applied.resource_allocation` and `explanation.meta.resource_allocation`, shared resource competition across bundle strategies is represented as a reservation ledger instead of a hidden estimate, and runtime contract checks now assert no double-use / allocation-sum consistency in both full and compact responses.
+  - Constraint-based supply alignment now includes Phase 2 cross-article pantone linking on the same production-order facade: sibling articles that share a pantone contribute a WB-sales-based proxy demand pool, fabric minimum batching now evaluates against `required + sibling_proxy_required`, and the applied shared-pool evidence is emitted in both `constraints_applied.fabric_min_batches[*].shared_pool_required|sibling_proxy_required` and `explanation.meta.shared_color_pool` for full/compact responses.
+  - Legacy planning endpoints are now explicitly marked low-fidelity/deprecated at runtime rather than relying on tribal knowledge: `/api/v1/planning/core/proposal` and `/api/v1/planning/order-proposal` both emit `Deprecation`, `X-Planning-Fidelity`, and `X-Planning-Successor` headers with no new business logic added.
   - Multi-regime e2e release evidence is now explicit and regression-locked for three economics regimes (`stockout_dominates`, `overstock_dominates`, `commission_price_conflict`): each case proves deterministic objective-vs-profit disagreement and expected Layer 5 intervention signals.
   - Penalty-weight calibration evidence is now documented in the decision-quality casebook with approximate flip boundaries, while regression now asserts emitted/frozen Layer 2 objective parameters (`capital_cost_rate=0.08`, `stockout_penalty_weight=1.0`, `overstock_penalty_weight=1.0`) and objective-source tracing (`code_default_constants`) in explainability payloads.
   - Layer 2 contract summary is now emitted in `explanation.meta.layer_2_allocation.contract` (version/status/checks for summary consistency, allocation-vs-composite-objective-gate consistency with legacy alias compatibility, non-negative metrics, positive ETA, tie-break invariants, decision-reason mapping, tie/near-tie objective-gap consistency with legacy profit-gap aliases, profit/GMROI/objective-score gap consistency, and capital metric sanity) and projected in compact explainability mode.
@@ -83,6 +93,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Raw bundle potential now uses competition-aware allocation across bundle types that share colors, with per-bundle breakdown in explanation.
   - Bundle stock input now supports WB ingestion fallback: if request omits `bundle_stock` entries, planner fills missing bundle types from `article_wb_mapping + wb_stock`.
   - Production-order request/admin schemas migrated to Pydantic v2 validator APIs (`@field_validator`/`@model_validator`) to reduce deprecation surface without changing API contract.
+  - Current physical-scope / arrival-projection / legacy-marker block has been regression-validated with `python -m pytest tests/test_planning_core_production_order_api.py -q`, `python -m pytest tests/test_end_to_end_planning.py -q`, and `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify`; `verify-live` was intentionally not rerun in this block.
 - WB ingestion reliability fix:
   - `POST /api/v1/wb/sales-daily/import` now stamps `created_at` on inserts to satisfy DB NOT NULL constraints and keep WB→planning adapter flow stable.
   - Added live WB pull endpoints using configured active `wb_integration_accounts.api_token`:
@@ -212,29 +223,39 @@ docker compose -f .\docker-compose.yml up -d --build
 docker compose -f .\docker-compose.yml ps
 docker compose -f .\docker-compose.yml logs --tail=200 backend
 curl.exe -i http://localhost:8000/api/v1/planning/core/health
+# Legacy low-fidelity stub:
 '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
 curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+# Primary production-order path:
+curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/production-order/proposal -H "Content-Type: application/json" --data-binary "@po_request.json"
 .\scripts\dev.ps1 context
 docker compose -f .\docker-compose.yml exec -T db psql -U maconly -d maconly_db -c "SELECT count(*) FROM monitoring_snapshots;"
 ```
 
 ## Last verification
 
-- Date: `2026-02-28 02:35 +07:00`
+- Date: `2026-03-28 23:26 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `ba7bc03`
+- Last commit (`git log -1 --oneline`): `2af7a73`
 - Gates:
-  - `python -m pytest -q tests/test_planning_core_production_order_api.py tests/test_planning_core_production_order_settings_api.py` → `94 passed`
+  - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `111 passed`
+  - `python -m pytest -q tests/test_end_to_end_planning.py` → `3 passed`
   - `.\scripts\dev.ps1 verify` → `OK`
-  - `.\scripts\dev.ps1 verify-live` → `OK` (`planning-core-health=200`, direct/from-WB happy-path=`200`, unknown article=`404`, schema-invalid=`422`)
+  - `.\scripts\dev.ps1 verify-live` → `not rerun in this block` (deferred live/unsafe gate)
 
 ### Minimal raw outputs
 
 ```text
-$ python -m pytest -q tests/test_planning_core_production_order_api.py tests/test_planning_core_production_order_settings_api.py
+$ python -m pytest -q tests/test_planning_core_production_order_api.py
 ........................................................................
-......................                                                     [100%]
-94 passed in 149.87s (0:02:29)
+.......................................                                    [100%]
+111 passed in 159.19s (0:02:39)
+```
+
+```text
+$ python -m pytest -q tests/test_end_to_end_planning.py
+...                                                                       [100%]
+3 passed in 7.86s
 ```
 
 ```text

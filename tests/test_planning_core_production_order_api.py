@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -40,8 +40,10 @@ from app.services.planning_production_order import (
     LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
     LAYER_PROXY_VALUE_SOURCE,
     LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    RESOURCE_ALLOCATION_CONTRACT_VERSION,
     _apply_capital_constraint_to_candidate_lines,
     _apply_layer3_purchase_shaping,
+    _build_competition_aware_resource_allocation,
     _build_layer1_stock_health_metrics,
     _build_layer1_contract_summary,
     _build_layer2_allocation_decisions,
@@ -54,6 +56,7 @@ from app.services.planning_production_order import (
     _build_layer4_scenarios,
     _build_layer4_contract_summary,
     _build_capital_constraint_contract_summary,
+    _build_resource_allocation_contract_summary,
     _build_layer5_contract_summary,
     _build_layer5_intervention_signals,
     _choose_action,
@@ -1532,6 +1535,76 @@ def test_layer5_contract_summary_marks_violated_for_threshold_and_signal_invaria
     assert checks["reduce_order_signal_requires_overstock_penalty_gate"] is True
 
 
+def test_resource_allocation_contract_summary_marks_violated_for_double_use_payload():
+    resource_allocation = {
+        "mode": "per_article_bundle_competition",
+        "total_resource_keys": 1,
+        "competing_resource_keys": 1,
+        "fully_reserved_resource_keys": 0,
+        "total_stock_units": 10,
+        "total_reserved_units": 12,
+        "reserved_bundle_units": {1: 6, 2: 6},
+        "reservations": [
+            {
+                "color_id": 10,
+                "size_id": 20,
+                "stock_qty": 10,
+                "total_reserved_qty": 12,
+                "shared_resource": True,
+                "consumer_bundle_type_ids": [1, 2],
+                "allocations": [
+                    {
+                        "bundle_type_id": 1,
+                        "reserved_qty": 6,
+                        "share_weight": 0.5,
+                        "allocation_basis": "demand_share",
+                    },
+                    {
+                        "bundle_type_id": 2,
+                        "reserved_qty": 6,
+                        "share_weight": 0.5,
+                        "allocation_basis": "demand_share",
+                    },
+                ],
+            }
+        ],
+    }
+
+    contract = _build_resource_allocation_contract_summary(resource_allocation)
+
+    assert contract["version"] == RESOURCE_ALLOCATION_CONTRACT_VERSION
+    assert contract["status"] == "violated"
+    assert contract["checks"]["no_double_use"] is False
+    assert contract["checks"]["allocation_sums_consistent"] is True
+    assert contract["checks"]["reservation_total_matches_summary"] is True
+
+
+def test_build_competition_aware_resource_allocation_prevents_shared_color_double_use():
+    allocation = _build_competition_aware_resource_allocation(
+        bundle_type_ids=[1, 2],
+        recipe_colors_by_bundle={1: {101, 102}, 2: {101, 103}},
+        all_recipe_color_ids=[101, 102, 103],
+        size_ids=[201],
+        stock_by_color_size={(101, 201): 10, (102, 201): 6, (103, 201): 4},
+        shares_by_bundle={1: 0.6, 2: 0.4},
+    )
+
+    assert allocation.contract["version"] == RESOURCE_ALLOCATION_CONTRACT_VERSION
+    assert allocation.contract["status"] == "ok"
+    assert allocation.contract["checks"]["no_double_use"] is True
+    assert allocation.reserved_bundle_units[1] == 6
+    assert allocation.reserved_bundle_units[2] == 4
+
+    shared_reservation = next(
+        item for item in allocation.reservations if item.color_id == 101 and item.size_id == 201
+    )
+    assert shared_reservation.shared_resource is True
+    assert shared_reservation.stock_qty == 10
+    assert shared_reservation.total_reserved_qty == 10
+    assert sum(item.reserved_qty for item in shared_reservation.allocations) == 10
+    assert sorted(item.bundle_type_id for item in shared_reservation.allocations) == [1, 2]
+
+
 def _business_projection(body: dict[str, object]) -> dict[str, object]:
     return {
         "status": body["status"],
@@ -1543,6 +1616,8 @@ def _business_projection(body: dict[str, object]) -> dict[str, object]:
         "recommendation": body["recommendation"],
         "alternatives": body["alternatives"],
         "constraints_applied": body["constraints_applied"],
+        "physical_scope": body.get("physical_scope"),
+        "arrival_projection": body.get("arrival_projection"),
     }
 
 
@@ -1565,6 +1640,204 @@ def test_production_order_proposal_happy_path(client, db_session):
     assert isinstance(body["recommendation"]["lines"], list)
     assert len(body["alternatives"]) >= 2
     assert body["explanation"]["summary"]
+    physical_scope = body["physical_scope"]
+    assert physical_scope["local_stock_scope"] == "all_warehouses_merged"
+    assert physical_scope["wb_stock_scope"] == "request_explicit_bundle_stock"
+    assert physical_scope["ready_bundle_source"] == "request"
+    assert physical_scope["raw_single_source"] == "stock_balance_by_sku_unit_recipe_projection"
+    assert physical_scope["nsc_assembled_bundle_inventory_state"] == "not_persisted"
+    assert "assembled_nsc_bundles_not_separately_persisted" in physical_scope["warnings"]
+    assert physical_scope["assumptions"]["size_weights_source"] == "request"
+    assert physical_scope["assumptions"]["in_flight_source"] == "none"
+    assert physical_scope["assumptions"]["bundle_stock_source"] == "request"
+    assert (
+        physical_scope["assumptions"]["raw_bundle_capacity_method"]
+        == "competition_aware_recipe_projection"
+    )
+    assert physical_scope["assumptions"]["raw_bundle_capacity_counts_in_main_cover_model"] is True
+    assert (
+        physical_scope["assumptions"]["nsc_assembled_bundle_inventory_state"]
+        == "not_persisted"
+    )
+    assert body["arrival_projection"]["status"] == "shortage_before_arrival"
+    assert body["arrival_projection"]["arrival_horizon_days"] == 70
+    assert body["arrival_projection"]["demand_units_until_arrival"] == 1400
+    assert body["arrival_projection"]["ready_bundle_units_now"] == 10
+    assert body["arrival_projection"]["raw_bundle_capacity_now"] == 20
+    assert body["arrival_projection"]["in_flight_bundle_capacity_at_arrival"] == 0
+    assert body["arrival_projection"]["projected_supply_units_before_arrival"] == 30
+    assert body["arrival_projection"]["projected_availability_at_arrival"] == 0
+    assert body["arrival_projection"]["projected_shortage_before_arrival"] == 1370
+    assert body["arrival_projection"]["projected_cover_days_at_arrival"] == 0.0
+    assert body["explanation"]["meta"]["physical_scope"] == body["physical_scope"]
+    assert body["explanation"]["meta"]["arrival_projection"] == body["arrival_projection"]
+    assert any("Physical scope:" in step for step in body["explanation"]["steps"])
+    assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
+
+
+def test_production_order_proposal_exposes_resource_allocation_consumption(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    assorti_bundle_type = BundleType(
+        code="PO-BT-RESOURCE",
+        name="PO-BT-RESOURCE",
+        is_assorti=True,
+    )
+    db_session.add(assorti_bundle_type)
+    db_session.flush()
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_daily_sales"] = [
+        {"bundle_type_id": seeded["bundle_type"].id, "daily_sales": 18.0},
+        {"bundle_type_id": assorti_bundle_type.id, "daily_sales": 12.0},
+    ]
+    payload["bundle_stock"] = [
+        {"bundle_type_id": seeded["bundle_type"].id, "wb_qty": 5, "local_qty": 5},
+        {"bundle_type_id": assorti_bundle_type.id, "wb_qty": 3, "local_qty": 1},
+    ]
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    resource_allocation = body["constraints_applied"]["resource_allocation"]
+    assert resource_allocation["mode"] == "per_article_bundle_competition"
+    assert resource_allocation["competing_resource_keys"] > 0
+    assert resource_allocation["contract"]["version"] == RESOURCE_ALLOCATION_CONTRACT_VERSION
+    assert resource_allocation["contract"]["status"] == "ok"
+
+    shared_reservations = [item for item in resource_allocation["reservations"] if item["shared_resource"]]
+    assert shared_reservations
+    for reservation in shared_reservations:
+        assert reservation["total_reserved_qty"] <= reservation["stock_qty"]
+        assert sum(item["reserved_qty"] for item in reservation["allocations"]) == reservation["total_reserved_qty"]
+
+    meta = body["explanation"]["meta"]
+    assert meta["resource_allocation"]["contract"]["status"] == "ok"
+    assert any("Resource allocation:" in step for step in body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["resource_allocation"]["contract"]["status"] == "ok"
+    assert any("Resource allocation:" in step for step in compact_body["explanation"]["steps"])
+
+
+def test_production_order_proposal_shared_color_pool_reduces_local_fabric_min_uplift(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    seeded["color_2"].pantone_code = seeded["color_1"].pantone_code
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_daily_sales"] = [{"bundle_type_id": seeded["bundle_type"].id, "daily_sales": 0.5}]
+    payload["bundle_stock"] = [{"bundle_type_id": seeded["bundle_type"].id, "wb_qty": 0, "local_qty": 0}]
+    payload["overrides"]["fabric_min_batch_qty_default"] = 100
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    base_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert base_response.status_code == 200, base_response.text
+    base_body = base_response.json()
+    base_recommendation = base_body["recommendation"]
+    assert base_recommendation is not None
+    base_fabric_constraints = base_body["constraints_applied"]["fabric_min_batches"]
+    assert base_fabric_constraints
+    assert base_fabric_constraints[0]["sibling_proxy_required"] == 0
+    base_total_units = base_recommendation["total_units"]
+
+    sibling_article = Article(code="PO-ART-SHARED", name="PO-ART-SHARED")
+    sibling_color = Color(inner_code="PO-C-SHARED", pantone_code=seeded["color_1"].pantone_code, description="Shared Pantone")
+    db_session.add_all([sibling_article, sibling_color])
+    db_session.flush()
+
+    db_session.add(
+        SkuUnit(
+            article_id=sibling_article.id,
+            color_id=sibling_color.id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        ArticlePlanningSettings(
+            article_id=sibling_article.id,
+            include_in_planning=True,
+            priority=1,
+            target_coverage_days=60,
+            lead_time_days=70,
+            service_level_percent=90,
+        )
+    )
+    db_session.add(
+        ArticleWbMapping(
+            article_id=sibling_article.id,
+            wb_sku="WB-SHARED-PANTONE-1",
+        )
+    )
+
+    sales_start = date(2026, 1, 1)
+    for day_offset in range(30):
+        sales_date = sales_start + timedelta(days=day_offset)
+        db_session.add(
+            WbSalesDaily(
+                wb_sku="WB-SHARED-PANTONE-1",
+                date=sales_date,
+                sales_qty=1,
+                revenue=None,
+                created_at=datetime(sales_date.year, sales_date.month, sales_date.day, tzinfo=timezone.utc),
+            )
+        )
+    db_session.commit()
+
+    shared_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert shared_response.status_code == 200, shared_response.text
+    shared_body = shared_response.json()
+    shared_recommendation = shared_body["recommendation"]
+    assert shared_recommendation is not None
+    assert shared_recommendation["total_units"] < base_total_units
+
+    shared_color_pool = shared_body["explanation"]["meta"]["shared_color_pool"]
+    assert shared_color_pool["status"] == "ok"
+    assert shared_color_pool["sibling_article_count"] >= 1
+    pantone_item = shared_color_pool["pantones"][seeded["color_1"].pantone_code]
+    assert pantone_item["sibling_proxy_required"] > 0
+    assert pantone_item["sibling_article_ids"] == [sibling_article.id]
+    assert any("Shared color pool:" in step for step in shared_body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["shared_color_pool"]["status"] == "ok"
+    assert any("Shared color pool:" in step for step in compact_body["explanation"]["steps"])
 
 
 def test_production_order_proposal_economic_overrides_are_traced_in_meta(client, db_session):
@@ -2159,6 +2432,11 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
         "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
         "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
     }
+    assert any("Physical scope:" in step for step in steps)
+    assert any("Arrival projection:" in step for step in steps)
+    assert meta["physical_scope"]["nsc_assembled_bundle_inventory_state"] == "not_persisted"
+    assert meta["arrival_projection"]["status"] == "shortage_before_arrival"
+    assert meta["arrival_projection"]["projected_shortage_before_arrival"] == 1370
     alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert (
@@ -2775,6 +3053,71 @@ def test_production_order_proposal_in_flight_eta_stage_sensitivity(client, db_se
     assert "effective_qty=" in in_flight_step
     assert "lines=1" in in_flight_step
     assert "effective_qty=200" not in in_flight_step
+
+
+def test_production_order_proposal_arrival_projection_safe_cover_until_arrival_forces_wait(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["in_flight_supply"] = [
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_1"].id,
+            "size_id": seeded["size_s"].id,
+            "qty": 800,
+            "eta_days": 10,
+            "stage": "nsk_to_wb",
+        },
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_1"].id,
+            "size_id": seeded["size_m"].id,
+            "qty": 800,
+            "eta_days": 10,
+            "stage": "nsk_to_wb",
+        },
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_2"].id,
+            "size_id": seeded["size_s"].id,
+            "qty": 800,
+            "eta_days": 10,
+            "stage": "nsk_to_wb",
+        },
+        {
+            "article_id": seeded["article"].id,
+            "color_id": seeded["color_2"].id,
+            "size_id": seeded["size_m"].id,
+            "qty": 800,
+            "eta_days": 10,
+            "stage": "nsk_to_wb",
+        },
+    ]
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["risk_level"] == "warning"
+    assert body["arrival_projection"]["status"] == "safe_cover_until_arrival"
+    assert body["arrival_projection"]["in_flight_bundle_capacity_at_arrival"] == 1374
+    assert body["arrival_projection"]["projected_supply_units_before_arrival"] == 1404
+    assert body["arrival_projection"]["projected_availability_at_arrival"] == 4
+    assert body["arrival_projection"]["projected_shortage_before_arrival"] == 0
+    assert body["arrival_projection"]["projected_cover_days_at_arrival"] == 0.2
+    assert body["recommendation"]["action"] == "wait"
+    assert body["recommendation"]["total_units"] == 0
+    assert body["recommendation"]["lines"] == []
+    assert body["explanation"]["meta"]["arrival_projection"] == body["arrival_projection"]
 
 
 def test_production_order_proposal_economic_buffer_policy(client, db_session):
@@ -5095,6 +5438,8 @@ def test_production_order_proposal_uses_wb_bundle_stock_fallback(client, db_sess
 
     assert "bundle_stock=wb_defaults" in source_step
     assert "ready stock наборов (WB+локальный)=25" in stock_step
+    assert body["physical_scope"]["wb_stock_scope"] == "article_wb_mapping_bundle_stock_aggregated"
+    assert body["physical_scope"]["ready_bundle_source"] == "wb_defaults"
 
 
 def test_production_order_proposal_from_wb_endpoint(client, db_session):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -27,6 +27,10 @@ from app.services.planning_production_order import (
 
 router = APIRouter()
 
+LEGACY_CORE_PROPOSAL_DEPRECATION = "true"
+LEGACY_CORE_PROPOSAL_SUCCESSOR = "/api/v1/planning/core/production-order/proposal"
+LEGACY_CORE_PROPOSAL_FIDELITY = "stub_legacy_low_fidelity"
+
 
 @router.get("/core/health")
 async def get_planning_core_health() -> dict:
@@ -39,13 +43,24 @@ async def get_planning_core_health() -> dict:
     return {"status": "ok"}
 
 
-@router.post("/core/proposal")
-async def create_planning_core_proposal(request: PlanningProposalRequest) -> dict:
+@router.post(
+    "/core/proposal",
+    deprecated=True,
+    summary="Legacy low-fidelity core proposal stub",
+)
+async def create_planning_core_proposal(
+    request: PlanningProposalRequest,
+    response: Response,
+) -> dict:
     """Skeleton endpoint for computing an order proposal.
 
     For now this endpoint is intentionally not implemented and always returns
     HTTP 200 with a static stub payload; no planning logic is executed.
     """
+
+    response.headers["Deprecation"] = LEGACY_CORE_PROPOSAL_DEPRECATION
+    response.headers["X-Planning-Fidelity"] = LEGACY_CORE_PROPOSAL_FIDELITY
+    response.headers["X-Planning-Successor"] = LEGACY_CORE_PROPOSAL_SUCCESSOR
 
     service = PlanningService()
     proposal = service.build_proposal(request.sales_window_days, request.horizon_days)

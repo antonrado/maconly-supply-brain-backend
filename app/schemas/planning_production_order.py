@@ -177,6 +177,8 @@ class FabricConstraintApplied(BaseModel):
     pantone_code: str
     required: int
     applied_min: int
+    shared_pool_required: int | None = None
+    sibling_proxy_required: int = 0
 
 
 class ElasticConstraintApplied(BaseModel):
@@ -186,9 +188,39 @@ class ElasticConstraintApplied(BaseModel):
     applied_min: int
 
 
+class ResourceAllocationBundleReservation(BaseModel):
+    bundle_type_id: int
+    reserved_qty: int
+    share_weight: float
+    allocation_basis: Literal["single_consumer", "demand_share"]
+
+
+class ResourceAllocationReservation(BaseModel):
+    color_id: int
+    size_id: int
+    stock_qty: int
+    total_reserved_qty: int
+    shared_resource: bool
+    consumer_bundle_type_ids: list[int] = Field(default_factory=list)
+    allocations: list[ResourceAllocationBundleReservation] = Field(default_factory=list)
+
+
+class ProductionOrderResourceAllocationApplied(BaseModel):
+    mode: Literal["per_article_bundle_competition"]
+    total_resource_keys: int
+    competing_resource_keys: int
+    fully_reserved_resource_keys: int
+    total_stock_units: int
+    total_reserved_units: int
+    reserved_bundle_units: dict[int, int] = Field(default_factory=dict)
+    reservations: list[ResourceAllocationReservation] = Field(default_factory=list)
+    contract: dict[str, Any] = Field(default_factory=dict)
+
+
 class ProductionOrderConstraintsApplied(BaseModel):
     fabric_min_batches: list[FabricConstraintApplied] = Field(default_factory=list)
     elastic_min_batches: list[ElasticConstraintApplied] = Field(default_factory=list)
+    resource_allocation: ProductionOrderResourceAllocationApplied | None = None
 
 
 class ProductionOrderAlternative(BaseModel):
@@ -203,6 +235,30 @@ class ProductionOrderExplanationBlock(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProductionOrderPhysicalScope(BaseModel):
+    local_stock_scope: Literal["all_warehouses_merged", "warehouse_filtered"]
+    wb_stock_scope: Literal["article_wb_mapping_bundle_stock_aggregated", "request_explicit_bundle_stock"]
+    ready_bundle_source: str
+    raw_single_source: Literal["stock_balance_by_sku_unit_recipe_projection"]
+    nsc_assembled_bundle_inventory_state: Literal["not_persisted"]
+    warnings: list[str] = Field(default_factory=list)
+    assumptions: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProductionOrderArrivalProjection(BaseModel):
+    status: Literal["safe_cover_until_arrival", "shortage_before_arrival", "no_demand"]
+    arrival_horizon_days: int
+    demand_units_until_arrival: int
+    ready_bundle_units_now: int
+    raw_bundle_capacity_now: int
+    in_flight_bundle_capacity_at_arrival: int
+    projected_supply_units_before_arrival: int
+    projected_availability_at_arrival: int
+    projected_shortage_before_arrival: int
+    projected_cover_days_at_arrival: float | None = None
+    basis: dict[str, Any] = Field(default_factory=dict)
+
+
 class ProductionOrderProposalResponse(BaseModel):
     status: Literal["ok", "skipped"]
     article_id: int
@@ -212,5 +268,7 @@ class ProductionOrderProposalResponse(BaseModel):
     lead_time_days_total: int
     recommendation: ProductionOrderRecommendation | None
     constraints_applied: ProductionOrderConstraintsApplied
+    physical_scope: ProductionOrderPhysicalScope | None = None
+    arrival_projection: ProductionOrderArrivalProjection | None = None
     alternatives: list[ProductionOrderAlternative]
     explanation: ProductionOrderExplanationBlock

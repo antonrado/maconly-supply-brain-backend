@@ -36,24 +36,80 @@ from app.schemas.planning_production_order import (
     ElasticConstraintApplied,
     FabricConstraintApplied,
     PlanningOverridesInput,
+    ProductionOrderArrivalProjection,
     ProductionOrderAlternative,
     ProductionOrderConstraintsApplied,
     ProductionOrderExplanationBlock,
+    ProductionOrderPhysicalScope,
     ProductionOrderProposalFromWbRequest,
     ProductionOrderProposalRequest,
     ProductionOrderProposalResponse,
     ProductionOrderRecommendation,
     ProductionOrderRecommendationLine,
+    ProductionOrderResourceAllocationApplied,
+    ResourceAllocationBundleReservation,
+    ResourceAllocationReservation,
+)
+from app.services.planning_production_order_assorti import (
+    ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+    ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
+    ASSORTI_CLASSIFICATION_MISSING_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_MISSING_SOURCE,
+    ASSORTI_CLASSIFICATION_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_SOURCE,
+    _load_assorti_bundle_type_flags,
+    _parse_assorti_bundle_type_ids,
+)
+from app.services.planning_production_order_economics import (
+    CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT as EXTRACTED_CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
+    ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI as EXTRACTED_ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI,
+    ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN as EXTRACTED_ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN,
+    ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT as EXTRACTED_ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT,
+    ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT as EXTRACTED_ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT,
+    ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI as EXTRACTED_ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI,
+    ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN as EXTRACTED_ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN,
+    ECONOMICS_FORMULA_VERSION as EXTRACTED_ECONOMICS_FORMULA_VERSION,
+    ECONOMICS_TRUST_KEY_FIELDS as EXTRACTED_ECONOMICS_TRUST_KEY_FIELDS,
+    ECONOMICS_TRUST_LEVEL_PARTIAL as EXTRACTED_ECONOMICS_TRUST_LEVEL_PARTIAL,
+    ECONOMICS_TRUST_LEVEL_TRUSTED as EXTRACTED_ECONOMICS_TRUST_LEVEL_TRUSTED,
+    ECONOMICS_TRUST_LEVEL_UNTRUSTED as EXTRACTED_ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+    ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD as EXTRACTED_ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD,
+    ECONOMICS_TRUST_WARNING_CODE_PARTIAL as EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_PARTIAL,
+    ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED as EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED,
+    FROM_WB_OBSERVED_ECONOMIC_SOURCE as EXTRACTED_FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+    LAYER_PROXY_VALUE_SOURCE as EXTRACTED_LAYER_PROXY_VALUE_SOURCE,
+    _EffectiveEconomicSettings,
+    _build_economics_trust_diagnostics,
+    _normalize_non_negative_float,
+    _resolve_economic_settings,
+)
+from app.services.planning_production_order_explainability import (
+    EXPLAINABILITY_MODE_COMPACT as EXTRACTED_EXPLAINABILITY_MODE_COMPACT,
+    _apply_explainability_mode,
+)
+from app.services.planning_production_order_layer_proxy import (
+    LAYER2_CAPITAL_COST_RATE as EXTRACTED_LAYER2_CAPITAL_COST_RATE,
+    LAYER2_OVERSTOCK_PENALTY_WEIGHT as EXTRACTED_LAYER2_OVERSTOCK_PENALTY_WEIGHT,
+    LAYER2_STOCKOUT_PENALTY_WEIGHT as EXTRACTED_LAYER2_STOCKOUT_PENALTY_WEIGHT,
+    LAYER3_OVERSTOCK_DAMPEN_MAX as EXTRACTED_LAYER3_OVERSTOCK_DAMPEN_MAX,
+    LAYER3_STOCKOUT_BOOST_MAX as EXTRACTED_LAYER3_STOCKOUT_BOOST_MAX,
+    LAYER5_ACCELERATE_ACTION_COST_RATE as EXTRACTED_LAYER5_ACCELERATE_ACTION_COST_RATE,
+    LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD as EXTRACTED_LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+    LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE as EXTRACTED_LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE,
+    LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE as EXTRACTED_LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD as EXTRACTED_LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+    _EffectiveLayerProxySettings,
+    _resolve_layer_proxy_settings,
 )
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
-FROM_WB_OBSERVED_ECONOMIC_SOURCE = "from_wb_observed_window"
+FROM_WB_OBSERVED_ECONOMIC_SOURCE = EXTRACTED_FROM_WB_OBSERVED_ECONOMIC_SOURCE
 FROM_WB_TARIFFS_COMMISSION_SOURCE = "from_wb_tariffs_commission"
 FROM_WB_PRICE_ANOMALY_MAX_DEVIATION = 0.30
 FROM_WB_TARIFFS_API_BASE_URL = "https://common-api.wildberries.ru"
 FROM_WB_TARIFFS_COMMISSION_PATH = "/api/v1/tariffs/commission"
 FROM_WB_TARIFFS_HTTP_TIMEOUT_SECONDS = 20.0
+SHARED_COLOR_POOL_SOURCE = "wb_sales_article_proxy"
+SHARED_COLOR_POOL_DEFAULT_OBSERVATION_WINDOW_DAYS = 30
 LAYER2_ALLOCATION_METHOD = "time_window_profit_proxy_with_gmroi_diagnostics"
 LAYER2_ALLOCATION_METHOD_CANONICAL = "time_window_composite_objective_with_gmroi_diagnostics"
 LAYER2_DECISION_GATE_LEGACY = "profit_until_eta"
@@ -73,40 +129,33 @@ LAYER2_DECISION_REASON_OBJECTIVE_BY_DECISION: dict[str, str] = {
     "assorti": "objective_score_assorti_gt_main",
     "hold": "objective_score_tie_hold",
 }
-ASSORTI_CLASSIFICATION_SOURCE = "bundle_type.is_assorti"
-ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE = "admin_defaults_assorti_mapping"
-ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE = "global_default_assorti_mapping"
-ASSORTI_CLASSIFICATION_MISSING_SOURCE = "bundle_type_missing_default_main"
+ASSORTI_CLASSIFICATION_SOURCE = EXTRACTED_ASSORTI_CLASSIFICATION_SOURCE
+ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE = EXTRACTED_ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE
+ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE = EXTRACTED_ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE
+ASSORTI_CLASSIFICATION_MISSING_SOURCE = EXTRACTED_ASSORTI_CLASSIFICATION_MISSING_SOURCE
 EXPLAINABILITY_MODE_FULL = "full"
-EXPLAINABILITY_MODE_COMPACT = "compact"
-LAYER_PROXY_VALUE_SOURCE = "code_default_constants"
-ECONOMICS_FORMULA_VERSION = "v1_economic_alpha"
-ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT = 0.8
-ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT = 0.2
-ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN = 0.0
-ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI = 0.0
-ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN = 1.8
-ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI = 1.65
-ECONOMICS_TRUST_LEVEL_TRUSTED = "trusted"
-ECONOMICS_TRUST_LEVEL_PARTIAL = "partial"
-ECONOMICS_TRUST_LEVEL_UNTRUSTED = "untrusted"
-ECONOMICS_TRUST_KEY_FIELDS: tuple[str, ...] = (
-    "wb_commission_percent_main",
-    "wb_commission_percent_assorti",
-    "production_cost_per_unit",
-    "logistics_cost_per_unit",
-    "average_realized_price_main",
-    "average_realized_price_assorti",
-)
-ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD = 2
-ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED = "economics_untrusted_defaults_dominant"
-ECONOMICS_TRUST_WARNING_CODE_PARTIAL = "economics_partial_defaults_present"
-CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT = "missing_available_capital_strict"
+EXPLAINABILITY_MODE_COMPACT = EXTRACTED_EXPLAINABILITY_MODE_COMPACT
+LAYER_PROXY_VALUE_SOURCE = EXTRACTED_LAYER_PROXY_VALUE_SOURCE
+ECONOMICS_FORMULA_VERSION = EXTRACTED_ECONOMICS_FORMULA_VERSION
+ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT = EXTRACTED_ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT
+ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT = EXTRACTED_ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT
+ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN = EXTRACTED_ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN
+ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI = EXTRACTED_ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI
+ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN = EXTRACTED_ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN
+ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI = EXTRACTED_ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI
+ECONOMICS_TRUST_LEVEL_TRUSTED = EXTRACTED_ECONOMICS_TRUST_LEVEL_TRUSTED
+ECONOMICS_TRUST_LEVEL_PARTIAL = EXTRACTED_ECONOMICS_TRUST_LEVEL_PARTIAL
+ECONOMICS_TRUST_LEVEL_UNTRUSTED = EXTRACTED_ECONOMICS_TRUST_LEVEL_UNTRUSTED
+ECONOMICS_TRUST_KEY_FIELDS = EXTRACTED_ECONOMICS_TRUST_KEY_FIELDS
+ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD = EXTRACTED_ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD
+ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED = EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+ECONOMICS_TRUST_WARNING_CODE_PARTIAL = EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT = EXTRACTED_CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
 LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD = 1.0
 LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
-LAYER2_CAPITAL_COST_RATE = 0.08
-LAYER2_STOCKOUT_PENALTY_WEIGHT = 1.0
-LAYER2_OVERSTOCK_PENALTY_WEIGHT = 1.0
+LAYER2_CAPITAL_COST_RATE = EXTRACTED_LAYER2_CAPITAL_COST_RATE
+LAYER2_STOCKOUT_PENALTY_WEIGHT = EXTRACTED_LAYER2_STOCKOUT_PENALTY_WEIGHT
+LAYER2_OVERSTOCK_PENALTY_WEIGHT = EXTRACTED_LAYER2_OVERSTOCK_PENALTY_WEIGHT
 LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW = "2026-12-31"
 LAYER2_EXPECTED_GROSS_PROFIT_GATE_LEGACY = "expected_gross_profit_until_eta"
 LAYER2_LEGACY_ALIAS_DEPRECATION_POLICY = "non_breaking_aliases_during_transition_window"
@@ -138,8 +187,8 @@ LAYER3_PURCHASE_FACTOR_BY_DECISION: dict[str, float] = {
     "hold": 0.35,
 }
 LAYER3_CALIBRATION_METHOD = "risk_weighted_factor_clamp"
-LAYER3_STOCKOUT_BOOST_MAX = 0.30
-LAYER3_OVERSTOCK_DAMPEN_MAX = 0.40
+LAYER3_STOCKOUT_BOOST_MAX = EXTRACTED_LAYER3_STOCKOUT_BOOST_MAX
+LAYER3_OVERSTOCK_DAMPEN_MAX = EXTRACTED_LAYER3_OVERSTOCK_DAMPEN_MAX
 LAYER3_STOCKOUT_WEIGHT_BY_DECISION: dict[str, float] = {
     "main": 1.0,
     "assorti": 0.7,
@@ -167,13 +216,14 @@ LAYER4_SCENARIO_FACTORS: tuple[tuple[str, float], ...] = (
     ("Aggressive", 1.20),
 )
 CAPITAL_CONSTRAINT_CONTRACT_VERSION = "v1_alpha"
+RESOURCE_ALLOCATION_CONTRACT_VERSION = "v1_alpha"
 LAYER5_CONTRACT_VERSION = "v1_alpha"
-LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = 0.25
-LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = 0.35
+LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD = EXTRACTED_LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD = EXTRACTED_LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD
 LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD = LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
-LAYER5_ACCELERATE_ACTION_COST_RATE = 0.20
-LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE = 0.15
-LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE = 0.10
+LAYER5_ACCELERATE_ACTION_COST_RATE = EXTRACTED_LAYER5_ACCELERATE_ACTION_COST_RATE
+LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE = EXTRACTED_LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE
+LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE = EXTRACTED_LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE
 
 
 @dataclass
@@ -188,38 +238,6 @@ class _EffectiveSettings:
     fabric_min_batch_default: int
     elastic_min_batch_default: int
     allow_order_with_buffer: bool
-
-
-@dataclass
-class _EffectiveLayerProxySettings:
-    layer3_stockout_boost_max: float
-    layer3_overstock_dampen_max: float
-    layer5_unavoidable_stockout_risk_threshold: float
-    layer5_accelerate_production_risk_threshold: float
-    layer2_capital_cost_rate: float
-    layer2_stockout_penalty_weight: float
-    layer2_overstock_penalty_weight: float
-    layer5_accelerate_action_cost_rate: float
-    layer5_price_slowdown_lost_volume_rate: float
-    layer5_reduce_order_marginal_profit_rate: float
-    threshold_order_adjusted: bool
-    source: dict[str, str]
-
-
-@dataclass
-class _EffectiveEconomicSettings:
-    production_cost_per_unit: float
-    logistics_cost_per_unit: float
-    wb_commission_percent_main: float
-    wb_commission_percent_assorti: float
-    average_realized_price_main: float
-    average_realized_price_assorti: float
-    margin_main_per_unit: float
-    margin_assorti_per_unit: float
-    unit_capital_per_unit: float
-    available_capital: float | None
-    calibration_state: str
-    source: dict[str, str]
 
 
 def _ceil_to_int(value: float) -> int:
@@ -440,21 +458,6 @@ def _build_effective_settings(
     )
 
 
-def _normalize_unit_interval(value: float | None) -> float | None:
-    if value is None:
-        return None
-
-    try:
-        normalized = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    if normalized < 0.0 or normalized > 1.0:
-        return None
-
-    return normalized
-
-
 def _bounded_unit_float(value: object) -> float:
     try:
         normalized = float(value)
@@ -505,652 +508,6 @@ def _compute_objective_components(
     }
 
 
-def _resolve_layer_proxy_float(
-    *,
-    request_value: float | None,
-    admin_value: float | None,
-    global_value: float | None,
-    code_default: float,
-) -> tuple[float, str]:
-    request_normalized = _normalize_unit_interval(request_value)
-    admin_normalized = _normalize_unit_interval(admin_value)
-    global_normalized = _normalize_unit_interval(global_value)
-
-    if request_normalized is not None:
-        return request_normalized, "request"
-    if admin_normalized is not None:
-        return admin_normalized, "admin_defaults"
-    if global_normalized is not None:
-        return global_normalized, "global_default"
-    return float(code_default), LAYER_PROXY_VALUE_SOURCE
-
-
-def _normalize_non_negative_float(value: object) -> float | None:
-    if value is None:
-        return None
-
-    try:
-        normalized = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    if normalized < 0.0:
-        return None
-    return normalized
-
-
-def _resolve_economic_float(
-    *,
-    request_value: float | None,
-    runtime_value: float | None,
-    admin_value: float | None,
-    global_value: float | None,
-    code_default: float,
-    runtime_source: str,
-) -> tuple[float, str]:
-    request_normalized = _normalize_non_negative_float(request_value)
-    runtime_normalized = _normalize_non_negative_float(runtime_value)
-    admin_normalized = _normalize_non_negative_float(admin_value)
-    global_normalized = _normalize_non_negative_float(global_value)
-
-    if request_normalized is not None:
-        return request_normalized, "request"
-    if runtime_normalized is not None:
-        return runtime_normalized, runtime_source
-    if admin_normalized is not None:
-        return admin_normalized, "admin_defaults"
-    if global_normalized is not None:
-        return global_normalized, "global_default"
-    return float(code_default), LAYER_PROXY_VALUE_SOURCE
-
-
-def _resolve_optional_economic_float(
-    *,
-    request_value: float | None,
-    admin_value: float | None,
-    global_value: float | None,
-) -> tuple[float | None, str]:
-    request_normalized = _normalize_non_negative_float(request_value)
-    admin_normalized = _normalize_non_negative_float(admin_value)
-    global_normalized = _normalize_non_negative_float(global_value)
-
-    if request_normalized is not None:
-        return request_normalized, "request"
-    if admin_normalized is not None:
-        return admin_normalized, "admin_defaults"
-    if global_normalized is not None:
-        return global_normalized, "global_default"
-    return None, "not_set"
-
-
-def _resolve_economic_settings(
-    *,
-    article_settings: ArticlePlanningSettings | None,
-    global_settings: GlobalPlanningSettings | None,
-    overrides: PlanningOverridesInput | None,
-    runtime_overrides: dict[str, float | None] | None = None,
-    runtime_source: str | None = None,
-    runtime_source_overrides: dict[str, str] | None = None,
-) -> _EffectiveEconomicSettings:
-    request_production_cost = (
-        overrides.production_cost_per_unit
-        if overrides is not None
-        else None
-    )
-    request_logistics_cost = (
-        overrides.logistics_cost_per_unit
-        if overrides is not None
-        else None
-    )
-    request_commission_main = (
-        overrides.wb_commission_percent_main
-        if overrides is not None
-        else None
-    )
-    request_commission_assorti = (
-        overrides.wb_commission_percent_assorti
-        if overrides is not None
-        else None
-    )
-    request_price_main = (
-        overrides.average_realized_price_main
-        if overrides is not None
-        else None
-    )
-    request_price_assorti = (
-        overrides.average_realized_price_assorti
-        if overrides is not None
-        else None
-    )
-    request_available_capital = (
-        overrides.available_capital
-        if overrides is not None
-        else None
-    )
-    runtime_values = runtime_overrides or {}
-    runtime_source_label = runtime_source or FROM_WB_OBSERVED_ECONOMIC_SOURCE
-    runtime_source_by_field = runtime_source_overrides or {}
-
-    def _runtime_source_for(field_name: str) -> str:
-        source_raw = runtime_source_by_field.get(field_name)
-        if isinstance(source_raw, str):
-            normalized = source_raw.strip()
-            if normalized:
-                return normalized
-        return runtime_source_label
-
-    runtime_production_cost = runtime_values.get("production_cost_per_unit")
-    runtime_logistics_cost = runtime_values.get("logistics_cost_per_unit")
-    runtime_commission_main = runtime_values.get("wb_commission_percent_main")
-    runtime_commission_assorti = runtime_values.get("wb_commission_percent_assorti")
-    runtime_price_main = runtime_values.get("average_realized_price_main")
-    runtime_price_assorti = runtime_values.get("average_realized_price_assorti")
-
-    admin_production_cost = (
-        getattr(article_settings, "production_order_production_cost_per_unit", None)
-        if article_settings is not None
-        else None
-    )
-    admin_logistics_cost = (
-        getattr(article_settings, "production_order_logistics_cost_per_unit", None)
-        if article_settings is not None
-        else None
-    )
-    admin_commission_main = (
-        getattr(article_settings, "production_order_wb_commission_percent_main", None)
-        if article_settings is not None
-        else None
-    )
-    admin_commission_assorti = (
-        getattr(article_settings, "production_order_wb_commission_percent_assorti", None)
-        if article_settings is not None
-        else None
-    )
-    admin_price_main = (
-        getattr(article_settings, "production_order_average_realized_price_main", None)
-        if article_settings is not None
-        else None
-    )
-    admin_price_assorti = (
-        getattr(article_settings, "production_order_average_realized_price_assorti", None)
-        if article_settings is not None
-        else None
-    )
-    admin_available_capital = (
-        getattr(article_settings, "production_order_available_capital", None)
-        if article_settings is not None
-        else None
-    )
-
-    global_production_cost = (
-        getattr(global_settings, "default_production_order_production_cost_per_unit", None)
-        if global_settings is not None
-        else None
-    )
-    global_logistics_cost = (
-        getattr(global_settings, "default_production_order_logistics_cost_per_unit", None)
-        if global_settings is not None
-        else None
-    )
-    global_commission_main = (
-        getattr(global_settings, "default_production_order_wb_commission_percent_main", None)
-        if global_settings is not None
-        else None
-    )
-    global_commission_assorti = (
-        getattr(global_settings, "default_production_order_wb_commission_percent_assorti", None)
-        if global_settings is not None
-        else None
-    )
-    global_price_main = (
-        getattr(global_settings, "default_production_order_average_realized_price_main", None)
-        if global_settings is not None
-        else None
-    )
-    global_price_assorti = (
-        getattr(global_settings, "default_production_order_average_realized_price_assorti", None)
-        if global_settings is not None
-        else None
-    )
-    global_available_capital = (
-        getattr(global_settings, "default_production_order_available_capital", None)
-        if global_settings is not None
-        else None
-    )
-
-    production_cost_per_unit, production_cost_source = _resolve_economic_float(
-        request_value=request_production_cost,
-        runtime_value=runtime_production_cost,
-        admin_value=admin_production_cost,
-        global_value=global_production_cost,
-        code_default=ECONOMICS_DEFAULT_PRODUCTION_COST_PER_UNIT,
-        runtime_source=_runtime_source_for("production_cost_per_unit"),
-    )
-    logistics_cost_per_unit, logistics_cost_source = _resolve_economic_float(
-        request_value=request_logistics_cost,
-        runtime_value=runtime_logistics_cost,
-        admin_value=admin_logistics_cost,
-        global_value=global_logistics_cost,
-        code_default=ECONOMICS_DEFAULT_LOGISTICS_COST_PER_UNIT,
-        runtime_source=_runtime_source_for("logistics_cost_per_unit"),
-    )
-    wb_commission_percent_main, wb_commission_main_source = _resolve_economic_float(
-        request_value=request_commission_main,
-        runtime_value=runtime_commission_main,
-        admin_value=admin_commission_main,
-        global_value=global_commission_main,
-        code_default=ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_MAIN,
-        runtime_source=_runtime_source_for("wb_commission_percent_main"),
-    )
-    wb_commission_percent_assorti, wb_commission_assorti_source = _resolve_economic_float(
-        request_value=request_commission_assorti,
-        runtime_value=runtime_commission_assorti,
-        admin_value=admin_commission_assorti,
-        global_value=global_commission_assorti,
-        code_default=ECONOMICS_DEFAULT_WB_COMMISSION_PERCENT_ASSORTI,
-        runtime_source=_runtime_source_for("wb_commission_percent_assorti"),
-    )
-    average_realized_price_main, price_main_source = _resolve_economic_float(
-        request_value=request_price_main,
-        runtime_value=runtime_price_main,
-        admin_value=admin_price_main,
-        global_value=global_price_main,
-        code_default=ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_MAIN,
-        runtime_source=_runtime_source_for("average_realized_price_main"),
-    )
-    average_realized_price_assorti, price_assorti_source = _resolve_economic_float(
-        request_value=request_price_assorti,
-        runtime_value=runtime_price_assorti,
-        admin_value=admin_price_assorti,
-        global_value=global_price_assorti,
-        code_default=ECONOMICS_DEFAULT_AVERAGE_REALIZED_PRICE_ASSORTI,
-        runtime_source=_runtime_source_for("average_realized_price_assorti"),
-    )
-    available_capital, available_capital_source = _resolve_optional_economic_float(
-        request_value=request_available_capital,
-        admin_value=admin_available_capital,
-        global_value=global_available_capital,
-    )
-
-    wb_commission_percent_main = max(min(wb_commission_percent_main, 1.0), 0.0)
-    wb_commission_percent_assorti = max(min(wb_commission_percent_assorti, 1.0), 0.0)
-
-    commission_main_amount = average_realized_price_main * wb_commission_percent_main
-    commission_assorti_amount = average_realized_price_assorti * wb_commission_percent_assorti
-    margin_main_per_unit = max(
-        average_realized_price_main - commission_main_amount - production_cost_per_unit - logistics_cost_per_unit,
-        0.0,
-    )
-    margin_assorti_per_unit = max(
-        average_realized_price_assorti - commission_assorti_amount - production_cost_per_unit - logistics_cost_per_unit,
-        0.0,
-    )
-    unit_capital_per_unit = max(production_cost_per_unit + logistics_cost_per_unit, 0.0)
-
-    source = {
-        "production_cost_per_unit": production_cost_source,
-        "logistics_cost_per_unit": logistics_cost_source,
-        "wb_commission_percent_main": wb_commission_main_source,
-        "wb_commission_percent_assorti": wb_commission_assorti_source,
-        "average_realized_price_main": price_main_source,
-        "average_realized_price_assorti": price_assorti_source,
-        "available_capital": available_capital_source,
-    }
-    calibrated_sources = [
-        source["production_cost_per_unit"],
-        source["logistics_cost_per_unit"],
-        source["wb_commission_percent_main"],
-        source["wb_commission_percent_assorti"],
-        source["average_realized_price_main"],
-        source["average_realized_price_assorti"],
-    ]
-    calibration_state = (
-        "economic_inputs_calibrated"
-        if any(item != LAYER_PROXY_VALUE_SOURCE for item in calibrated_sources)
-        else "economic_inputs_default_formula"
-    )
-
-    return _EffectiveEconomicSettings(
-        production_cost_per_unit=round(production_cost_per_unit, 4),
-        logistics_cost_per_unit=round(logistics_cost_per_unit, 4),
-        wb_commission_percent_main=round(wb_commission_percent_main, 4),
-        wb_commission_percent_assorti=round(wb_commission_percent_assorti, 4),
-        average_realized_price_main=round(average_realized_price_main, 4),
-        average_realized_price_assorti=round(average_realized_price_assorti, 4),
-        margin_main_per_unit=round(margin_main_per_unit, 4),
-        margin_assorti_per_unit=round(margin_assorti_per_unit, 4),
-        unit_capital_per_unit=round(unit_capital_per_unit, 4),
-        available_capital=round(available_capital, 4) if available_capital is not None else None,
-        calibration_state=calibration_state,
-        source=source,
-    )
-
-
-def _build_economics_trust_diagnostics(economic_source: dict[str, str]) -> dict[str, object]:
-    key_field_sources = {
-        field_name: str(economic_source.get(field_name, "unknown"))
-        for field_name in ECONOMICS_TRUST_KEY_FIELDS
-    }
-    code_default_key_fields = sorted(
-        field_name
-        for field_name, source in key_field_sources.items()
-        if source == LAYER_PROXY_VALUE_SOURCE
-    )
-    code_default_key_fields_count = len(code_default_key_fields)
-    key_fields_total = len(ECONOMICS_TRUST_KEY_FIELDS)
-    code_default_dominance_ratio = (
-        round(code_default_key_fields_count / key_fields_total, 4)
-        if key_fields_total > 0
-        else 0.0
-    )
-
-    if code_default_key_fields_count >= ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD:
-        trust_level = ECONOMICS_TRUST_LEVEL_UNTRUSTED
-    elif code_default_key_fields_count == 0:
-        trust_level = ECONOMICS_TRUST_LEVEL_TRUSTED
-    else:
-        trust_level = ECONOMICS_TRUST_LEVEL_PARTIAL
-
-    warnings: list[dict[str, object]] = []
-    if trust_level == ECONOMICS_TRUST_LEVEL_UNTRUSTED:
-        warnings.append(
-            {
-                "code": ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED,
-                "severity": "HIGH",
-                "message": (
-                    "Economics trust level is untrusted because key economics inputs are dominated "
-                    "by code defaults."
-                ),
-                "code_default_key_fields": code_default_key_fields,
-            }
-        )
-    elif trust_level == ECONOMICS_TRUST_LEVEL_PARTIAL:
-        warnings.append(
-            {
-                "code": ECONOMICS_TRUST_WARNING_CODE_PARTIAL,
-                "severity": "MEDIUM",
-                "message": (
-                    "Economics trust level is partial because some key economics inputs still use "
-                    "code defaults."
-                ),
-                "code_default_key_fields": code_default_key_fields,
-            }
-        )
-
-    return {
-        "economics_trust_level": trust_level,
-        "key_fields": list(ECONOMICS_TRUST_KEY_FIELDS),
-        "key_field_sources": key_field_sources,
-        "code_default_key_fields": code_default_key_fields,
-        "code_default_key_fields_count": code_default_key_fields_count,
-        "code_default_dominance_ratio": code_default_dominance_ratio,
-        "warnings": warnings,
-    }
-
-
-def _resolve_layer_proxy_settings(
-    *,
-    article_settings: ArticlePlanningSettings | None,
-    global_settings: GlobalPlanningSettings | None,
-    overrides: PlanningOverridesInput | None,
-) -> _EffectiveLayerProxySettings:
-    request_layer3_stockout_boost = (
-        overrides.layer3_stockout_boost_max
-        if overrides is not None
-        else None
-    )
-    request_layer3_overstock_dampen = (
-        overrides.layer3_overstock_dampen_max
-        if overrides is not None
-        else None
-    )
-    request_layer5_unavoidable_threshold = (
-        overrides.layer5_unavoidable_stockout_risk_threshold
-        if overrides is not None
-        else None
-    )
-    request_layer5_accelerate_threshold = (
-        overrides.layer5_accelerate_production_risk_threshold
-        if overrides is not None
-        else None
-    )
-    request_layer2_capital_cost_rate = (
-        overrides.layer2_capital_cost_rate
-        if overrides is not None
-        else None
-    )
-    request_layer2_stockout_penalty_weight = (
-        overrides.layer2_stockout_penalty_weight
-        if overrides is not None
-        else None
-    )
-    request_layer2_overstock_penalty_weight = (
-        overrides.layer2_overstock_penalty_weight
-        if overrides is not None
-        else None
-    )
-    request_layer5_accelerate_action_cost_rate = (
-        overrides.layer5_accelerate_action_cost_rate
-        if overrides is not None
-        else None
-    )
-    request_layer5_price_slowdown_lost_volume_rate = (
-        overrides.layer5_price_slowdown_lost_volume_rate
-        if overrides is not None
-        else None
-    )
-    request_layer5_reduce_order_marginal_profit_rate = (
-        overrides.layer5_reduce_order_marginal_profit_rate
-        if overrides is not None
-        else None
-    )
-
-    admin_layer3_stockout_boost = (
-        article_settings.production_order_layer3_stockout_boost_max
-        if article_settings is not None
-        else None
-    )
-    admin_layer3_overstock_dampen = (
-        article_settings.production_order_layer3_overstock_dampen_max
-        if article_settings is not None
-        else None
-    )
-    admin_layer5_unavoidable_threshold = (
-        article_settings.production_order_layer5_unavoidable_stockout_risk_threshold
-        if article_settings is not None
-        else None
-    )
-    admin_layer5_accelerate_threshold = (
-        article_settings.production_order_layer5_accelerate_production_risk_threshold
-        if article_settings is not None
-        else None
-    )
-    admin_layer2_capital_cost_rate = (
-        getattr(article_settings, "production_order_layer2_capital_cost_rate", None)
-        if article_settings is not None
-        else None
-    )
-    admin_layer2_stockout_penalty_weight = (
-        getattr(article_settings, "production_order_layer2_stockout_penalty_weight", None)
-        if article_settings is not None
-        else None
-    )
-    admin_layer2_overstock_penalty_weight = (
-        getattr(article_settings, "production_order_layer2_overstock_penalty_weight", None)
-        if article_settings is not None
-        else None
-    )
-    admin_layer5_accelerate_action_cost_rate = (
-        getattr(article_settings, "production_order_layer5_accelerate_action_cost_rate", None)
-        if article_settings is not None
-        else None
-    )
-    admin_layer5_price_slowdown_lost_volume_rate = (
-        getattr(article_settings, "production_order_layer5_price_slowdown_lost_volume_rate", None)
-        if article_settings is not None
-        else None
-    )
-    admin_layer5_reduce_order_marginal_profit_rate = (
-        getattr(article_settings, "production_order_layer5_reduce_order_marginal_profit_rate", None)
-        if article_settings is not None
-        else None
-    )
-
-    global_layer3_stockout_boost = (
-        global_settings.default_production_order_layer3_stockout_boost_max
-        if global_settings is not None
-        else None
-    )
-    global_layer3_overstock_dampen = (
-        global_settings.default_production_order_layer3_overstock_dampen_max
-        if global_settings is not None
-        else None
-    )
-    global_layer5_unavoidable_threshold = (
-        global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold
-        if global_settings is not None
-        else None
-    )
-    global_layer5_accelerate_threshold = (
-        global_settings.default_production_order_layer5_accelerate_production_risk_threshold
-        if global_settings is not None
-        else None
-    )
-    global_layer2_capital_cost_rate = (
-        getattr(global_settings, "default_production_order_layer2_capital_cost_rate", None)
-        if global_settings is not None
-        else None
-    )
-    global_layer2_stockout_penalty_weight = (
-        getattr(global_settings, "default_production_order_layer2_stockout_penalty_weight", None)
-        if global_settings is not None
-        else None
-    )
-    global_layer2_overstock_penalty_weight = (
-        getattr(global_settings, "default_production_order_layer2_overstock_penalty_weight", None)
-        if global_settings is not None
-        else None
-    )
-    global_layer5_accelerate_action_cost_rate = (
-        getattr(global_settings, "default_production_order_layer5_accelerate_action_cost_rate", None)
-        if global_settings is not None
-        else None
-    )
-    global_layer5_price_slowdown_lost_volume_rate = (
-        getattr(global_settings, "default_production_order_layer5_price_slowdown_lost_volume_rate", None)
-        if global_settings is not None
-        else None
-    )
-    global_layer5_reduce_order_marginal_profit_rate = (
-        getattr(global_settings, "default_production_order_layer5_reduce_order_marginal_profit_rate", None)
-        if global_settings is not None
-        else None
-    )
-
-    layer3_stockout_boost_max, layer3_stockout_source = _resolve_layer_proxy_float(
-        request_value=request_layer3_stockout_boost,
-        admin_value=admin_layer3_stockout_boost,
-        global_value=global_layer3_stockout_boost,
-        code_default=LAYER3_STOCKOUT_BOOST_MAX,
-    )
-    layer3_overstock_dampen_max, layer3_overstock_source = _resolve_layer_proxy_float(
-        request_value=request_layer3_overstock_dampen,
-        admin_value=admin_layer3_overstock_dampen,
-        global_value=global_layer3_overstock_dampen,
-        code_default=LAYER3_OVERSTOCK_DAMPEN_MAX,
-    )
-    layer5_unavoidable_threshold, layer5_unavoidable_source = _resolve_layer_proxy_float(
-        request_value=request_layer5_unavoidable_threshold,
-        admin_value=admin_layer5_unavoidable_threshold,
-        global_value=global_layer5_unavoidable_threshold,
-        code_default=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
-    )
-    layer5_accelerate_threshold, layer5_accelerate_source = _resolve_layer_proxy_float(
-        request_value=request_layer5_accelerate_threshold,
-        admin_value=admin_layer5_accelerate_threshold,
-        global_value=global_layer5_accelerate_threshold,
-        code_default=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
-    )
-    layer2_capital_cost_rate, layer2_capital_cost_rate_source = _resolve_layer_proxy_float(
-        request_value=request_layer2_capital_cost_rate,
-        admin_value=admin_layer2_capital_cost_rate,
-        global_value=global_layer2_capital_cost_rate,
-        code_default=LAYER2_CAPITAL_COST_RATE,
-    )
-    layer2_stockout_penalty_weight, layer2_stockout_penalty_weight_source = _resolve_layer_proxy_float(
-        request_value=request_layer2_stockout_penalty_weight,
-        admin_value=admin_layer2_stockout_penalty_weight,
-        global_value=global_layer2_stockout_penalty_weight,
-        code_default=LAYER2_STOCKOUT_PENALTY_WEIGHT,
-    )
-    layer2_overstock_penalty_weight, layer2_overstock_penalty_weight_source = _resolve_layer_proxy_float(
-        request_value=request_layer2_overstock_penalty_weight,
-        admin_value=admin_layer2_overstock_penalty_weight,
-        global_value=global_layer2_overstock_penalty_weight,
-        code_default=LAYER2_OVERSTOCK_PENALTY_WEIGHT,
-    )
-    layer5_accelerate_action_cost_rate, layer5_accelerate_action_cost_rate_source = _resolve_layer_proxy_float(
-        request_value=request_layer5_accelerate_action_cost_rate,
-        admin_value=admin_layer5_accelerate_action_cost_rate,
-        global_value=global_layer5_accelerate_action_cost_rate,
-        code_default=LAYER5_ACCELERATE_ACTION_COST_RATE,
-    )
-    (
-        layer5_price_slowdown_lost_volume_rate,
-        layer5_price_slowdown_lost_volume_rate_source,
-    ) = _resolve_layer_proxy_float(
-        request_value=request_layer5_price_slowdown_lost_volume_rate,
-        admin_value=admin_layer5_price_slowdown_lost_volume_rate,
-        global_value=global_layer5_price_slowdown_lost_volume_rate,
-        code_default=LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE,
-    )
-    (
-        layer5_reduce_order_marginal_profit_rate,
-        layer5_reduce_order_marginal_profit_rate_source,
-    ) = _resolve_layer_proxy_float(
-        request_value=request_layer5_reduce_order_marginal_profit_rate,
-        admin_value=admin_layer5_reduce_order_marginal_profit_rate,
-        global_value=global_layer5_reduce_order_marginal_profit_rate,
-        code_default=LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
-    )
-
-    threshold_order_adjusted = False
-    if layer5_accelerate_threshold < layer5_unavoidable_threshold:
-        layer5_accelerate_threshold = layer5_unavoidable_threshold
-        threshold_order_adjusted = True
-        layer5_accelerate_source = f"{layer5_accelerate_source}|clamped_to_unavoidable"
-
-    return _EffectiveLayerProxySettings(
-        layer3_stockout_boost_max=layer3_stockout_boost_max,
-        layer3_overstock_dampen_max=layer3_overstock_dampen_max,
-        layer5_unavoidable_stockout_risk_threshold=layer5_unavoidable_threshold,
-        layer5_accelerate_production_risk_threshold=layer5_accelerate_threshold,
-        layer2_capital_cost_rate=layer2_capital_cost_rate,
-        layer2_stockout_penalty_weight=layer2_stockout_penalty_weight,
-        layer2_overstock_penalty_weight=layer2_overstock_penalty_weight,
-        layer5_accelerate_action_cost_rate=layer5_accelerate_action_cost_rate,
-        layer5_price_slowdown_lost_volume_rate=layer5_price_slowdown_lost_volume_rate,
-        layer5_reduce_order_marginal_profit_rate=layer5_reduce_order_marginal_profit_rate,
-        threshold_order_adjusted=threshold_order_adjusted,
-        source={
-            "layer3_stockout_boost_max": layer3_stockout_source,
-            "layer3_overstock_dampen_max": layer3_overstock_source,
-            "layer5_unavoidable_stockout_risk_threshold": layer5_unavoidable_source,
-            "layer5_accelerate_production_risk_threshold": layer5_accelerate_source,
-            "layer2_capital_cost_rate": layer2_capital_cost_rate_source,
-            "layer2_stockout_penalty_weight": layer2_stockout_penalty_weight_source,
-            "layer2_overstock_penalty_weight": layer2_overstock_penalty_weight_source,
-            "layer5_accelerate_action_cost_rate": layer5_accelerate_action_cost_rate_source,
-            "layer5_price_slowdown_lost_volume_rate": (
-                layer5_price_slowdown_lost_volume_rate_source
-            ),
-            "layer5_reduce_order_marginal_profit_rate": (
-                layer5_reduce_order_marginal_profit_rate_source
-            ),
-        },
-    )
-
-
 def _add_units_for_color(
     line_qty: dict[tuple[int, int], int],
     color_id: int,
@@ -1173,359 +530,6 @@ def _add_units_for_color(
             continue
         key = (color_id, size_id)
         line_qty[key] = line_qty.get(key, 0) + qty
-
-
-def _parse_assorti_bundle_type_ids(raw_value: str | None) -> set[int]:
-    if raw_value is None:
-        return set()
-
-    bundle_type_ids: set[int] = set()
-    for token in raw_value.split(","):
-        candidate = token.strip()
-        if not candidate:
-            continue
-        try:
-            bundle_type_id = int(candidate)
-        except ValueError:
-            continue
-        if bundle_type_id <= 0:
-            continue
-        bundle_type_ids.add(bundle_type_id)
-
-    return bundle_type_ids
-
-
-def _compact_explanation_steps(steps: list[str]) -> tuple[list[str], int]:
-    if not steps:
-        return [], 0
-
-    keep_tokens = (
-        "WB ingestion adapter",
-        "Спрос по наборам",
-        "Источник параметров",
-        "Economics trust",
-        "Assorti classification",
-        "Layer 1 stock health",
-        "Layer 2 allocation",
-        "Layer 3 purchase shaping",
-        "Layer 4 scenarios",
-        "Capital constraint",
-        "Layer 5 intervention",
-        "Применены ограничения",
-    )
-
-    compact_steps = [
-        step
-        for step in steps
-        if any(token in step for token in keep_tokens)
-    ]
-    if not compact_steps:
-        compact_steps = steps[: min(len(steps), 6)]
-
-    compact_steps = compact_steps[:10]
-    omitted_steps = max(len(steps) - len(compact_steps), 0)
-    if omitted_steps > 0:
-        compact_steps.append(
-            f"Explainability compact mode: omitted_steps={omitted_steps}."
-        )
-
-    return compact_steps, omitted_steps
-
-
-def _sum_numeric_mapping_values(value: object) -> float:
-    if not isinstance(value, dict):
-        return 0.0
-
-    total = 0.0
-    for item in value.values():
-        if isinstance(item, bool):
-            continue
-        if isinstance(item, int | float):
-            total += float(item)
-
-    return round(total, 4)
-
-
-def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object]:
-    compact_meta: dict[str, object] = {
-        "warnings": meta.get("warnings", []),
-        "economics_trust": meta.get("economics_trust", {}),
-        "sources": meta.get("sources", {}),
-        "reorder_policy": meta.get("reorder_policy", {}),
-        "economic_buffer": meta.get("economic_buffer", {}),
-        "in_flight_effective": meta.get("in_flight_effective", {}),
-        "capital_gap": meta.get("capital_gap", {}),
-        "capital_constraint": meta.get("capital_constraint", {}),
-        "alpha_proxy_economics": meta.get("alpha_proxy_economics", {}),
-    }
-
-    layer1_raw = meta.get("layer_1_stock_health")
-    if isinstance(layer1_raw, dict):
-        assorti_raw = layer1_raw.get("assorti_classification")
-        assorti_compact: dict[str, object] = {}
-        if isinstance(assorti_raw, dict):
-            assorti_compact = {
-                "source": assorti_raw.get("source"),
-                "fallback_sources": assorti_raw.get("fallback_sources", []),
-                "source_breakdown": assorti_raw.get("source_breakdown", {}),
-                "summary": assorti_raw.get("summary", {}),
-            }
-
-        compact_meta["layer_1_stock_health"] = {
-            "summary": layer1_raw.get("summary", {}),
-            "contract": layer1_raw.get("contract", {}),
-            "assorti_classification": assorti_compact,
-            "proxies": layer1_raw.get("proxies", {}),
-        }
-
-    layer2_raw = meta.get("layer_2_allocation")
-    if isinstance(layer2_raw, dict):
-        compact_meta["layer_2_allocation"] = {
-            "method": layer2_raw.get("method"),
-            "method_canonical": layer2_raw.get("method_canonical"),
-            "legacy_method": layer2_raw.get("legacy_method"),
-            "legacy_alias_deprecation_plan": layer2_raw.get("legacy_alias_deprecation_plan", {}),
-            "summary": layer2_raw.get("summary", {}),
-            "contract": layer2_raw.get("contract", {}),
-            "decision_quality": layer2_raw.get("decision_quality", {}),
-            "decision_gate": layer2_raw.get("decision_gate"),
-            "decision_gate_canonical": layer2_raw.get("decision_gate_canonical"),
-            "legacy_decision_gate": layer2_raw.get("legacy_decision_gate"),
-            "tie_break": layer2_raw.get("tie_break"),
-            "gmroi_usage": layer2_raw.get("gmroi_usage"),
-            "objective_formula": layer2_raw.get("objective_formula"),
-            "objective_parameters": layer2_raw.get("objective_parameters", {}),
-            "objective_source": layer2_raw.get("objective_source", {}),
-        }
-
-    layer3_raw = meta.get("layer_3_purchase_shaping")
-    if isinstance(layer3_raw, dict):
-        compact_meta["layer_3_purchase_shaping"] = {
-            "method": layer3_raw.get("method"),
-            "factors": layer3_raw.get("factors", {}),
-            "contract": layer3_raw.get("contract", {}),
-            "qty_before": layer3_raw.get("qty_before", 0),
-            "qty_after_base": layer3_raw.get("qty_after_base", 0),
-            "qty_after": layer3_raw.get("qty_after", 0),
-            "qty_delta_vs_base": layer3_raw.get("qty_delta_vs_base", 0),
-            "adjusted_lines": layer3_raw.get("adjusted_lines", 0),
-            "main_lines": layer3_raw.get("main_lines", 0),
-            "assorti_lines": layer3_raw.get("assorti_lines", 0),
-            "hold_lines": layer3_raw.get("hold_lines", 0),
-            "calibration": layer3_raw.get("calibration", {}),
-        }
-
-    layer4_raw = meta.get("layer_4_scenarios")
-    if isinstance(layer4_raw, dict):
-        scenarios_compact: list[dict[str, object]] = []
-        scenarios_raw = layer4_raw.get("scenarios")
-        if isinstance(scenarios_raw, list):
-            for scenario in scenarios_raw:
-                if not isinstance(scenario, dict):
-                    continue
-                scenarios_compact.append(
-                    {
-                        "scenario": scenario.get("scenario"),
-                        "purchase_units": scenario.get("purchase_units"),
-                        "total_capital_required": scenario.get("total_capital_required"),
-                        "expected_revenue": scenario.get("expected_revenue"),
-                        "expected_gross_profit": scenario.get("expected_gross_profit"),
-                        "objective_score": scenario.get("objective_score"),
-                        "expected_margin_percent": scenario.get("expected_margin_percent"),
-                        "expected_turnover_days": scenario.get("expected_turnover_days"),
-                        "expected_turnover_proxy": scenario.get("expected_turnover_proxy"),
-                        "stockout_probability_proxy": scenario.get("stockout_probability_proxy"),
-                        "stockout_risk_proxy": scenario.get("stockout_risk_proxy"),
-                        "overstock_risk_proxy": scenario.get("overstock_risk_proxy"),
-                        "risk_adjusted_profit": scenario.get("risk_adjusted_profit"),
-                        "capital_efficiency_metric": scenario.get("capital_efficiency_metric"),
-                        "capital_delta_vs_balanced": scenario.get("capital_delta_vs_balanced"),
-                        "expected_revenue_delta_vs_balanced": scenario.get(
-                            "expected_revenue_delta_vs_balanced"
-                        ),
-                        "expected_gross_profit_delta_vs_balanced": scenario.get(
-                            "expected_gross_profit_delta_vs_balanced"
-                        ),
-                        "gross_profit_delta_vs_balanced": scenario.get("gross_profit_delta_vs_balanced"),
-                        "objective_score_delta_vs_balanced": (
-                            scenario.get("objective_score_delta_vs_balanced")
-                        ),
-                        "assorti_sustainability_impact": scenario.get("assorti_sustainability_impact"),
-                    }
-                )
-
-        compact_meta["layer_4_scenarios"] = {
-            "method": layer4_raw.get("method"),
-            "factors": layer4_raw.get("factors", []),
-            "contract": layer4_raw.get("contract", {}),
-            "aggregate_deltas": layer4_raw.get("aggregate_deltas", {}),
-            "scenarios": scenarios_compact,
-        }
-
-    layer5_raw = meta.get("layer_5_intervention")
-    if isinstance(layer5_raw, dict):
-        compact_meta["layer_5_intervention"] = layer5_raw
-
-    elastic_scope_raw = meta.get("elastic_scope")
-    if isinstance(elastic_scope_raw, dict):
-        compact_meta["elastic_scope"] = elastic_scope_raw
-
-    elastic_uplift_raw = meta.get("elastic_uplift")
-    if isinstance(elastic_uplift_raw, dict):
-        compact_meta["elastic_uplift"] = {
-            "delta": elastic_uplift_raw.get("delta", 0),
-            "scope": elastic_uplift_raw.get("scope", "none"),
-            "affected_lines": elastic_uplift_raw.get("affected_lines", 0),
-        }
-
-    from_wb_raw = meta.get("from_wb")
-    if isinstance(from_wb_raw, dict):
-        freshness_raw = from_wb_raw.get("freshness")
-        economic_observed_raw = from_wb_raw.get("economic_observed_prices")
-        economic_commission_raw = from_wb_raw.get("economic_observed_commission")
-        freshness_compact: dict[str, object] = {}
-        economic_observed_compact: dict[str, object] = {}
-        economic_commission_compact: dict[str, object] = {}
-        if isinstance(freshness_raw, dict):
-            freshness_compact = {
-                "status": freshness_raw.get("status"),
-                "sales_age_days": freshness_raw.get("sales_age_days"),
-                "stock_oldest_age_days": freshness_raw.get("stock_oldest_age_days"),
-                "threshold_days": freshness_raw.get("threshold_days"),
-                "threshold_source": freshness_raw.get("threshold_source"),
-            }
-        if isinstance(economic_observed_raw, dict):
-            economic_observed_compact = {
-                "source": economic_observed_raw.get("source"),
-                "window": economic_observed_raw.get("window"),
-                "anomaly_max_deviation": economic_observed_raw.get(
-                    "anomaly_max_deviation"
-                ),
-                "prices": economic_observed_raw.get("prices"),
-                "sample_counts": economic_observed_raw.get("sample_counts"),
-            }
-        if isinstance(economic_commission_raw, dict):
-            economic_commission_compact = {
-                "source": economic_commission_raw.get("source"),
-                "status": economic_commission_raw.get("status"),
-                "reason": economic_commission_raw.get("reason"),
-                "commission_percent": economic_commission_raw.get("commission_percent"),
-                "commission_percent_stats": economic_commission_raw.get("commission_percent_stats"),
-                "kgvp_supplier_percent_stats": economic_commission_raw.get("kgvp_supplier_percent_stats"),
-            }
-
-        daily_sales_by_bundle = from_wb_raw.get("daily_sales_by_bundle")
-        wb_stock_by_bundle = from_wb_raw.get("wb_stock_by_bundle")
-        wb_stock_updated_at_by_bundle = from_wb_raw.get("wb_stock_updated_at_by_bundle")
-
-        compact_meta["from_wb"] = {
-            "observation_window_days": from_wb_raw.get("observation_window_days"),
-            "freshness_mode": from_wb_raw.get("freshness_mode"),
-            "requested_as_of_date": from_wb_raw.get("requested_as_of_date"),
-            "as_of_date": from_wb_raw.get("as_of_date"),
-            "as_of_source": from_wb_raw.get("as_of_source"),
-            "bundle_type_ids": from_wb_raw.get("bundle_type_ids", []),
-            "sales_window": from_wb_raw.get("sales_window"),
-            "freshness": freshness_compact,
-            "economic_observed_prices": economic_observed_compact,
-            "economic_observed_commission": economic_commission_compact,
-            "snapshot": {
-                "daily_sales_bundle_count": (
-                    len(daily_sales_by_bundle)
-                    if isinstance(daily_sales_by_bundle, dict)
-                    else 0
-                ),
-                "daily_sales_total": _sum_numeric_mapping_values(daily_sales_by_bundle),
-                "wb_stock_bundle_count": (
-                    len(wb_stock_by_bundle)
-                    if isinstance(wb_stock_by_bundle, dict)
-                    else 0
-                ),
-                "wb_stock_total": int(_sum_numeric_mapping_values(wb_stock_by_bundle)),
-                "wb_stock_updated_bundle_count": (
-                    len(wb_stock_updated_at_by_bundle)
-                    if isinstance(wb_stock_updated_at_by_bundle, dict)
-                    else 0
-                ),
-            },
-        }
-
-    return compact_meta
-
-
-def _apply_explainability_mode(
-    explanation: ProductionOrderExplanationBlock,
-    mode: str,
-) -> ProductionOrderExplanationBlock:
-    if mode != EXPLAINABILITY_MODE_COMPACT:
-        return explanation
-
-    compact_steps, omitted_steps = _compact_explanation_steps(explanation.steps)
-    compact_meta = _build_compact_explanation_meta(explanation.meta)
-    compact_meta["explainability"] = {
-        "mode": EXPLAINABILITY_MODE_COMPACT,
-        "steps_omitted": omitted_steps,
-    }
-
-    return ProductionOrderExplanationBlock(
-        summary=explanation.summary,
-        steps=compact_steps,
-        meta=compact_meta,
-    )
-
-
-def _load_assorti_bundle_type_flags(
-    db: Session,
-    bundle_type_ids: list[int],
-    admin_assorti_bundle_type_ids: set[int] | None = None,
-    global_assorti_bundle_type_ids: set[int] | None = None,
-) -> tuple[dict[int, bool], list[dict[str, int | bool | str]]]:
-    if not bundle_type_ids:
-        return {}, []
-
-    unique_bundle_type_ids = sorted({int(bundle_type_id) for bundle_type_id in bundle_type_ids})
-
-    bundle_types = (
-        db.query(BundleType)
-        .filter(BundleType.id.in_(unique_bundle_type_ids))
-        .all()
-    )
-    bundle_type_by_id = {int(bundle_type.id): bundle_type for bundle_type in bundle_types}
-
-    admin_assorti_ids = admin_assorti_bundle_type_ids or set()
-    global_assorti_ids = global_assorti_bundle_type_ids or set()
-
-    result: dict[int, bool] = {}
-    traces: list[dict[str, int | bool | str]] = []
-
-    for bundle_type_id in unique_bundle_type_ids:
-        bundle_type = bundle_type_by_id.get(bundle_type_id)
-        if bundle_type is not None and bool(bundle_type.is_assorti):
-            is_assorti = True
-            source = ASSORTI_CLASSIFICATION_SOURCE
-        elif bundle_type_id in admin_assorti_ids:
-            is_assorti = True
-            source = ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE
-        elif bundle_type_id in global_assorti_ids:
-            is_assorti = True
-            source = ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE
-        elif bundle_type is not None:
-            is_assorti = False
-            source = ASSORTI_CLASSIFICATION_SOURCE
-        else:
-            is_assorti = False
-            source = ASSORTI_CLASSIFICATION_MISSING_SOURCE
-
-        result[bundle_type_id] = is_assorti
-        traces.append(
-            {
-                "bundle_type_id": int(bundle_type_id),
-                "is_assorti": is_assorti,
-                "source": source,
-            }
-        )
-
-    return result, traces
 
 
 def _build_layer1_stock_health_metrics(
@@ -4174,6 +3178,353 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _build_resource_allocation_contract_summary(
+    resource_allocation: ProductionOrderResourceAllocationApplied | dict[str, object],
+) -> dict[str, object]:
+    payload = (
+        resource_allocation.model_dump(mode="python")
+        if isinstance(resource_allocation, ProductionOrderResourceAllocationApplied)
+        else dict(resource_allocation)
+    )
+    reservations_raw = payload.get("reservations", [])
+    reservations = reservations_raw if isinstance(reservations_raw, list) else []
+
+    no_double_use = True
+    allocation_sums_consistent = True
+    total_reserved_from_reservations = 0
+    for reservation in reservations:
+        if not isinstance(reservation, dict):
+            no_double_use = False
+            allocation_sums_consistent = False
+            continue
+
+        stock_qty = int(reservation.get("stock_qty", 0) or 0)
+        total_reserved_qty = int(reservation.get("total_reserved_qty", 0) or 0)
+        allocations_raw = reservation.get("allocations", [])
+        allocations = allocations_raw if isinstance(allocations_raw, list) else []
+        allocated_sum = sum(
+            int(item.get("reserved_qty", 0) or 0)
+            for item in allocations
+            if isinstance(item, dict)
+        )
+
+        total_reserved_from_reservations += total_reserved_qty
+        if total_reserved_qty > stock_qty:
+            no_double_use = False
+        if allocated_sum != total_reserved_qty:
+            allocation_sums_consistent = False
+
+    reservation_total_matches_summary = (
+        total_reserved_from_reservations == int(payload.get("total_reserved_units", 0) or 0)
+    )
+    checks = {
+        "no_double_use": no_double_use,
+        "allocation_sums_consistent": allocation_sums_consistent,
+        "reservation_total_matches_summary": reservation_total_matches_summary,
+    }
+    return {
+        "version": RESOURCE_ALLOCATION_CONTRACT_VERSION,
+        "status": "ok" if all(checks.values()) else "violated",
+        "checks": checks,
+    }
+
+
+def _build_competition_aware_resource_allocation(
+    *,
+    bundle_type_ids: list[int],
+    recipe_colors_by_bundle: dict[int, set[int]],
+    all_recipe_color_ids: list[int],
+    size_ids: list[int],
+    stock_by_color_size: dict[tuple[int, int], int],
+    shares_by_bundle: dict[int, float],
+) -> ProductionOrderResourceAllocationApplied:
+    reservations: list[ResourceAllocationReservation] = []
+    reserved_bundle_units: dict[int, int] = {int(bundle_type_id): 0 for bundle_type_id in bundle_type_ids}
+    competing_resource_keys = 0
+    fully_reserved_resource_keys = 0
+    total_stock_units = 0
+    total_reserved_units = 0
+
+    color_consumers: dict[int, list[int]] = {
+        int(color_id): [
+            int(bundle_type_id)
+            for bundle_type_id in bundle_type_ids
+            if color_id in recipe_colors_by_bundle.get(bundle_type_id, set())
+        ]
+        for color_id in all_recipe_color_ids
+    }
+
+    for size_id in size_ids:
+        color_bundle_alloc: dict[tuple[int, int], int] = {}
+        for color_id in all_recipe_color_ids:
+            stock_qty = max(int(stock_by_color_size.get((color_id, size_id), 0) or 0), 0)
+            total_stock_units += stock_qty
+            consumers = color_consumers.get(int(color_id), [])
+            if not consumers:
+                continue
+
+            shared_resource = len(consumers) > 1
+            if shared_resource:
+                competing_resource_keys += 1
+
+            allocations: list[ResourceAllocationBundleReservation] = []
+            total_reserved_qty = 0
+            if len(consumers) == 1:
+                bundle_type_id = int(consumers[0])
+                if stock_qty > 0:
+                    allocations.append(
+                        ResourceAllocationBundleReservation(
+                            bundle_type_id=bundle_type_id,
+                            reserved_qty=stock_qty,
+                            share_weight=1.0,
+                            allocation_basis="single_consumer",
+                        )
+                    )
+                    color_bundle_alloc[(int(color_id), bundle_type_id)] = stock_qty
+                    total_reserved_qty = stock_qty
+            else:
+                consumer_weights = _normalize_weights(
+                    consumers,
+                    {bundle_type_id: shares_by_bundle.get(bundle_type_id, 0.0) for bundle_type_id in consumers},
+                )
+                allocated = _allocate_units(stock_qty, consumer_weights)
+                for bundle_type_id in consumers:
+                    reserved_qty = max(int(allocated.get(bundle_type_id, 0) or 0), 0)
+                    if reserved_qty <= 0:
+                        continue
+                    allocations.append(
+                        ResourceAllocationBundleReservation(
+                            bundle_type_id=int(bundle_type_id),
+                            reserved_qty=reserved_qty,
+                            share_weight=float(consumer_weights.get(bundle_type_id, 0.0)),
+                            allocation_basis="demand_share",
+                        )
+                    )
+                    color_bundle_alloc[(int(color_id), int(bundle_type_id))] = reserved_qty
+                    total_reserved_qty += reserved_qty
+
+            if stock_qty > 0 or allocations:
+                if stock_qty > 0 and total_reserved_qty >= stock_qty:
+                    fully_reserved_resource_keys += 1
+                total_reserved_units += total_reserved_qty
+                reservations.append(
+                    ResourceAllocationReservation(
+                        color_id=int(color_id),
+                        size_id=int(size_id),
+                        stock_qty=stock_qty,
+                        total_reserved_qty=total_reserved_qty,
+                        shared_resource=shared_resource,
+                        consumer_bundle_type_ids=[int(bundle_type_id) for bundle_type_id in consumers],
+                        allocations=allocations,
+                    )
+                )
+
+        for bundle_type_id in bundle_type_ids:
+            recipe_colors = recipe_colors_by_bundle.get(bundle_type_id, set())
+            if not recipe_colors:
+                continue
+            reserved_color_qty = [
+                color_bundle_alloc.get((int(color_id), int(bundle_type_id)), 0)
+                for color_id in recipe_colors
+            ]
+            if not reserved_color_qty or any(quantity <= 0 for quantity in reserved_color_qty):
+                continue
+            reserved_bundle_units[int(bundle_type_id)] += min(reserved_color_qty)
+
+    allocation = ProductionOrderResourceAllocationApplied(
+        mode="per_article_bundle_competition",
+        total_resource_keys=len(all_recipe_color_ids) * len(size_ids),
+        competing_resource_keys=competing_resource_keys,
+        fully_reserved_resource_keys=fully_reserved_resource_keys,
+        total_stock_units=total_stock_units,
+        total_reserved_units=total_reserved_units,
+        reserved_bundle_units=reserved_bundle_units,
+        reservations=reservations,
+        contract={},
+    )
+    allocation.contract = _build_resource_allocation_contract_summary(allocation)
+    return allocation
+
+
+def _resolve_shared_color_pool_as_of_date(
+    db: Session,
+    requested_as_of_date: date | None,
+) -> tuple[date, str]:
+    if requested_as_of_date is not None:
+        return requested_as_of_date, "request"
+
+    latest_sales_date = db.query(func.max(WbSalesDaily.date)).scalar()
+    if isinstance(latest_sales_date, date):
+        return latest_sales_date, "latest_wb_sales"
+
+    return datetime.now(timezone.utc).date(), "utc_today"
+
+
+def _build_shared_color_pool_snapshot(
+    *,
+    db: Session,
+    article_id: int,
+    pantone_by_color: dict[int, str],
+    target_horizon_days: int,
+    observation_window_days: int | None,
+    as_of_date: date | None,
+) -> dict[str, object]:
+    pantone_codes = sorted({value for value in pantone_by_color.values() if value})
+    window_days = max(int(observation_window_days or SHARED_COLOR_POOL_DEFAULT_OBSERVATION_WINDOW_DAYS), 1)
+    effective_as_of_date, as_of_source = _resolve_shared_color_pool_as_of_date(db, as_of_date)
+
+    snapshot: dict[str, object] = {
+        "source": SHARED_COLOR_POOL_SOURCE,
+        "status": "no_shared_pantones",
+        "applies_to": "fabric_min_batch_only",
+        "observation_window_days": window_days,
+        "as_of_date": effective_as_of_date.isoformat(),
+        "as_of_source": as_of_source,
+        "target_horizon_days": int(target_horizon_days),
+        "pantones": {},
+        "sibling_article_count": 0,
+        "sibling_proxy_required_total": 0,
+    }
+    if not pantone_codes:
+        return snapshot
+
+    sibling_rows = (
+        db.query(SkuUnit.article_id, Color.pantone_code)
+        .join(Color, Color.id == SkuUnit.color_id)
+        .filter(
+            SkuUnit.article_id != article_id,
+            Color.pantone_code.isnot(None),
+            Color.pantone_code.in_(pantone_codes),
+        )
+        .all()
+    )
+    if not sibling_rows:
+        snapshot["status"] = "no_sibling_articles"
+        snapshot["pantones"] = {
+            pantone_code: {
+                "sibling_proxy_required": 0,
+                "sibling_article_ids": [],
+                "contributors": [],
+            }
+            for pantone_code in pantone_codes
+        }
+        return snapshot
+
+    candidate_article_ids = sorted({int(row.article_id) for row in sibling_rows})
+    article_settings_rows = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id.in_(candidate_article_ids))
+        .all()
+    )
+    include_in_planning_by_article = {
+        int(row.article_id): bool(row.include_in_planning) for row in article_settings_rows
+    }
+    sibling_article_ids = sorted(
+        article_id_value
+        for article_id_value in candidate_article_ids
+        if include_in_planning_by_article.get(article_id_value, True)
+    )
+    if not sibling_article_ids:
+        snapshot["status"] = "siblings_excluded_from_planning"
+        snapshot["pantones"] = {
+            pantone_code: {
+                "sibling_proxy_required": 0,
+                "sibling_article_ids": [],
+                "contributors": [],
+            }
+            for pantone_code in pantone_codes
+        }
+        return snapshot
+
+    article_code_rows = db.query(Article.id, Article.code).filter(Article.id.in_(sibling_article_ids)).all()
+    article_code_by_id = {int(article_row_id): str(article_code) for article_row_id, article_code in article_code_rows}
+
+    article_pantone_rows = (
+        db.query(SkuUnit.article_id, Color.pantone_code)
+        .join(Color, Color.id == SkuUnit.color_id)
+        .filter(
+            SkuUnit.article_id.in_(sibling_article_ids),
+            Color.pantone_code.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    pantones_by_article: dict[int, set[str]] = defaultdict(set)
+    for sibling_article_id, pantone_code in article_pantone_rows:
+        if pantone_code:
+            pantones_by_article[int(sibling_article_id)].add(str(pantone_code))
+
+    sales_window_start = effective_as_of_date - timedelta(days=window_days - 1)
+    sibling_sales_rows = (
+        db.query(
+            ArticleWbMapping.article_id,
+            func.coalesce(func.sum(WbSalesDaily.sales_qty), 0).label("sales_qty"),
+        )
+        .join(WbSalesDaily, WbSalesDaily.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(
+            ArticleWbMapping.article_id.in_(sibling_article_ids),
+            WbSalesDaily.date >= sales_window_start,
+            WbSalesDaily.date <= effective_as_of_date,
+        )
+        .group_by(ArticleWbMapping.article_id)
+        .all()
+    )
+    sales_qty_by_article = {
+        int(row.article_id): max(int(row.sales_qty or 0), 0) for row in sibling_sales_rows
+    }
+
+    pantone_items: dict[str, dict[str, object]] = {
+        pantone_code: {
+            "sibling_proxy_required": 0,
+            "sibling_article_ids": [],
+            "contributors": [],
+        }
+        for pantone_code in pantone_codes
+    }
+
+    total_proxy_required = 0
+    pantone_code_set = set(pantone_codes)
+    for sibling_article_id in sibling_article_ids:
+        article_pantones = sorted(pantones_by_article.get(sibling_article_id, set()) & pantone_code_set)
+        if not article_pantones:
+            continue
+
+        article_sales_qty = sales_qty_by_article.get(sibling_article_id, 0)
+        article_avg_daily_sales = float(article_sales_qty) / float(window_days) if window_days > 0 else 0.0
+        if article_avg_daily_sales <= 0:
+            continue
+
+        per_pantone_daily_sales = article_avg_daily_sales / float(len(article_pantones))
+        proxy_required_units = _ceil_to_int(per_pantone_daily_sales * float(target_horizon_days))
+        if proxy_required_units <= 0:
+            continue
+
+        for pantone_code in article_pantones:
+            item = pantone_items[pantone_code]
+            sibling_ids = item["sibling_article_ids"]
+            if isinstance(sibling_ids, list) and sibling_article_id not in sibling_ids:
+                sibling_ids.append(sibling_article_id)
+            contributors = item["contributors"]
+            if isinstance(contributors, list):
+                contributors.append(
+                    {
+                        "article_id": sibling_article_id,
+                        "article_code": article_code_by_id.get(sibling_article_id, f"ARTICLE-{sibling_article_id}"),
+                        "avg_daily_sales_article": round(article_avg_daily_sales, 4),
+                        "avg_daily_sales_pantone_proxy": round(per_pantone_daily_sales, 4),
+                        "proxy_required_units": proxy_required_units,
+                    }
+                )
+            item["sibling_proxy_required"] = int(item.get("sibling_proxy_required", 0) or 0) + proxy_required_units
+            total_proxy_required += proxy_required_units
+
+    snapshot["status"] = "ok" if total_proxy_required > 0 else "no_sibling_sales_signal"
+    snapshot["pantones"] = pantone_items
+    snapshot["sibling_article_count"] = len(sibling_article_ids)
+    snapshot["sibling_proxy_required_total"] = total_proxy_required
+    return snapshot
+
+
 def _build_from_wb_freshness_snapshot(
     *,
     effective_as_of_date: date | None,
@@ -4857,6 +4208,8 @@ def build_production_order_proposal_from_wb(
         runtime_economic_overrides=runtime_overrides_payload,
         runtime_economic_source=FROM_WB_OBSERVED_ECONOMIC_SOURCE,
         runtime_economic_source_overrides=runtime_source_overrides_payload,
+        shared_color_pool_observation_window_days=request.observation_window_days,
+        shared_color_pool_as_of_date=effective_as_of_date,
     )
     requested_as_of_text = request.as_of_date.isoformat() if request.as_of_date is not None else "none"
     as_of_text = effective_as_of_date.isoformat() if effective_as_of_date is not None else "none"
@@ -5025,6 +4378,130 @@ def _compute_economic_buffer_days(
     return max(min(buffer_days, 14), 0)
 
 
+def _build_physical_scope_contract(
+    *,
+    bundle_stock_source: str,
+    in_flight_source: str,
+    size_weights_source: str,
+) -> ProductionOrderPhysicalScope:
+    wb_stock_scope = (
+        "article_wb_mapping_bundle_stock_aggregated"
+        if bundle_stock_source in {"wb_defaults", "none"}
+        else "request_explicit_bundle_stock"
+    )
+    warnings = [
+        "assembled_nsc_bundles_not_separately_persisted",
+    ]
+    assumptions = {
+        "size_weights_source": size_weights_source,
+        "in_flight_source": in_flight_source,
+        "bundle_stock_source": bundle_stock_source,
+        "ready_bundle_formula": "sum(bundle_stock.wb_qty + bundle_stock.local_qty)",
+        "raw_bundle_capacity_method": "competition_aware_recipe_projection",
+        "raw_bundle_capacity_counts_in_main_cover_model": True,
+        "nsc_assembled_bundle_inventory_state": "not_persisted",
+    }
+    return ProductionOrderPhysicalScope(
+        local_stock_scope="all_warehouses_merged",
+        wb_stock_scope=wb_stock_scope,
+        ready_bundle_source=bundle_stock_source,
+        raw_single_source="stock_balance_by_sku_unit_recipe_projection",
+        nsc_assembled_bundle_inventory_state="not_persisted",
+        warnings=warnings,
+        assumptions=assumptions,
+    )
+
+
+def _build_arrival_horizon_projection(
+    *,
+    bundle_type_ids: list[int],
+    recipe_colors_by_bundle: dict[int, set[int]],
+    all_recipe_color_ids: list[int],
+    size_ids: list[int],
+    current_stock_by_color_size: dict[tuple[int, int], int],
+    in_flight_effective_by_color_size: dict[tuple[int, int], int],
+    shares_by_bundle: dict[int, float],
+    ready_bundle_stock_total: int,
+    total_daily_sales: float,
+    lead_time_days_total: int,
+) -> ProductionOrderArrivalProjection:
+    raw_now_by_bundle = _estimate_competition_aware_raw_bundle_stock(
+        bundle_type_ids=bundle_type_ids,
+        recipe_colors_by_bundle=recipe_colors_by_bundle,
+        all_recipe_color_ids=all_recipe_color_ids,
+        size_ids=size_ids,
+        stock_by_color_size=current_stock_by_color_size,
+        shares_by_bundle=shares_by_bundle,
+    )
+    in_flight_by_bundle = _estimate_competition_aware_raw_bundle_stock(
+        bundle_type_ids=bundle_type_ids,
+        recipe_colors_by_bundle=recipe_colors_by_bundle,
+        all_recipe_color_ids=all_recipe_color_ids,
+        size_ids=size_ids,
+        stock_by_color_size=in_flight_effective_by_color_size,
+        shares_by_bundle=shares_by_bundle,
+    )
+    raw_bundle_capacity_now = sum(raw_now_by_bundle.values())
+    in_flight_bundle_capacity_at_arrival = sum(in_flight_by_bundle.values())
+    demand_units_until_arrival = _ceil_to_int(
+        max(float(total_daily_sales), 0.0) * max(int(lead_time_days_total), 0)
+    )
+    projected_supply_units_before_arrival = (
+        int(ready_bundle_stock_total)
+        + int(raw_bundle_capacity_now)
+        + int(in_flight_bundle_capacity_at_arrival)
+    )
+    projected_shortage_before_arrival = max(
+        int(demand_units_until_arrival) - int(projected_supply_units_before_arrival),
+        0,
+    )
+    projected_availability_at_arrival = max(
+        int(projected_supply_units_before_arrival) - int(demand_units_until_arrival),
+        0,
+    )
+
+    if total_daily_sales <= 0:
+        status = "no_demand"
+        projected_cover_days_at_arrival = None
+    else:
+        status = (
+            "shortage_before_arrival"
+            if projected_shortage_before_arrival > 0
+            else "safe_cover_until_arrival"
+        )
+        projected_cover_days_at_arrival = round(
+            float(projected_availability_at_arrival) / float(total_daily_sales),
+            4,
+        )
+
+    return ProductionOrderArrivalProjection(
+        status=status,
+        arrival_horizon_days=max(int(lead_time_days_total), 0),
+        demand_units_until_arrival=int(demand_units_until_arrival),
+        ready_bundle_units_now=int(ready_bundle_stock_total),
+        raw_bundle_capacity_now=int(raw_bundle_capacity_now),
+        in_flight_bundle_capacity_at_arrival=int(in_flight_bundle_capacity_at_arrival),
+        projected_supply_units_before_arrival=int(projected_supply_units_before_arrival),
+        projected_availability_at_arrival=int(projected_availability_at_arrival),
+        projected_shortage_before_arrival=int(projected_shortage_before_arrival),
+        projected_cover_days_at_arrival=projected_cover_days_at_arrival,
+        basis={
+            "demand_basis": "daily_sales_x_lead_time_days_total",
+            "raw_bundle_treatment": "counted_as_convertible_before_arrival",
+            "bundle_state_note": "raw_bundle_capacity_is_recipe_projection_not_persisted_ready_inventory",
+            "ready_bundle_units_now": int(ready_bundle_stock_total),
+            "raw_bundle_capacity_now_by_bundle": {
+                int(bundle_type_id): int(raw_now_by_bundle.get(bundle_type_id, 0))
+                for bundle_type_id in bundle_type_ids
+            },
+            "in_flight_bundle_capacity_at_arrival_by_bundle": {
+                int(bundle_type_id): int(in_flight_by_bundle.get(bundle_type_id, 0))
+                for bundle_type_id in bundle_type_ids
+            },
+        },
+    )
+
+
 def _estimate_competition_aware_raw_bundle_stock(
     *,
     bundle_type_ids: list[int],
@@ -5108,6 +4585,8 @@ def build_production_order_proposal(
     runtime_economic_overrides: dict[str, float | None] | None = None,
     runtime_economic_source: str | None = None,
     runtime_economic_source_overrides: dict[str, str] | None = None,
+    shared_color_pool_observation_window_days: int | None = None,
+    shared_color_pool_as_of_date: date | None = None,
 ) -> ProductionOrderProposalResponse:
     now = datetime.now(timezone.utc)
 
@@ -5387,7 +4866,7 @@ def build_production_order_proposal(
         for bundle_type_id in bundle_type_ids:
             shares_by_bundle[bundle_type_id] = equal_share
 
-    competition_raw_by_bundle = _estimate_competition_aware_raw_bundle_stock(
+    resource_allocation = _build_competition_aware_resource_allocation(
         bundle_type_ids=bundle_type_ids,
         recipe_colors_by_bundle=recipe_colors_by_bundle,
         all_recipe_color_ids=all_recipe_color_ids,
@@ -5395,6 +4874,10 @@ def build_production_order_proposal(
         stock_by_color_size=stock_by_color_size,
         shares_by_bundle=shares_by_bundle,
     )
+    competition_raw_by_bundle = {
+        int(bundle_type_id): int(reserved_qty)
+        for bundle_type_id, reserved_qty in resource_allocation.reserved_bundle_units.items()
+    }
     competition_raw_bundle_stock = sum(competition_raw_by_bundle.values())
     competition_raw_breakdown = ", ".join(
         f"{bundle_type_id}:{competition_raw_by_bundle.get(bundle_type_id, 0)}"
@@ -5570,6 +5053,15 @@ def build_production_order_proposal(
     for color in colors:
         pantone_by_color[color.id] = color.pantone_code or f"COLOR-{color.id}"
 
+    shared_color_pool = _build_shared_color_pool_snapshot(
+        db=db,
+        article_id=request.article_id,
+        pantone_by_color=pantone_by_color,
+        target_horizon_days=target_bundle_horizon_days,
+        observation_window_days=shared_color_pool_observation_window_days,
+        as_of_date=shared_color_pool_as_of_date,
+    )
+
     color_settings_rows = (
         db.query(ColorPlanningSettings)
         .filter(
@@ -5584,7 +5076,7 @@ def build_production_order_proposal(
         if row.fabric_min_batch_qty is not None and row.fabric_min_batch_qty > 0
     }
 
-    constraints_applied = ProductionOrderConstraintsApplied()
+    constraints_applied = ProductionOrderConstraintsApplied(resource_allocation=resource_allocation)
 
     colors_by_pantone: dict[str, list[int]] = defaultdict(list)
     for color_id in all_recipe_color_ids:
@@ -5595,6 +5087,14 @@ def build_production_order_proposal(
         if required_qty <= 0:
             continue
 
+        shared_color_pool_item = shared_color_pool.get("pantones", {}).get(pantone_code, {})
+        sibling_proxy_required = int(
+            shared_color_pool_item.get("sibling_proxy_required", 0)
+            if isinstance(shared_color_pool_item, dict)
+            else 0
+        )
+        shared_pool_required = required_qty + sibling_proxy_required
+
         min_candidates = [settings.fabric_min_batch_default]
         for color_id in pantone_color_ids:
             override_value = color_min_override.get(color_id)
@@ -5602,15 +5102,17 @@ def build_production_order_proposal(
                 min_candidates.append(override_value)
 
         applied_min = max(min_candidates)
-        if required_qty >= applied_min:
+        if shared_pool_required >= applied_min:
             continue
 
-        delta = applied_min - required_qty
+        delta = applied_min - shared_pool_required
         constraints_applied.fabric_min_batches.append(
             FabricConstraintApplied(
                 pantone_code=pantone_code,
                 required=required_qty,
                 applied_min=applied_min,
+                shared_pool_required=shared_pool_required,
+                sibling_proxy_required=sibling_proxy_required,
             )
         )
 
@@ -5822,11 +5324,37 @@ def build_production_order_proposal(
         **layer5_intervention,
         "contract": layer5_contract,
     }
-    action = _choose_action(
-        risk_level=risk_level,
-        candidate_units=candidate_total_units,
-        allow_order_with_buffer=settings.allow_order_with_buffer,
+    physical_scope = _build_physical_scope_contract(
+        bundle_stock_source=bundle_stock_source,
+        in_flight_source=in_flight_source,
+        size_weights_source=size_weights_source,
     )
+    arrival_projection = _build_arrival_horizon_projection(
+        bundle_type_ids=bundle_type_ids,
+        recipe_colors_by_bundle=recipe_colors_by_bundle,
+        all_recipe_color_ids=all_recipe_color_ids,
+        size_ids=size_ids,
+        current_stock_by_color_size=current_stock_by_color_size,
+        in_flight_effective_by_color_size=in_flight_effective_by_color_size,
+        shares_by_bundle=shares_by_bundle,
+        ready_bundle_stock_total=ready_bundle_stock_total,
+        total_daily_sales=total_daily_sales,
+        lead_time_days_total=settings.lead_time_days_total,
+    )
+    if arrival_projection.status == "safe_cover_until_arrival" and total_daily_sales > 0:
+        action = "wait"
+    else:
+        action_risk_level = risk_level
+        if (
+            arrival_projection.status == "shortage_before_arrival"
+            and risk_level not in {"critical", "warning"}
+        ):
+            action_risk_level = "critical"
+        action = _choose_action(
+            risk_level=action_risk_level,
+            candidate_units=candidate_total_units,
+            allow_order_with_buffer=settings.allow_order_with_buffer,
+        )
 
     if action == "wait":
         recommendation = ProductionOrderRecommendation(
@@ -5888,8 +5416,42 @@ def build_production_order_proposal(
                 f"(competition-aware by bundle: {competition_raw_breakdown})."
             ),
             (
+                "Physical scope: "
+                f"local_stock_scope={physical_scope.local_stock_scope}, "
+                f"wb_stock_scope={physical_scope.wb_stock_scope}, "
+                f"ready_bundle_source={physical_scope.ready_bundle_source}, "
+                f"raw_single_source={physical_scope.raw_single_source}, "
+                "nsc_assembled_bundle_inventory_state="
+                f"{physical_scope.nsc_assembled_bundle_inventory_state}."
+            ),
+            (
+                f"Resource allocation: mode={resource_allocation.mode}, "
+                f"resource_keys={resource_allocation.total_resource_keys}, "
+                f"competing={resource_allocation.competing_resource_keys}, "
+                f"reserved_units={resource_allocation.total_reserved_units}, "
+                f"contract_status={resource_allocation.contract.get('status')}."
+            ),
+            (
+                "Arrival projection: "
+                f"status={arrival_projection.status}, "
+                f"arrival_horizon_days={arrival_projection.arrival_horizon_days}, "
+                f"demand_units_until_arrival={arrival_projection.demand_units_until_arrival}, "
+                f"projected_supply_units_before_arrival={arrival_projection.projected_supply_units_before_arrival}, "
+                "projected_shortage_before_arrival="
+                f"{arrival_projection.projected_shortage_before_arrival}."
+            ),
+            (
+                "Shared color pool: "
+                f"status={shared_color_pool.get('status')}, "
+                f"source={shared_color_pool.get('source')}, "
+                f"sibling_article_count={shared_color_pool.get('sibling_article_count')}, "
+                f"sibling_proxy_required_total={shared_color_pool.get('sibling_proxy_required_total')}, "
+                f"observation_window_days={shared_color_pool.get('observation_window_days')}, "
+                f"as_of_date={shared_color_pool.get('as_of_date')}."
+            ),
+            (
                 f"Дефицит по модели B: target_bundle_units={required_bundle_units}, "
-                f"bundle_deficit_total={bundle_deficit_total}, распределение через size_weights."
+                f"available_for_cover={available_bundles_for_cover}, deficit={bundle_deficit_total}."
             ),
             (
                 f"Reorder policy: lead_time_days={settings.lead_time_days_total}, "
@@ -6051,6 +5613,9 @@ def build_production_order_proposal(
                 "in_flight": in_flight_source,
                 "bundle_stock": bundle_stock_source,
             },
+            "physical_scope": physical_scope.model_dump(mode="python"),
+            "arrival_projection": arrival_projection.model_dump(mode="python"),
+            "shared_color_pool": shared_color_pool,
             "reorder_policy": {
                 "lead_time_days_total": settings.lead_time_days_total,
                 "safety_stock_days": settings.safety_stock_days,
@@ -6139,6 +5704,7 @@ def build_production_order_proposal(
             "layer_5_intervention": layer5_intervention_meta,
             "capital_gap": capital_gap_summary,
             "capital_constraint": capital_constraint_summary,
+            "resource_allocation": resource_allocation.model_dump(mode="python"),
             "alpha_proxy_economics": {
                 "source": LAYER_PROXY_VALUE_SOURCE,
                 "calibration_state": "alpha_proxy_not_calibrated",
@@ -6258,6 +5824,8 @@ def build_production_order_proposal(
         lead_time_days_total=settings.lead_time_days_total,
         recommendation=recommendation,
         constraints_applied=constraints_applied,
+        physical_scope=physical_scope,
+        arrival_projection=arrival_projection,
         alternatives=alternatives,
         explanation=explanation,
     )

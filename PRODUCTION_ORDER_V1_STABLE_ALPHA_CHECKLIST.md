@@ -122,7 +122,13 @@
 - [x] Budget-limited proposal responses expose deterministic capital-constraint evidence in meta (`status=budget_limited_applied`, ranking, cutoff line incl. partial allocation when applicable).
 - [x] For equal objective metrics, shared-capital ranking tie-break is deterministic and availability-priority aligned (`stockout_risk` higher first, then `overstock_risk` lower).
 - [x] Capital-constraint meta includes runtime contract block (`version/checks/status`) and valid flows keep `capital_constraint.contract.status=ok` in full/compact responses, including ranking risk-priority consistency (`risk_priority_score = stockout_risk - overstock_risk`).
+- [x] Phase 1 resource allocation core is regression-locked on the production-order path: per-article shared resources (`color x size`) are explicitly reserved across competing bundle strategies, no-double-use is enforced by runtime contract checks, and allocation consumption is exposed in both `constraints_applied.resource_allocation` and full/compact explainability metadata.
+- [x] Phase 2 shared pantone pool is regression-locked on the production-order path: sibling WB article demand can reduce local fabric-min uplift for the same pantone, and shared-pool diagnostics are exposed in both `constraints_applied.fabric_min_batches` and full/compact explainability metadata.
+- [x] Production-order API response now explicitly exposes `physical_scope` and `arrival_projection` contracts at the top level and mirrors both blocks in explainability metadata, including compact mode.
+- [x] Arrival-horizon projection is regression-locked as a deterministic narrow slice (`ready now + competition-aware raw + effective in-flight @ arrival - demand until arrival`) and is wired into recommendation guardrail behavior (`safe_cover_until_arrival -> wait`, `shortage_before_arrival` remains shortage-driving).
+- [x] Legacy planning endpoints are explicitly marked low-fidelity/deprecated without new planning logic: `/api/v1/planning/core/proposal` and `/api/v1/planning/order-proposal` emit successor/fidelity headers instead of silently pretending parity with production-order core.
 - [x] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
+- [x] Any R5 modularization remains narrow and facade-preserving: extracted helpers may move to dedicated service modules (currently economics + compact explainability + assorti classification + layer-proxy settings), but `planning_production_order.py` keeps the external service surface/compatibility imports unchanged and regressions remain green.
 
 ## 11) Verification gate
 - [x] Run verification suite and confirm green:
@@ -130,6 +136,7 @@
   - `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev.ps1 verify-live` (targeted local gate: verify + production-order live API smoke checks)
 - [x] Regression tests include Layer 1-5 contracts + explainability compact/full coverage.
 - [x] Decision quality case studies are documented and reviewable for external sanity check.
+- [x] Current physical-scope / arrival-projection / legacy-marker block is revalidated by `tests/test_planning_core_production_order_api.py`, `tests/test_end_to_end_planning.py`, and `scripts/dev.ps1 verify`.
 - [x] Working tree is clean after final commit.
 
 ## 12) Decision documentation discipline (mandatory)
