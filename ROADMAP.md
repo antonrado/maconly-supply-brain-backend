@@ -92,6 +92,7 @@
 - Direct production-order prerequisite failures should stay operator-facing and machine-readable: missing `bundle_recipe` coverage and missing SKU scope for recipe colors now return structured `400` details (`code/message/affected ids/next_steps`) and must not regress back to plain string errors.
 - Production-order settings admin validation should stay machine-readable as well: invalid size ids, elastic binding scope mismatches, assorti bundle type ids, and in-flight color/size scope errors now return structured `400` details (`code/field/affected ids/next_steps`) instead of plain strings.
 - WB onboarding/live-sync account resolution should stay machine-readable too: missing active account, unknown `account_id`, and empty `api_token` now return structured `400` details (`code/account_id?/next_steps`) instead of plain strings before any external WB call is attempted.
+- WB transport/response failures should also stay machine-readable: request/network failures, rate limits, unauthorized tokens, invalid JSON, and invalid rows-format payloads now return structured WB error details with deterministic `code`, `next_steps`, and upstream metadata where available.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.

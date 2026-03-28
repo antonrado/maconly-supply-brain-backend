@@ -75,6 +75,23 @@ def _build_wb_account_resolution_detail(
     return detail
 
 
+def _build_wb_api_failure_detail(
+    *,
+    code: str,
+    message: str,
+    next_steps: list[str],
+    extra: dict[str, object] | None = None,
+) -> dict[str, object]:
+    detail = {
+        "code": code,
+        "message": message,
+        "next_steps": list(next_steps),
+    }
+    if extra:
+        detail.update(extra)
+    return detail
+
+
 def _resolve_wb_integration_account(
     db: Session,
     *,
@@ -234,7 +251,12 @@ def _wb_request(
         except httpx.RequestError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"WB API request failed: {exc}",
+                detail=_build_wb_api_failure_detail(
+                    code="wb_api_request_failed",
+                    message="WB API request failed",
+                    next_steps=["retry_wb_live_sync"],
+                    extra={"error": str(exc)},
+                ),
             ) from exc
 
         if response.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
@@ -249,30 +271,54 @@ def _wb_request(
                 retry_after = 1
 
         if attempt >= WB_SYNC_RATE_LIMIT_MAX_RETRIES:
-            detail = "WB API rate limit exceeded"
-            if retry_after_header:
-                detail = f"{detail}; retry after {retry_after_header}s"
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=_build_wb_api_failure_detail(
+                    code="wb_api_rate_limit_exceeded",
+                    message="WB API rate limit exceeded",
+                    next_steps=["retry_wb_live_sync_later"],
+                    extra={
+                        "retry_after_seconds": retry_after,
+                        "retry_after_raw": retry_after_header,
+                    },
+                ),
+            )
 
         time.sleep(min(retry_after, WB_SYNC_RATE_LIMIT_MAX_SLEEP_SECONDS))
 
     if response is None:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="WB API request failed: no response",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_no_response",
+                message="WB API request failed: no response",
+                next_steps=["retry_wb_live_sync"],
+            ),
         )
 
     if response.status_code == status.HTTP_401_UNAUTHORIZED:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="WB API token is unauthorized for this method",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_unauthorized",
+                message="WB API token is unauthorized for this method",
+                next_steps=["check_wb_api_token_permissions"],
+            ),
         )
 
     if response.status_code >= status.HTTP_400_BAD_REQUEST:
         body_preview = response.text[:500]
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"WB API returned {response.status_code}: {body_preview}",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_http_error",
+                message="WB API returned an unexpected HTTP error",
+                next_steps=["retry_wb_live_sync", "check_wb_api_status_or_request_payload"],
+                extra={
+                    "upstream_status_code": int(response.status_code),
+                    "body_preview": body_preview,
+                },
+            ),
         )
 
     return response
@@ -284,7 +330,11 @@ def _wb_parse_json_payload(response: httpx.Response) -> object:
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="WB API response is not valid JSON",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_invalid_json",
+                message="WB API response is not valid JSON",
+                next_steps=["retry_wb_live_sync", "inspect_wb_api_response_format"],
+            ),
         ) from exc
 
 
@@ -292,7 +342,11 @@ def _normalize_wb_json_rows(payload: object) -> list[dict[str, object]]:
     if not isinstance(payload, list):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="WB API response format is invalid: expected array",
+            detail=_build_wb_api_failure_detail(
+                code="wb_api_invalid_rows_format",
+                message="WB API response format is invalid: expected array",
+                next_steps=["inspect_wb_api_response_format"],
+            ),
         )
 
     normalized: list[dict[str, object]] = []

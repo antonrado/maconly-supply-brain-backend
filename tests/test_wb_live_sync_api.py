@@ -588,7 +588,79 @@ def test_wb_get_json_rows_raises_429_after_retries(monkeypatch):
         wb_ingest._wb_get_json_rows(path="/fake", token="t", params={"x": 1})
 
     assert exc.value.status_code == 429
-    assert "rate limit" in str(exc.value.detail).lower()
+    assert exc.value.detail == {
+        "code": "wb_api_rate_limit_exceeded",
+        "message": "WB API rate limit exceeded",
+        "next_steps": ["retry_wb_live_sync_later"],
+        "retry_after_seconds": 2,
+        "retry_after_raw": "2",
+    }
+
+
+def test_wb_request_raises_structured_request_failed_detail(monkeypatch):
+    def fake_httpx_request(*args, **kwargs):
+        raise wb_ingest.httpx.RequestError("boom")
+
+    monkeypatch.setattr(wb_ingest.httpx, "request", fake_httpx_request)
+
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._wb_request(method="GET", url="https://example.test", token="t")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == {
+        "code": "wb_api_request_failed",
+        "message": "WB API request failed",
+        "next_steps": ["retry_wb_live_sync"],
+        "error": "boom",
+    }
+
+
+def test_wb_request_raises_structured_unauthorized_detail(monkeypatch):
+    class FakeResponse:
+        def __init__(self):
+            self.status_code = 401
+            self.headers = {}
+            self.text = "unauthorized"
+
+    monkeypatch.setattr(wb_ingest.httpx, "request", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._wb_request(method="GET", url="https://example.test", token="t")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == {
+        "code": "wb_api_unauthorized",
+        "message": "WB API token is unauthorized for this method",
+        "next_steps": ["check_wb_api_token_permissions"],
+    }
+
+
+def test_wb_parse_json_payload_raises_structured_invalid_json_detail():
+    class FakeResponse:
+        def json(self):
+            raise ValueError("bad json")
+
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._wb_parse_json_payload(FakeResponse())
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == {
+        "code": "wb_api_invalid_json",
+        "message": "WB API response is not valid JSON",
+        "next_steps": ["retry_wb_live_sync", "inspect_wb_api_response_format"],
+    }
+
+
+def test_normalize_wb_json_rows_raises_structured_invalid_rows_format_detail():
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._normalize_wb_json_rows({"not": "a-list"})
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == {
+        "code": "wb_api_invalid_rows_format",
+        "message": "WB API response format is invalid: expected array",
+        "next_steps": ["inspect_wb_api_response_format"],
+    }
 
 
 def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
