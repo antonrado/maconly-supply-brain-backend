@@ -20,6 +20,7 @@ LEGACY_ORDER_PROPOSAL_FIDELITY = "legacy_live_low_fidelity"
     response_model=OrderProposalResponse,
     deprecated=True,
     summary="Legacy low-fidelity order proposal",
+    include_in_schema=False,
 )
 def get_order_proposal(
     target_date: date,

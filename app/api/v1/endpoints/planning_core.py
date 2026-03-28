@@ -47,6 +47,7 @@ async def get_planning_core_health() -> dict:
     "/core/proposal",
     deprecated=True,
     summary="Legacy low-fidelity core proposal stub",
+    include_in_schema=False,
 )
 async def create_planning_core_proposal(
     request: PlanningProposalRequest,

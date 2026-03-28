@@ -69,6 +69,17 @@ def test_legacy_core_proposal_stub_exposes_deprecation_headers(client, monkeypat
     assert body["status"] == "ok"
 
 
+def test_openapi_hides_legacy_planning_paths_and_keeps_canonical_production_order_paths(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200, response.text
+    paths = response.json()["paths"]
+    assert "/api/v1/planning/core/proposal" not in paths
+    assert "/api/v1/planning/order-proposal" not in paths
+    assert "/api/v1/planning/core/production-order/proposal" in paths
+    assert "/api/v1/planning/core/production-order/proposal/from-wb" in paths
+
+
 def _setup_article_with_skus_and_planning(db_session):
     """Create article with multiple SKUs and planning settings for end-to-end tests."""
     article = create_article(db_session, code="E2E-ART-1")
