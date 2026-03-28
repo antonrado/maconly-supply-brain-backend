@@ -92,6 +92,15 @@ def _build_wb_api_failure_detail(
     return detail
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def _resolve_wb_integration_account(
     db: Session,
     *,
@@ -1001,7 +1010,7 @@ def get_from_wb_readiness_summary(
         if article is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Article id={article_id} not found",
+                detail=_build_article_not_found_detail(article_id=article_id),
             )
 
     mapping_query = (

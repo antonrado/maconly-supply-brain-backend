@@ -171,6 +171,17 @@ def test_production_order_settings_get_empty(client, db_session):
     assert body["available_capital"] is None
 
 
+def test_production_order_settings_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
+    response = client.get("/api/v1/planning/core/production-order/settings/999999999")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def test_production_order_settings_put_and_get_roundtrip(client, db_session):
     seeded = _seed_scope(db_session)
 

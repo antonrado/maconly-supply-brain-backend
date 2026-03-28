@@ -7197,7 +7197,12 @@ def test_production_order_proposal_returns_404_for_unknown_article(client, db_se
         },
     )
     assert response.status_code == 404, response.text
-    assert response.json()["detail"] == "Article not found"
+    assert response.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_production_order_proposal_from_wb_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
@@ -7213,7 +7218,12 @@ def test_production_order_proposal_from_wb_returns_404_for_unknown_article(clien
         },
     )
     assert response.status_code == 404, response.text
-    assert response.json()["detail"] == "Article not found"
+    assert response.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_production_order_proposal_from_wb_validation_error_invalid_freshness_mode(client, db_session):  # noqa: ARG001

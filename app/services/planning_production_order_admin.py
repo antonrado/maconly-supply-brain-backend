@@ -58,12 +58,21 @@ def _serialize_assorti_bundle_type_ids(bundle_type_ids: list[int]) -> str | None
     return ",".join(str(bundle_type_id) for bundle_type_id in normalized)
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def _require_article(db: Session, article_id: int) -> Article:
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Article not found",
+            detail=_build_article_not_found_detail(article_id=article_id),
         )
     return article
 

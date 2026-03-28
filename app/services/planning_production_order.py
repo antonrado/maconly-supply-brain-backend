@@ -3702,6 +3702,15 @@ def _build_direct_missing_sku_scope_detail(
     }
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def _resolve_from_wb_freshness_thresholds(
     db: Session,
     article_id: int,
@@ -4184,7 +4193,10 @@ def build_production_order_proposal_from_wb(
 ) -> ProductionOrderProposalResponse:
     article = db.query(Article).filter(Article.id == request.article_id).first()
     if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=request.article_id),
+        )
 
     bundle_type_ids = _resolve_bundle_type_ids_for_from_wb(
         db=db,
@@ -4723,7 +4735,10 @@ def build_production_order_proposal(
 
     article = db.query(Article).filter(Article.id == request.article_id).first()
     if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=request.article_id),
+        )
 
     article_settings = (
         db.query(ArticlePlanningSettings)

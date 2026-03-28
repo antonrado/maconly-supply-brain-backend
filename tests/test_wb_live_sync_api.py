@@ -663,6 +663,20 @@ def test_normalize_wb_json_rows_raises_structured_invalid_rows_format_detail():
     }
 
 
+def test_wb_from_wb_readiness_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/wb/from-wb/readiness",
+        json={"article_id": 999999999, "limit": 10},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     article_ready = Article(code="READY-1", name="Ready")
     article_no_recipe = Article(code="BLOCK-NO-RECIPE", name="No recipe")
