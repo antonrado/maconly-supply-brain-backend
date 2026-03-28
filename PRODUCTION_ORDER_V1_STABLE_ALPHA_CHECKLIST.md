@@ -127,6 +127,7 @@
 - [x] Production-order API response now explicitly exposes `physical_scope` and `arrival_projection` contracts at the top level and mirrors both blocks in explainability metadata, including compact mode.
 - [x] Arrival-horizon projection is regression-locked as a deterministic narrow slice (`ready now + competition-aware raw + effective in-flight @ arrival - demand until arrival`) and is wired into recommendation guardrail behavior (`safe_cover_until_arrival -> wait`, `shortage_before_arrival` remains shortage-driving).
 - [x] Legacy planning endpoints are explicitly marked low-fidelity/deprecated without new planning logic: `/api/v1/planning/core/proposal` and `/api/v1/planning/order-proposal` emit successor/fidelity headers instead of silently pretending parity with production-order core.
+- [x] Direct production-order prerequisite failures are regression-locked as machine-readable operator contracts: missing `bundle_recipe` coverage and missing SKU scope for recipe colors return structured `400` details with deterministic `code`, affected IDs, and `next_steps`.
 - [x] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 - [x] Any R5 modularization remains narrow and facade-preserving: extracted helpers may move to dedicated service modules (currently economics + compact explainability + assorti classification + layer-proxy settings), but `planning_production_order.py` keeps the external service surface/compatibility imports unchanged and regressions remain green.
 

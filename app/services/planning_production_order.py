@@ -3657,6 +3657,51 @@ def _build_from_wb_freshness_failure_detail(
     }
 
 
+def _build_direct_missing_bundle_recipe_detail(
+    *,
+    article_id: int,
+    requested_bundle_type_ids: list[int],
+    missing_bundle_type_ids: list[int],
+) -> dict[str, object]:
+    all_missing = sorted(int(bundle_type_id) for bundle_type_id in missing_bundle_type_ids)
+    requested = sorted(int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids)
+    code = "no_bundle_recipe" if all_missing == requested else "missing_bundle_recipe_bundle_types"
+    message = (
+        "No bundle recipe defined for the requested bundle types"
+        if code == "no_bundle_recipe"
+        else "Bundle recipe is missing for some requested bundle types"
+    )
+    next_steps = (
+        ["create_bundle_recipe_for_requested_bundle_type_ids"]
+        if code == "no_bundle_recipe"
+        else ["add_bundle_recipe_for_missing_bundle_type_ids"]
+    )
+    return {
+        "code": code,
+        "message": message,
+        "article_id": int(article_id),
+        "requested_bundle_type_ids": requested,
+        "missing_bundle_type_ids": all_missing,
+        "next_steps": next_steps,
+    }
+
+
+def _build_direct_missing_sku_scope_detail(
+    *,
+    article_id: int,
+    requested_bundle_type_ids: list[int],
+    recipe_color_ids: list[int],
+) -> dict[str, object]:
+    return {
+        "code": "no_sku_units_for_recipe_colors",
+        "message": "No SKU units found for article and recipe colors",
+        "article_id": int(article_id),
+        "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
+        "recipe_color_ids": [int(color_id) for color_id in recipe_color_ids],
+        "next_steps": ["create_sku_units_for_recipe_colors"],
+    }
+
+
 def _resolve_from_wb_freshness_thresholds(
     db: Session,
     article_id: int,
@@ -4773,7 +4818,11 @@ def build_production_order_proposal(
     if not recipes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No bundle recipe defined for the provided article and bundle types",
+            detail=_build_direct_missing_bundle_recipe_detail(
+                article_id=request.article_id,
+                requested_bundle_type_ids=bundle_type_ids,
+                missing_bundle_type_ids=bundle_type_ids,
+            ),
         )
 
     recipe_colors_by_bundle: dict[int, set[int]] = defaultdict(set)
@@ -4788,7 +4837,11 @@ def build_production_order_proposal(
     if missing_bundle_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No bundle recipe defined for bundle_type_id(s): {missing_bundle_types}",
+            detail=_build_direct_missing_bundle_recipe_detail(
+                article_id=request.article_id,
+                requested_bundle_type_ids=bundle_type_ids,
+                missing_bundle_type_ids=missing_bundle_types,
+            ),
         )
 
     all_recipe_color_ids = sorted({color_id for colors in recipe_colors_by_bundle.values() for color_id in colors})
@@ -4805,7 +4858,11 @@ def build_production_order_proposal(
     if not sku_units:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No SKU units found for article and recipe colors",
+            detail=_build_direct_missing_sku_scope_detail(
+                article_id=request.article_id,
+                requested_bundle_type_ids=bundle_type_ids,
+                recipe_color_ids=all_recipe_color_ids,
+            ),
         )
 
     sku_by_color_size: dict[tuple[int, int], SkuUnit] = {}

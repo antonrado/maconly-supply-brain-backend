@@ -23,6 +23,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `POST /api/v1/planning/core/production-order/proposal`
   - `POST /api/v1/planning/core/production-order/proposal/from-wb`
   - Handles article settings, model-B deficit conversion, minima (fabric/elastic), alternatives, and explanation blocks.
+  - Direct production-order prerequisite failures are now operator-facing and structured: missing bundle recipes and missing SKU scope for recipe colors return machine-readable `400` payloads with `code`, `message`, affected IDs, and deterministic `next_steps` instead of plain strings.
   - `from-wb` adapter path auto-builds `bundle_daily_sales` and `bundle_stock` from WB-ingested tables (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
   - `from-wb` explanation now includes requested/effective `as_of_date` source trace, resolved sales window bounds, and adapter snapshots for `daily_sales_by_bundle`, `wb_stock_by_bundle`, and `wb_stock_updated_at_by_bundle` to make WB-derived input reconstruction auditable.
   - `from-wb` explanation now also includes WB data freshness snapshot (`freshness_status`, sales age, oldest stock age, stock age by bundle, and stale thresholds) to surface stale/no-data ingestion risk inline with the proposal.

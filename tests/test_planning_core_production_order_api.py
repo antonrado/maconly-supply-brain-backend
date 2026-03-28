@@ -7075,6 +7075,104 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
     }
 
 
+def test_production_order_proposal_rejects_without_bundle_recipe_with_structured_detail(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+
+    (
+        db_session.query(BundleRecipe)
+        .filter(
+            BundleRecipe.article_id == seeded["article"].id,
+            BundleRecipe.bundle_type_id == seeded["bundle_type"].id,
+        )
+        .delete(synchronize_session=False)
+    )
+    db_session.commit()
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_bundle_recipe",
+        "message": "No bundle recipe defined for the requested bundle types",
+        "article_id": seeded["article"].id,
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "missing_bundle_type_ids": [seeded["bundle_type"].id],
+        "next_steps": ["create_bundle_recipe_for_requested_bundle_type_ids"],
+    }
+
+
+def test_production_order_proposal_rejects_with_partial_missing_bundle_recipe_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    second_bundle_type = BundleType(code="PO-BT-2", name="PO-BT-2")
+    db_session.add(second_bundle_type)
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["bundle_daily_sales"].append({"bundle_type_id": second_bundle_type.id, "daily_sales": 10.0})
+    payload["bundle_stock"].append({"bundle_type_id": second_bundle_type.id, "wb_qty": 0, "local_qty": 0})
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "missing_bundle_recipe_bundle_types",
+        "message": "Bundle recipe is missing for some requested bundle types",
+        "article_id": seeded["article"].id,
+        "requested_bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
+        "missing_bundle_type_ids": [second_bundle_type.id],
+        "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
+    }
+
+
+def test_production_order_proposal_rejects_without_sku_scope_with_structured_detail(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+
+    sku_ids = [
+        row.id
+        for row in db_session.query(SkuUnit).filter(SkuUnit.article_id == seeded["article"].id).all()
+    ]
+    (
+        db_session.query(StockBalance)
+        .filter(StockBalance.sku_unit_id.in_(sku_ids))
+        .delete(synchronize_session=False)
+    )
+    (
+        db_session.query(SkuUnit)
+        .filter(SkuUnit.article_id == seeded["article"].id)
+        .delete(synchronize_session=False)
+    )
+    db_session.commit()
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_sku_units_for_recipe_colors",
+        "message": "No SKU units found for article and recipe colors",
+        "article_id": seeded["article"].id,
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "recipe_color_ids": [seeded["color_1"].id, seeded["color_2"].id],
+        "next_steps": ["create_sku_units_for_recipe_colors"],
+    }
+
+
 def test_production_order_proposal_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal",

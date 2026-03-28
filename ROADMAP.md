@@ -89,6 +89,7 @@
 - Production-order API contract now explicitly exposes physical stock scope and arrival-horizon projection at the top level (`physical_scope`, `arrival_projection`) and mirrors both blocks in explainability metadata; compact mode preserves these blocks as first-class diagnostics rather than dropping them into untyped tails.
 - Arrival-horizon projection is now part of the live decision guardrail on the production-order facade: `safe_cover_until_arrival` may deterministically force `wait`, while `shortage_before_arrival` remains an order-driving/escalation signal without introducing deep simulation.
 - Legacy planning paths are now explicitly marked low-fidelity/deprecated at the API surface: `/api/v1/planning/core/proposal` remains a stub with successor guidance, and `/api/v1/planning/order-proposal` remains legacy live logic with deprecation/fidelity headers instead of silent parity assumptions.
+- Direct production-order prerequisite failures should stay operator-facing and machine-readable: missing `bundle_recipe` coverage and missing SKU scope for recipe colors now return structured `400` details (`code/message/affected ids/next_steps`) and must not regress back to plain string errors.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.
