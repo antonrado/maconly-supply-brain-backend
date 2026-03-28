@@ -3591,6 +3591,23 @@ def _build_from_wb_no_mapping_detail(
     }
 
 
+def _build_from_wb_missing_requested_bundle_type_detail(
+    *,
+    article_id: int,
+    missing_bundle_type_ids: list[int],
+    requested_bundle_type_ids: list[int],
+) -> dict[str, object]:
+    return {
+        "code": "missing_wb_mapping_for_requested_bundle_types",
+        "message": "Missing WB mapping for requested bundle_type_id(s)",
+        "article_id": int(article_id),
+        "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
+        "missing_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in missing_bundle_type_ids],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "next_steps": build_from_wb_readiness_next_steps("no_wb_mapping"),
+    }
+
+
 def _build_from_wb_freshness_failure_detail(
     *,
     article_id: int,
@@ -3731,7 +3748,11 @@ def _resolve_bundle_type_ids_for_from_wb(
         if missing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Missing WB mapping for bundle_type_id(s): {missing}",
+                detail=_build_from_wb_missing_requested_bundle_type_detail(
+                    article_id=article_id,
+                    missing_bundle_type_ids=missing,
+                    requested_bundle_type_ids=requested,
+                ),
             )
         return requested
 

@@ -7060,9 +7060,19 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == (
-        f"Missing WB mapping for bundle_type_id(s): [{seeded['bundle_type'].id}]"
-    )
+    assert response.json()["detail"] == {
+        "code": "missing_wb_mapping_for_requested_bundle_types",
+        "message": "Missing WB mapping for requested bundle_type_id(s)",
+        "article_id": seeded["article"].id,
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "missing_bundle_type_ids": [seeded["bundle_type"].id],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "next_steps": [
+            "run_wb_article_mapping_discover_live",
+            "run_wb_article_bootstrap_live_if_article_missing",
+            "run_wb_article_mapping_sync_live",
+        ],
+    }
 
 
 def test_production_order_proposal_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
