@@ -870,7 +870,7 @@ def bootstrap_articles_from_wb_api(
     )
 
 
-def _build_from_wb_readiness_next_steps(blocker: str | None) -> list[str]:
+def build_from_wb_readiness_next_steps(blocker: str | None) -> list[str]:
     if blocker == "no_wb_mapping":
         return [
             "run_wb_article_mapping_discover_live",
@@ -952,7 +952,7 @@ def get_from_wb_readiness_summary(
                     missing_recipe_bundle_type_ids=[],
                     ready_for_from_wb=False,
                     blocker="no_wb_mapping",
-                    next_steps=_build_from_wb_readiness_next_steps("no_wb_mapping"),
+                    next_steps=build_from_wb_readiness_next_steps("no_wb_mapping"),
                 )
             ],
         )
@@ -1079,7 +1079,7 @@ def get_from_wb_readiness_summary(
                 missing_recipe_bundle_type_ids=missing_recipe_bundle_type_ids,
                 ready_for_from_wb=ready_for_from_wb,
                 blocker=blocker,
-                next_steps=_build_from_wb_readiness_next_steps(blocker),
+                next_steps=build_from_wb_readiness_next_steps(blocker),
             )
         )
 

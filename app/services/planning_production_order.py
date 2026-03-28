@@ -99,6 +99,7 @@ from app.services.planning_production_order_layer_proxy import (
     _EffectiveLayerProxySettings,
     _resolve_layer_proxy_settings,
 )
+from app.services.wb_ingest import build_from_wb_readiness_next_steps
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
@@ -3575,6 +3576,70 @@ def _build_from_wb_freshness_snapshot(
     )
 
 
+def _build_from_wb_no_mapping_detail(
+    *,
+    article_id: int,
+    requested_bundle_type_ids: list[int] | None,
+) -> dict[str, object]:
+    return {
+        "code": "no_wb_mapped_bundle_types",
+        "message": "No WB-mapped bundle types found for the article",
+        "article_id": int(article_id),
+        "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in (requested_bundle_type_ids or [])],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "next_steps": build_from_wb_readiness_next_steps("no_wb_mapping"),
+    }
+
+
+def _build_from_wb_freshness_failure_detail(
+    *,
+    article_id: int,
+    freshness_status: str,
+    freshness_mode: str,
+    sales_age_days: int | None,
+    stock_oldest_age_days: int | None,
+    sales_stale_after_days: int,
+    stock_stale_after_days: int,
+    threshold_source: dict[str, str],
+) -> dict[str, object]:
+    stale_sales = sales_age_days is not None and sales_age_days > sales_stale_after_days
+    stale_stock = stock_oldest_age_days is not None and stock_oldest_age_days > stock_stale_after_days
+
+    if freshness_status == "no_data":
+        next_steps = build_from_wb_readiness_next_steps("no_wb_sales_or_stock_data")
+    elif stale_sales and stale_stock:
+        next_steps = ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
+    elif stale_sales:
+        next_steps = ["run_wb_sales_daily_sync_live"]
+    elif stale_stock:
+        next_steps = ["run_wb_stock_sync_live"]
+    else:
+        next_steps = []
+
+    stale_components: list[str] = []
+    if stale_sales:
+        stale_components.append("sales")
+    if stale_stock:
+        stale_components.append("stock")
+
+    return {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": int(article_id),
+        "freshness_mode": freshness_mode,
+        "freshness_status": freshness_status,
+        "sales_age_days": sales_age_days,
+        "stock_oldest_age_days": stock_oldest_age_days,
+        "threshold_days": {
+            "sales": int(sales_stale_after_days),
+            "stock": int(stock_stale_after_days),
+        },
+        "threshold_source": dict(threshold_source),
+        "stale_components": stale_components,
+        "next_steps": next_steps,
+    }
+
+
 def _resolve_from_wb_freshness_thresholds(
     db: Session,
     article_id: int,
@@ -4063,7 +4128,10 @@ def build_production_order_proposal_from_wb(
     if not bundle_type_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No WB-mapped bundle types found for the article",
+            detail=_build_from_wb_no_mapping_detail(
+                article_id=request.article_id,
+                requested_bundle_type_ids=request.bundle_type_ids,
+            ),
         )
 
     daily_sales_by_bundle, effective_as_of_date = _load_wb_bundle_daily_sales(
@@ -4115,20 +4183,17 @@ def build_production_order_proposal_from_wb(
     )
 
     if request.freshness_mode == "strict" and freshness_status != "fresh":
-        sales_age_text = "none" if freshness_sales_age_days is None else str(freshness_sales_age_days)
-        stock_age_text = (
-            "none"
-            if freshness_stock_oldest_age_days is None
-            else str(freshness_stock_oldest_age_days)
-        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "WB data freshness check failed: "
-                f"status={freshness_status}, "
-                f"sales_age_days={sales_age_text}, "
-                f"stock_oldest_age_days={stock_age_text}, "
-                f"thresholds=sales:{sales_stale_after_days}|stock:{stock_stale_after_days}."
+            detail=_build_from_wb_freshness_failure_detail(
+                article_id=request.article_id,
+                freshness_status=freshness_status,
+                freshness_mode=request.freshness_mode,
+                sales_age_days=freshness_sales_age_days,
+                stock_oldest_age_days=freshness_stock_oldest_age_days,
+                sales_stale_after_days=sales_stale_after_days,
+                stock_stale_after_days=stock_stale_after_days,
+                threshold_source=freshness_threshold_source,
             ),
         )
 

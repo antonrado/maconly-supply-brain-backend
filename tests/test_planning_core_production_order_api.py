@@ -6786,8 +6786,15 @@ def test_production_order_proposal_from_wb_strict_rejects_stale_data(client, db_
     assert response.status_code == 400, response.text
 
     detail = response.json()["detail"]
-    assert "WB data freshness check failed" in detail
-    assert "status=stale" in detail
+    assert detail["code"] == "wb_data_freshness_failed"
+    assert detail["message"] == "WB data freshness check failed"
+    assert detail["article_id"] == seeded["article"].id
+    assert detail["freshness_mode"] == "strict"
+    assert detail["freshness_status"] == "stale"
+    assert detail["threshold_days"] == {"sales": 3, "stock": 2}
+    assert detail["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert detail["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
+    assert set(detail["stale_components"]) == {"sales", "stock"}
 
 
 def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_session):
@@ -6822,8 +6829,17 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
     assert response.status_code == 400, response.text
 
     detail = response.json()["detail"]
-    assert "WB data freshness check failed" in detail
-    assert "status=no_data" in detail
+    assert detail["code"] == "wb_data_freshness_failed"
+    assert detail["message"] == "WB data freshness check failed"
+    assert detail["article_id"] == seeded["article"].id
+    assert detail["freshness_mode"] == "strict"
+    assert detail["freshness_status"] == "no_data"
+    assert detail["sales_age_days"] is None
+    assert detail["stock_oldest_age_days"] is None
+    assert detail["threshold_days"] == {"sales": 3, "stock": 2}
+    assert detail["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert detail["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
+    assert detail["stale_components"] == []
 
 
 def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaults(client, db_session):
@@ -7016,7 +7032,18 @@ def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "No WB-mapped bundle types found for the article"
+    assert response.json()["detail"] == {
+        "code": "no_wb_mapped_bundle_types",
+        "message": "No WB-mapped bundle types found for the article",
+        "article_id": article.id,
+        "requested_bundle_type_ids": [],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "next_steps": [
+            "run_wb_article_mapping_discover_live",
+            "run_wb_article_bootstrap_live_if_article_missing",
+            "run_wb_article_mapping_sync_live",
+        ],
+    }
 
 
 def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_type(client, db_session):
