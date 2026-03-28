@@ -79,7 +79,32 @@ def _get_article_sku_index(db: Session, article_id: int) -> tuple[set[int], set[
     return color_ids, size_ids, sku_by_id, sku_by_color_size
 
 
-def _validate_size_weights(db: Session, payload: ProductionOrderAdminSettingsUpsertRequest) -> None:
+def _build_admin_settings_validation_detail(
+    *,
+    code: str,
+    message: str,
+    article_id: int,
+    field: str,
+    next_steps: list[str],
+    extra: dict[str, object] | None = None,
+) -> dict[str, object]:
+    detail = {
+        "code": code,
+        "message": message,
+        "article_id": int(article_id),
+        "field": field,
+        "next_steps": list(next_steps),
+    }
+    if extra:
+        detail.update(extra)
+    return detail
+
+
+def _validate_size_weights(
+    db: Session,
+    article_id: int,
+    payload: ProductionOrderAdminSettingsUpsertRequest,
+) -> None:
     if not payload.size_weights:
         return
 
@@ -93,7 +118,14 @@ def _validate_size_weights(db: Session, payload: ProductionOrderAdminSettingsUps
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown size_id(s): {missing}",
+            detail=_build_admin_settings_validation_detail(
+                code="unknown_size_ids",
+                message="Unknown size_id(s)",
+                article_id=article_id,
+                field="size_weights.size_id",
+                next_steps=["use_existing_size_ids"],
+                extra={"invalid_size_ids": missing},
+            ),
         )
 
 
@@ -117,15 +149,27 @@ def _validate_elastic_bindings(
     if missing_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown elastic_type_id(s): {missing_types}",
+            detail=_build_admin_settings_validation_detail(
+                code="unknown_elastic_type_ids",
+                message="Unknown elastic_type_id(s)",
+                article_id=article_id,
+                field="elastic_bindings.elastic_type_id",
+                next_steps=["use_existing_elastic_type_ids"],
+                extra={"invalid_elastic_type_ids": missing_types},
+            ),
         )
 
     for item in payload.elastic_bindings:
         if item.color_id is not None and item.color_id not in article_color_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"color_id={item.color_id} does not belong to article_id={article_id} SKU scope"
+                detail=_build_admin_settings_validation_detail(
+                    code="elastic_binding_color_out_of_article_scope",
+                    message="color_id does not belong to article SKU scope",
+                    article_id=article_id,
+                    field="elastic_bindings.color_id",
+                    next_steps=["use_article_color_ids_only"],
+                    extra={"invalid_color_id": int(item.color_id)},
                 ),
             )
 
@@ -134,22 +178,37 @@ def _validate_elastic_bindings(
             if sku is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"sku_unit_id={item.sku_unit_id} does not belong to article_id={article_id}"
+                    detail=_build_admin_settings_validation_detail(
+                        code="elastic_binding_sku_out_of_article_scope",
+                        message="sku_unit_id does not belong to article",
+                        article_id=article_id,
+                        field="elastic_bindings.sku_unit_id",
+                        next_steps=["use_article_sku_unit_ids_only"],
+                        extra={"invalid_sku_unit_id": int(item.sku_unit_id)},
                     ),
                 )
 
             if item.color_id is not None and sku.color_id != item.color_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"sku_unit_id={item.sku_unit_id} color mismatch with color_id={item.color_id}"
+                    detail=_build_admin_settings_validation_detail(
+                        code="elastic_binding_sku_color_mismatch",
+                        message="sku_unit_id color mismatch with color_id",
+                        article_id=article_id,
+                        field="elastic_bindings.color_id",
+                        next_steps=["align_elastic_binding_color_with_sku"],
+                        extra={
+                            "sku_unit_id": int(item.sku_unit_id),
+                            "requested_color_id": int(item.color_id),
+                            "sku_color_id": int(sku.color_id),
+                        },
                     ),
                 )
 
 
 def _validate_assorti_bundle_type_ids(
     db: Session,
+    article_id: int,
     payload: ProductionOrderAdminSettingsUpsertRequest,
 ) -> None:
     if not payload.assorti_bundle_type_ids:
@@ -165,7 +224,14 @@ def _validate_assorti_bundle_type_ids(
     if missing_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown assorti_bundle_type_id(s): {missing_ids}",
+            detail=_build_admin_settings_validation_detail(
+                code="unknown_assorti_bundle_type_ids",
+                message="Unknown assorti_bundle_type_id(s)",
+                article_id=article_id,
+                field="assorti_bundle_type_ids",
+                next_steps=["use_existing_bundle_type_ids"],
+                extra={"invalid_bundle_type_ids": missing_ids},
+            ),
         )
 
 
@@ -178,9 +244,16 @@ def _validate_in_flight_defaults(
         if (item.color_id, item.size_id) not in sku_by_color_size:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"In-flight default color_id={item.color_id}, size_id={item.size_id} "
-                    f"does not match any SKU for article_id={article_id}"
+                detail=_build_admin_settings_validation_detail(
+                    code="in_flight_default_out_of_article_sku_scope",
+                    message="In-flight default does not match any SKU for article",
+                    article_id=article_id,
+                    field="in_flight_supply_defaults",
+                    next_steps=["use_article_color_size_pairs_only"],
+                    extra={
+                        "color_id": int(item.color_id),
+                        "size_id": int(item.size_id),
+                    },
                 ),
             )
 
@@ -358,7 +431,7 @@ def upsert_production_order_admin_settings(
         article_id=article_id,
     )
 
-    _validate_size_weights(db=db, payload=payload)
+    _validate_size_weights(db=db, article_id=article_id, payload=payload)
     _validate_elastic_bindings(
         db=db,
         article_id=article_id,
@@ -371,7 +444,7 @@ def upsert_production_order_admin_settings(
         payload=payload,
         sku_by_color_size=sku_by_color_size,
     )
-    _validate_assorti_bundle_type_ids(db=db, payload=payload)
+    _validate_assorti_bundle_type_ids(db=db, article_id=article_id, payload=payload)
 
     db.query(ProductionOrderSizeWeightSetting).filter(
         ProductionOrderSizeWeightSetting.article_id == article_id
