@@ -118,6 +118,36 @@ def _build_wb_shipment_item_final_qty_exceeds_stock_detail(
     }
 
 
+def _build_invalid_wb_shipment_status_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "invalid_wb_shipment_status",
+        "message": f"Invalid status '{status_value}'",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "status": str(status_value),
+        "allowed_values": sorted(_ALLOWED_STATUSES),
+        "next_steps": ["use_supported_wb_shipment_status"],
+    }
+
+
+def _build_invalid_wb_shipment_status_transition_detail(
+    *,
+    shipment_id: int,
+    current_status: str,
+    target_status: str,
+) -> dict[str, object]:
+    return {
+        "code": "invalid_wb_shipment_status_transition",
+        "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "current_status": str(current_status),
+        "target_status": str(target_status),
+        "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
+        "next_steps": ["use_allowed_wb_shipment_status_transition"],
+    }
+
+
 def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
     return {
         "code": "wb_arrival_date_before_target_date",
@@ -510,14 +540,21 @@ def update_shipment(
         if new_status not in _ALLOWED_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status '{new_status}', must be one of: {sorted(_ALLOWED_STATUSES)}",
+                detail=_build_invalid_wb_shipment_status_detail(
+                    shipment_id=shipment_id,
+                    status_value=new_status,
+                ),
             )
         old_status = shipment.status
         allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(old_status, set())
         if new_status not in allowed_targets:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status transition from '{old_status}' to '{new_status}'",
+                detail=_build_invalid_wb_shipment_status_transition_detail(
+                    shipment_id=shipment_id,
+                    current_status=old_status,
+                    target_status=new_status,
+                ),
             )
         if new_status != old_status:
             shipment.status = new_status

@@ -432,7 +432,51 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
         json={"status": "weird"},
     )
     assert resp_bad.status_code == 400
-    assert "Invalid status" in resp_bad.json().get("detail", "")
+    assert resp_bad.json()["detail"] == {
+        "code": "invalid_wb_shipment_status",
+        "message": "Invalid status 'weird'",
+        "shipment_id": shipment.id,
+        "field": "status",
+        "status": "weird",
+        "allowed_values": ["approved", "cancelled", "draft", "shipped"],
+        "next_steps": ["use_supported_wb_shipment_status"],
+    }
+
+
+def test_update_shipment_returns_structured_400_for_invalid_status_transition(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="approved",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment=None,
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment.id}",
+        json={"status": "draft"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "invalid_wb_shipment_status_transition",
+        "message": "Invalid status transition from 'approved' to 'draft'",
+        "shipment_id": shipment.id,
+        "field": "status",
+        "current_status": "approved",
+        "target_status": "draft",
+        "allowed_target_statuses": ["approved", "cancelled", "shipped"],
+        "next_steps": ["use_allowed_wb_shipment_status_transition"],
+    }
 
 
 def test_update_shipment_returns_structured_400_for_final_status(client, db_session):
