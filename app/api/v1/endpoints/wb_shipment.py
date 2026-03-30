@@ -57,6 +57,28 @@ def _build_wb_shipment_item_not_found_detail(*, shipment_id: int, item_id: int) 
     }
 
 
+def _build_invalid_sort_by_detail(*, sort_by: str, allowed_fields: list[str]) -> dict[str, object]:
+    return {
+        "code": "invalid_sort_by",
+        "message": f"Invalid sort_by '{sort_by}'",
+        "field": "sort_by",
+        "sort_by": str(sort_by),
+        "allowed_values": list(allowed_fields),
+        "next_steps": ["use_supported_shipment_sort_by"],
+    }
+
+
+def _build_invalid_sort_dir_detail(*, sort_dir: str) -> dict[str, object]:
+    return {
+        "code": "invalid_sort_dir",
+        "message": "Invalid sort_dir",
+        "field": "sort_dir",
+        "sort_dir": str(sort_dir),
+        "allowed_values": ["asc", "desc"],
+        "next_steps": ["use_sort_dir_asc_or_desc"],
+    }
+
+
 def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
     return {
         "code": "wb_arrival_date_before_target_date",
@@ -144,7 +166,7 @@ def list_shipments(
     ),
 )
 def list_shipment_headers(
-    status: str | None = Query(None),
+    shipment_status: str | None = Query(None, alias="status"),
     article_id: int | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -165,14 +187,17 @@ def list_shipment_headers(
     if sort_by not in sortable_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sort_by '{sort_by}', must be one of: {sorted(sortable_fields.keys())}",
+            detail=_build_invalid_sort_by_detail(
+                sort_by=sort_by,
+                allowed_fields=sorted(sortable_fields.keys()),
+            ),
         )
 
     sort_dir_normalized = sort_dir.lower()
     if sort_dir_normalized not in {"asc", "desc"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid sort_dir, must be 'asc' or 'desc'",
+            detail=_build_invalid_sort_dir_detail(sort_dir=sort_dir),
         )
 
     sort_column = sortable_fields[sort_by]

@@ -830,8 +830,14 @@ def test_shipment_headers_invalid_sort_by(client):
 		params={"sort_by": "nonexistent_field"},
 	)
 	assert resp.status_code == 400
-	body = resp.json()
-	assert "Invalid sort_by" in body.get("detail", "")
+	assert resp.json()["detail"] == {
+		"code": "invalid_sort_by",
+		"message": "Invalid sort_by 'nonexistent_field'",
+		"field": "sort_by",
+		"sort_by": "nonexistent_field",
+		"allowed_values": ["created_at", "id", "status", "target_date", "updated_at", "wb_arrival_date"],
+		"next_steps": ["use_supported_shipment_sort_by"],
+	}
 
 
 def test_shipment_headers_invalid_sort_dir(client):
@@ -840,8 +846,14 @@ def test_shipment_headers_invalid_sort_dir(client):
 		params={"sort_dir": "sideways"},
 	)
 	assert resp.status_code == 400
-	body = resp.json()
-	assert "Invalid sort_dir" in body.get("detail", "")
+	assert resp.json()["detail"] == {
+		"code": "invalid_sort_dir",
+		"message": "Invalid sort_dir",
+		"field": "sort_dir",
+		"sort_dir": "sideways",
+		"allowed_values": ["asc", "desc"],
+		"next_steps": ["use_sort_dir_asc_or_desc"],
+	}
 
 
 def test_shipment_preset_no_history(client, db_session):
