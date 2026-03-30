@@ -136,6 +136,7 @@
 - [x] Planning config snapshot miss-cases are regression-locked as machine-readable operator contracts: missing article returns `article_not_found`, and missing article-level planning config returns `no_planning_settings_found`, both with `article_id` and deterministic `next_steps`.
 - [x] Read-only article endpoints `article-dashboard` and `article-bundle-snapshot` are regression-locked on the same machine-readable `article_not_found` contract (`article_id`, `next_steps`) instead of raw strings.
 - [x] Read-only `bundle-availability` lookup/prerequisite failures are regression-locked as machine-readable operator contracts: missing article, bundle type, warehouse, and missing recipe now return deterministic structured details instead of raw strings.
+- [x] Read-only `bundle-deficit` validation/lookup/prerequisite failures are regression-locked as machine-readable operator contracts: invalid `target_count`, missing article, bundle type, warehouse, and missing recipe now return deterministic structured details instead of raw strings.
 - [x] Scope guard preserved while implementing economics: no ML, no solver, no multi-warehouse, no non-economics feature expansion.
 - [x] Any R5 modularization remains narrow and facade-preserving: extracted helpers may move to dedicated service modules (currently economics + compact explainability + assorti classification + layer-proxy settings), but `planning_production_order.py` keeps the external service surface/compatibility imports unchanged and regressions remain green.
 
