@@ -11,6 +11,17 @@ from app.schemas import (
 from app.services.wb_replenishment import compute_replenishment
 
 
+def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
+    return {
+        "code": "wb_arrival_date_before_target_date",
+        "message": "wb_arrival_date cannot be earlier than target_date",
+        "field": "wb_arrival_date",
+        "target_date": str(target_date),
+        "wb_arrival_date": str(wb_arrival_date),
+        "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
+    }
+
+
 router = APIRouter()
 
 
@@ -22,7 +33,10 @@ def wb_replenishment_proposal(
     if payload.wb_arrival_date < payload.target_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="wb_arrival_date cannot be earlier than target_date",
+            detail=_build_invalid_wb_arrival_date_detail(
+                target_date=payload.target_date,
+                wb_arrival_date=payload.wb_arrival_date,
+            ),
         )
 
     items = compute_replenishment(db=db, payload=payload)
