@@ -193,3 +193,17 @@ def test_filtering_by_article_ids_and_is_active(client, db_session):
 
     ids_filtered = {it["article_id"] for it in body_filtered["items"]}
     assert article_inactive.id in ids_filtered
+
+
+def test_filtering_by_article_ids_skips_unknown_article_ids(client, db_session):
+    article_active, _color_active = _setup_basic_article_with_deficit(db_session)
+
+    response = client.get(
+        "/api/v1/planning/order-explanation-portfolio",
+        params={"article_ids": [article_active.id, 999999999]},
+    )
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    ids = {item["article_id"] for item in body["items"]}
+    assert ids == {article_active.id}

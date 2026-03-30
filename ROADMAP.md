@@ -99,6 +99,7 @@
 - Read-only article endpoints should follow the same pattern: `article-dashboard` and `article-bundle-snapshot` now return structured `article_not_found` detail (`code/message/article_id/next_steps`) instead of raw strings.
 - Read-only bundle availability should follow the same operator contract discipline: missing article, bundle type, warehouse, and missing recipe on `bundle-availability` now return structured details (`article_not_found`, `bundle_type_not_found`, `warehouse_not_found`, `no_bundle_recipe`) instead of raw strings.
 - Read-only bundle deficit should match the same contract discipline: invalid `target_count`, missing article, bundle type, warehouse, and missing recipe on `bundle-deficit` now return structured details (`invalid_target_count`, `article_not_found`, `bundle_type_not_found`, `warehouse_not_found`, `no_bundle_recipe`) instead of raw strings.
+- Read-only order explanation should preserve the same machine-readable missing-article contract too: filtered `order-explanation-portfolio` requests now handle missing articles via structured `article_not_found` detail internally while keeping the existing skip-missing response semantics.
 
 ### 2.5 Layer 5 - Intervention signals (in progress)
 - Deterministic unavoidable-stockout flags are wired from Layer 4 aggressive risk + risk-level context.

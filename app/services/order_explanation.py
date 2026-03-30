@@ -25,12 +25,21 @@ from app.services.demand_engine import compute_demand
 from app.services.order_proposal import generate_order_proposal
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def _resolve_article(db: Session, article_id: int) -> Article:
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Article not found",
+            detail=_build_article_not_found_detail(article_id=article_id),
         )
     return article
 
@@ -298,7 +307,9 @@ def build_order_explanation_portfolio(
         try:
             explanation = build_order_explanation_for_article(db=db, article_id=aid)
         except HTTPException as exc:  # type: ignore[py310-no-except-type-comments]
-            if exc.status_code == status.HTTP_404_NOT_FOUND and exc.detail == "Article not found":
+            if exc.status_code == status.HTTP_404_NOT_FOUND and exc.detail == _build_article_not_found_detail(
+                article_id=aid,
+            ):
                 continue
             raise
 
