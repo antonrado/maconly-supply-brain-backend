@@ -475,6 +475,15 @@ def get_monitoring_timeseries(
     return MonitoringTimeseriesResponse(items=series)
 
 
+def _build_alert_rule_not_found_detail(*, rule_id: int) -> dict[str, object]:
+    return {
+        "code": "alert_rule_not_found",
+        "message": "Alert rule not found",
+        "rule_id": int(rule_id),
+        "next_steps": ["use_existing_alert_rule_id"],
+    }
+
+
 @router.get(
     "/monitoring/risk-focus",
     response_model=MonitoringTopRiskResponse,
@@ -574,7 +583,7 @@ def update_alert_rule_api(
     if rule is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alert rule not found",
+            detail=_build_alert_rule_not_found_detail(rule_id=rule_id),
         )
     return AlertRuleSchema.from_orm(rule)
 
@@ -591,7 +600,7 @@ def delete_alert_rule_api(
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alert rule not found",
+            detail=_build_alert_rule_not_found_detail(rule_id=rule_id),
         )
     return None
 

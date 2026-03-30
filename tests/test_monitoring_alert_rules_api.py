@@ -159,8 +159,20 @@ def test_delete_alert_rule_and_404(client, db_session):
         json={"threshold_value": 5},
     )
     assert resp_patch.status_code == 404
+    assert resp_patch.json()["detail"] == {
+        "code": "alert_rule_not_found",
+        "message": "Alert rule not found",
+        "rule_id": rule.id,
+        "next_steps": ["use_existing_alert_rule_id"],
+    }
 
     resp_delete = client.delete(
         f"/api/v1/planning/monitoring/alert-rules/{rule.id}",
     )
     assert resp_delete.status_code == 404
+    assert resp_delete.json()["detail"] == {
+        "code": "alert_rule_not_found",
+        "message": "Alert rule not found",
+        "rule_id": rule.id,
+        "next_steps": ["use_existing_alert_rule_id"],
+    }
