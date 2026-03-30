@@ -15,6 +15,26 @@ from app.schemas.stock_balance import (
 router = APIRouter()
 
 
+def _build_stock_balance_not_found_detail(*, stock_balance_id: int) -> dict[str, object]:
+    return {
+        "code": "stock_balance_not_found",
+        "message": "StockBalance not found",
+        "stock_balance_id": int(stock_balance_id),
+        "next_steps": ["use_existing_stock_balance_id"],
+    }
+
+
+def _build_stock_balance_pair_already_exists_detail(*, sku_unit_id: int, warehouse_id: int) -> dict[str, object]:
+    return {
+        "code": "stock_balance_pair_already_exists",
+        "message": "StockBalance for this sku_unit and warehouse already exists",
+        "field": "sku_unit_id,warehouse_id",
+        "sku_unit_id": int(sku_unit_id),
+        "warehouse_id": int(warehouse_id),
+        "next_steps": ["use_unique_stock_balance_sku_unit_warehouse_pair"],
+    }
+
+
 def _ensure_unique_pair(
     db: Session,
     sku_unit_id: int,
@@ -31,7 +51,10 @@ def _ensure_unique_pair(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="StockBalance for this sku_unit and warehouse already exists",
+            detail=_build_stock_balance_pair_already_exists_detail(
+                sku_unit_id=sku_unit_id,
+                warehouse_id=warehouse_id,
+            ),
         )
 
 
@@ -46,7 +69,8 @@ def get_stock_balance(id: int, db: Session = Depends(get_db)):
     item = db.query(StockBalance).filter(StockBalance.id == id).first()
     if item is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="StockBalance not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_stock_balance_not_found_detail(stock_balance_id=id),
         )
     return item
 
@@ -76,7 +100,8 @@ def update_stock_balance(
     item = db.query(StockBalance).filter(StockBalance.id == id).first()
     if item is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="StockBalance not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_stock_balance_not_found_detail(stock_balance_id=id),
         )
 
     _ensure_unique_pair(db, data.sku_unit_id, data.warehouse_id, current_id=id)
@@ -100,7 +125,8 @@ def partial_update_stock_balance(
     item = db.query(StockBalance).filter(StockBalance.id == id).first()
     if item is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="StockBalance not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_stock_balance_not_found_detail(stock_balance_id=id),
         )
 
     update_data = data.dict(exclude_unset=True)
@@ -127,7 +153,8 @@ def delete_stock_balance(id: int, db: Session = Depends(get_db)):
     item = db.query(StockBalance).filter(StockBalance.id == id).first()
     if item is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="StockBalance not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_stock_balance_not_found_detail(stock_balance_id=id),
         )
 
     db.delete(item)
