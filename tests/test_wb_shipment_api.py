@@ -435,6 +435,39 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
     assert "Invalid status" in resp_bad.json().get("detail", "")
 
 
+def test_update_shipment_returns_structured_400_for_final_status(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="shipped",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment=None,
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment.id}",
+        json={"comment": "blocked"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_final_status_locked",
+        "message": "Cannot modify a shipment in final status",
+        "shipment_id": shipment.id,
+        "status": "shipped",
+        "next_steps": ["use_draft_or_approved_shipment_for_updates"],
+    }
+
+
 def test_shipment_item_editing_respects_status(client, db_session):
     """PATCH items allowed only in draft and updates shipment.updated_at."""
     # Create draft shipment via API to get real items
@@ -459,7 +492,7 @@ def test_shipment_item_editing_respects_status(client, db_session):
     item_id = shipment["items"][0]["id"]
     old_updated_at = shipment["updated_at"]
 
-    patch_payload = {"final_qty": 999, "explanation": "Manual adjustment"}
+    patch_payload = {"final_qty": 50, "explanation": "Manual adjustment"}
 
     # Successful patch in draft status
     resp_patch = client.patch(
@@ -469,7 +502,7 @@ def test_shipment_item_editing_respects_status(client, db_session):
     assert resp_patch.status_code == 200
     shipment_after = resp_patch.json()
     patched_item = next(i for i in shipment_after["items"] if i["id"] == item_id)
-    assert patched_item["final_qty"] == 999
+    assert patched_item["final_qty"] == 50
     assert patched_item["explanation"] == "Manual adjustment"
     assert shipment_after["updated_at"] != old_updated_at
 
@@ -513,9 +546,50 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_forbidden.status_code == 400
-    assert "Cannot modify items of a non-draft shipment" in resp_forbidden.json().get(
-        "detail", ""
+    assert resp_forbidden.json()["detail"] == {
+        "code": "wb_shipment_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft shipment",
+        "shipment_id": shipment_id,
+        "status": "approved",
+        "next_steps": ["use_draft_shipment_for_item_updates"],
+    }
+
+
+def test_update_shipment_item_returns_structured_400_when_final_qty_exceeds_stock(client, db_session):
+    article, target_date = _setup_article_for_replenishment(
+        db_session, code="SHIP-API-STOCK-LIMIT"
     )
+
+    payload = {
+        "target_date": target_date.isoformat(),
+        "wb_arrival_date": target_date.isoformat(),
+        "comment": "stock limit",
+    }
+
+    resp_create = client.post(
+        "/api/v1/wb/manager/shipment/from-proposal",
+        json=payload,
+    )
+    assert resp_create.status_code == 201, resp_create.text
+    shipment = resp_create.json()
+    shipment_id = shipment["id"]
+    item = shipment["items"][0]
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment_id}/items/{item['id']}",
+        json={"final_qty": int(item["nsk_stock_available"]) + 1},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_item_final_qty_exceeds_stock",
+        "message": "final_qty exceeds available NSC stock",
+        "shipment_id": shipment_id,
+        "item_id": item["id"],
+        "final_qty": int(item["nsk_stock_available"]) + 1,
+        "nsk_stock_available": int(item["nsk_stock_available"]),
+        "field": "final_qty",
+        "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
+    }
 
 
 def test_shipment_headers_basic_aggregates(client, db_session):

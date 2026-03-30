@@ -79,6 +79,45 @@ def _build_invalid_sort_dir_detail(*, sort_dir: str) -> dict[str, object]:
     }
 
 
+def _build_wb_shipment_final_status_locked_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_final_status_locked",
+        "message": "Cannot modify a shipment in final status",
+        "shipment_id": int(shipment_id),
+        "status": str(status_value),
+        "next_steps": ["use_draft_or_approved_shipment_for_updates"],
+    }
+
+
+def _build_wb_shipment_item_non_draft_locked_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft shipment",
+        "shipment_id": int(shipment_id),
+        "status": str(status_value),
+        "next_steps": ["use_draft_shipment_for_item_updates"],
+    }
+
+
+def _build_wb_shipment_item_final_qty_exceeds_stock_detail(
+    *,
+    shipment_id: int,
+    item_id: int,
+    final_qty: int,
+    nsk_stock_available: int,
+) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_final_qty_exceeds_stock",
+        "message": "final_qty exceeds available NSC stock",
+        "shipment_id": int(shipment_id),
+        "item_id": int(item_id),
+        "final_qty": int(final_qty),
+        "nsk_stock_available": int(nsk_stock_available),
+        "field": "final_qty",
+        "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
+    }
+
+
 def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
     return {
         "code": "wb_arrival_date_before_target_date",
@@ -457,7 +496,10 @@ def update_shipment(
         # Final states: no further modifications allowed
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify a shipment in final status",
+            detail=_build_wb_shipment_final_status_locked_detail(
+                shipment_id=shipment_id,
+                status_value=shipment.status,
+            ),
         )
 
     data = payload.dict(exclude_unset=True)
@@ -517,7 +559,10 @@ def update_shipment_item(
     if shipment.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify items of a non-draft shipment",
+            detail=_build_wb_shipment_item_non_draft_locked_detail(
+                shipment_id=shipment_id,
+                status_value=shipment.status,
+            ),
         )
 
     item = (
@@ -543,7 +588,12 @@ def update_shipment_item(
         if new_final_qty > item.nsk_stock_available:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="final_qty exceeds available NSC stock",
+                detail=_build_wb_shipment_item_final_qty_exceeds_stock_detail(
+                    shipment_id=shipment_id,
+                    item_id=item_id,
+                    final_qty=new_final_qty,
+                    nsk_stock_available=item.nsk_stock_available,
+                ),
             )
         item.final_qty = new_final_qty
     if "explanation" in data:
