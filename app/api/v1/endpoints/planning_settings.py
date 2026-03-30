@@ -13,6 +13,25 @@ from app.schemas.planning_settings import (
 router = APIRouter()
 
 
+def _build_planning_settings_not_found_detail(*, planning_settings_id: int) -> dict[str, object]:
+    return {
+        "code": "planning_settings_not_found",
+        "message": "PlanningSettings not found",
+        "planning_settings_id": int(planning_settings_id),
+        "next_steps": ["use_existing_planning_settings_id"],
+    }
+
+
+def _build_planning_settings_article_already_exists_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "planning_settings_article_already_exists",
+        "message": "PlanningSettings for this article already exists",
+        "field": "article_id",
+        "article_id": int(article_id),
+        "next_steps": ["use_article_without_existing_planning_settings"],
+    }
+
+
 @router.get("/", response_model=list[PlanningSettingsRead])
 def list_planning_settings(db: Session = Depends(get_db)):
     items = db.query(PlanningSettings).all()
@@ -25,7 +44,7 @@ def get_planning_settings(id: int, db: Session = Depends(get_db)):
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PlanningSettings not found",
+            detail=_build_planning_settings_not_found_detail(planning_settings_id=id),
         )
     return item
 
@@ -43,7 +62,7 @@ def create_planning_settings(
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="PlanningSettings for this article already exists",
+            detail=_build_planning_settings_article_already_exists_detail(article_id=data.article_id),
         )
 
     item = PlanningSettings(
@@ -72,7 +91,7 @@ def update_planning_settings(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PlanningSettings not found",
+            detail=_build_planning_settings_not_found_detail(planning_settings_id=id),
         )
 
     if data.article_id != item.article_id:
@@ -87,7 +106,7 @@ def update_planning_settings(
         if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="PlanningSettings for this article already exists",
+                detail=_build_planning_settings_article_already_exists_detail(article_id=data.article_id),
             )
 
     item.article_id = data.article_id
@@ -113,7 +132,7 @@ def partial_update_planning_settings(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PlanningSettings not found",
+            detail=_build_planning_settings_not_found_detail(planning_settings_id=id),
         )
 
     update_data = data.dict(exclude_unset=True)
@@ -131,7 +150,7 @@ def partial_update_planning_settings(
         if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="PlanningSettings for this article already exists",
+                detail=_build_planning_settings_article_already_exists_detail(article_id=new_article_id),
             )
         item.article_id = new_article_id
 
@@ -158,7 +177,7 @@ def delete_planning_settings(id: int, db: Session = Depends(get_db)):
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="PlanningSettings not found",
+            detail=_build_planning_settings_not_found_detail(planning_settings_id=id),
         )
 
     db.delete(item)
