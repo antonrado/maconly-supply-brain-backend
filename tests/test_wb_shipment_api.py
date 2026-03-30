@@ -125,6 +125,33 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
     assert len(items_db) == len(items)
 
 
+def test_create_shipment_from_proposal_invalid_dates(client):
+    payload = {
+        "target_date": "2025-01-31",
+        "wb_arrival_date": "2025-01-01",
+        "target_coverage_days": 30,
+        "min_coverage_days": 7,
+        "replenishment_strategy": "normal",
+        "zero_sales_policy": "ignore",
+        "max_coverage_days_after": 60,
+        "comment": "invalid dates",
+    }
+
+    resp = client.post(
+        "/api/v1/wb/manager/shipment/from-proposal",
+        json=payload,
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"] == {
+        "code": "wb_arrival_date_before_target_date",
+        "message": "wb_arrival_date cannot be earlier than target_date",
+        "field": "wb_arrival_date",
+        "target_date": "2025-01-31",
+        "wb_arrival_date": "2025-01-01",
+        "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
+    }
+
+
 def test_shipment_list_filters_by_status_and_article(client, db_session):
     """GET /wb/manager/shipment/ supports filters by status, article_id and date range."""
     # Prepare two articles and shipments
