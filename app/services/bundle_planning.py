@@ -15,6 +15,43 @@ from app.models.models import (
 from app.schemas.planning import BundleAvailabilityPerSize, BundleAvailabilityResponse
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
+def _build_bundle_type_not_found_detail(*, bundle_type_id: int) -> dict[str, object]:
+    return {
+        "code": "bundle_type_not_found",
+        "message": "BundleType not found",
+        "bundle_type_id": int(bundle_type_id),
+        "next_steps": ["use_existing_bundle_type_id"],
+    }
+
+
+def _build_warehouse_not_found_detail(*, warehouse_id: int) -> dict[str, object]:
+    return {
+        "code": "warehouse_not_found",
+        "message": "Warehouse not found",
+        "warehouse_id": int(warehouse_id),
+        "next_steps": ["use_existing_warehouse_id"],
+    }
+
+
+def _build_no_bundle_recipe_detail(*, article_id: int, bundle_type_id: int) -> dict[str, object]:
+    return {
+        "code": "no_bundle_recipe",
+        "message": "No bundle recipe defined for this article and bundle type",
+        "article_id": int(article_id),
+        "bundle_type_id": int(bundle_type_id),
+        "next_steps": ["create_bundle_recipe_for_bundle_type"],
+    }
+
+
 def calculate_bundle_availability(
     db: Session,
     article_id: int,
@@ -23,15 +60,24 @@ def calculate_bundle_availability(
 ) -> BundleAvailabilityResponse:
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=article_id),
+        )
 
     bundle_type = db.query(BundleType).filter(BundleType.id == bundle_type_id).first()
     if bundle_type is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BundleType not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_bundle_type_not_found_detail(bundle_type_id=bundle_type_id),
+        )
 
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if warehouse is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warehouse not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_warehouse_not_found_detail(warehouse_id=warehouse_id),
+        )
 
     recipes = (
         db.query(BundleRecipe)
@@ -45,7 +91,10 @@ def calculate_bundle_availability(
     if not recipes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No bundle recipe defined for this article and bundle type",
+            detail=_build_no_bundle_recipe_detail(
+                article_id=article_id,
+                bundle_type_id=bundle_type_id,
+            ),
         )
 
     recipe_color_ids = {r.color_id for r in recipes}
