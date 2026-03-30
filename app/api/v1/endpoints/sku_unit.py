@@ -9,6 +9,32 @@ from app.schemas.sku_unit import SkuUnitCreate, SkuUnitRead, SkuUnitUpdate
 router = APIRouter()
 
 
+def _build_sku_unit_not_found_detail(*, sku_unit_id: int) -> dict[str, object]:
+    return {
+        "code": "sku_unit_not_found",
+        "message": "SkuUnit not found",
+        "sku_unit_id": int(sku_unit_id),
+        "next_steps": ["use_existing_sku_unit_id"],
+    }
+
+
+def _build_sku_unit_combination_already_exists_detail(
+    *,
+    article_id: int,
+    color_id: int,
+    size_id: int,
+) -> dict[str, object]:
+    return {
+        "code": "sku_unit_combination_already_exists",
+        "message": "SkuUnit combination already exists",
+        "field": "article_id,color_id,size_id",
+        "article_id": int(article_id),
+        "color_id": int(color_id),
+        "size_id": int(size_id),
+        "next_steps": ["use_unique_sku_unit_article_color_size_combination"],
+    }
+
+
 def _ensure_unique_combination(db: Session, article_id: int, color_id: int, size_id: int, current_id: int | None = None) -> None:
     query = db.query(SkuUnit).filter(
         SkuUnit.article_id == article_id,
@@ -19,7 +45,14 @@ def _ensure_unique_combination(db: Session, article_id: int, color_id: int, size
         query = query.filter(SkuUnit.id != current_id)
     existing = query.first()
     if existing is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="SkuUnit combination already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_build_sku_unit_combination_already_exists_detail(
+                article_id=article_id,
+                color_id=color_id,
+                size_id=size_id,
+            ),
+        )
 
 
 @router.get("/", response_model=list[SkuUnitRead])
@@ -32,7 +65,10 @@ def list_sku_units(db: Session = Depends(get_db)):
 def get_sku_unit(id: int, db: Session = Depends(get_db)):
     item = db.query(SkuUnit).filter(SkuUnit.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SkuUnit not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_sku_unit_not_found_detail(sku_unit_id=id),
+        )
     return item
 
 
@@ -55,7 +91,10 @@ def create_sku_unit(data: SkuUnitCreate, db: Session = Depends(get_db)):
 def update_sku_unit(id: int, data: SkuUnitCreate, db: Session = Depends(get_db)):
     item = db.query(SkuUnit).filter(SkuUnit.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SkuUnit not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_sku_unit_not_found_detail(sku_unit_id=id),
+        )
 
     _ensure_unique_combination(db, data.article_id, data.color_id, data.size_id, current_id=id)
 
@@ -71,7 +110,10 @@ def update_sku_unit(id: int, data: SkuUnitCreate, db: Session = Depends(get_db))
 def partial_update_sku_unit(id: int, data: SkuUnitUpdate, db: Session = Depends(get_db)):
     item = db.query(SkuUnit).filter(SkuUnit.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SkuUnit not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_sku_unit_not_found_detail(sku_unit_id=id),
+        )
 
     update_data = data.dict(exclude_unset=True)
 
@@ -93,7 +135,10 @@ def partial_update_sku_unit(id: int, data: SkuUnitUpdate, db: Session = Depends(
 def delete_sku_unit(id: int, db: Session = Depends(get_db)):
     item = db.query(SkuUnit).filter(SkuUnit.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SkuUnit not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_sku_unit_not_found_detail(sku_unit_id=id),
+        )
 
     db.delete(item)
     db.commit()
