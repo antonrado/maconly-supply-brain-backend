@@ -262,6 +262,67 @@ def test_get_shipment_by_id(client, db_session):
 
     resp_404 = client.get("/api/v1/wb/manager/shipment/999999")
     assert resp_404.status_code == 404
+    assert resp_404.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_update_shipment_returns_structured_404_for_unknown_shipment(client):
+    response = client.patch(
+        "/api/v1/wb/manager/shipment/999999",
+        json={"comment": "missing shipment"},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_get_shipment_item_summary_returns_structured_404_for_unknown_shipment(client):
+    response = client.get("/api/v1/wb/manager/shipment/999999/items/1/summary")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_get_shipment_item_summary_returns_structured_404_for_unknown_item(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="draft",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment="summary missing item",
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/wb/manager/shipment/{shipment.id}/items/999999/summary")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": shipment.id,
+        "item_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
 
 
 def test_shipment_status_transitions_and_final_states(client, db_session):
@@ -418,6 +479,12 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_order_404.status_code == 404
+    assert resp_order_404.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
 
     # 404 for non-existing item in existing draft shipment
     resp_item_404 = client.patch(
@@ -425,6 +492,13 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_item_404.status_code == 404
+    assert resp_item_404.json()["detail"] == {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": shipment_id,
+        "item_id": 999999,
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
 
     # Change status to approved
     resp_status = client.patch(

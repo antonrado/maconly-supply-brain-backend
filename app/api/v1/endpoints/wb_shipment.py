@@ -38,6 +38,25 @@ _ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+def _build_wb_shipment_not_found_detail(*, shipment_id: int) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": int(shipment_id),
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def _build_wb_shipment_item_not_found_detail(*, shipment_id: int, item_id: int) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": int(shipment_id),
+        "item_id": int(item_id),
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
+
+
 def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
     return {
         "code": "wb_arrival_date_before_target_date",
@@ -272,7 +291,7 @@ def get_shipment_aggregates(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     return WbShipmentAggregates(
@@ -324,7 +343,7 @@ def get_shipment(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
     return shipment
 
@@ -348,7 +367,7 @@ def get_shipment_item_summary(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     item = (
@@ -362,7 +381,10 @@ def get_shipment_item_summary(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipmentItem not found",
+            detail=_build_wb_shipment_item_not_found_detail(
+                shipment_id=shipment_id,
+                item_id=item_id,
+            ),
         )
 
     return WbShipmentItemSummary(
@@ -403,7 +425,7 @@ def update_shipment(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     if shipment.status in {"shipped", "cancelled"}:
@@ -464,7 +486,7 @@ def update_shipment_item(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     if shipment.status != "draft":
@@ -484,7 +506,10 @@ def update_shipment_item(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipmentItem not found",
+            detail=_build_wb_shipment_item_not_found_detail(
+                shipment_id=shipment_id,
+                item_id=item_id,
+            ),
         )
 
     data = payload.dict(exclude_unset=True)
