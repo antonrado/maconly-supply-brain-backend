@@ -147,6 +147,12 @@ def test_get_purchase_order_by_id(client, db_session):
 
     resp_404 = client.get("/api/v1/purchase-order/999999")
     assert resp_404.status_code == 404
+    assert resp_404.json()["detail"] == {
+        "code": "purchase_order_not_found",
+        "message": "PurchaseOrder not found",
+        "order_id": 999999,
+        "next_steps": ["use_existing_purchase_order_id"],
+    }
 
 
 def test_patch_purchase_order_status_and_fields(client, db_session):
@@ -358,6 +364,12 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_order_404.status_code == 404
+    assert resp_order_404.json()["detail"] == {
+        "code": "purchase_order_not_found",
+        "message": "PurchaseOrder not found",
+        "order_id": 999999,
+        "next_steps": ["use_existing_purchase_order_id"],
+    }
 
     # 404 for non-existing item in existing draft order
     resp_item_404 = client.patch(
@@ -365,6 +377,13 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_item_404.status_code == 404
+    assert resp_item_404.json()["detail"] == {
+        "code": "purchase_order_item_not_found",
+        "message": "PurchaseOrderItem not found",
+        "order_id": order_id,
+        "item_id": 999999,
+        "next_steps": ["use_existing_purchase_order_item_id"],
+    }
 
     # Change status to approved
     resp_status = client.patch(
@@ -378,6 +397,10 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_forbidden.status_code == 400
-    assert "Cannot modify items of a non-draft purchase order" in resp_forbidden.json().get(
-        "detail", ""
-    )
+    assert resp_forbidden.json()["detail"] == {
+        "code": "purchase_order_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft purchase order",
+        "order_id": order_id,
+        "status": "approved",
+        "next_steps": ["use_draft_purchase_order_for_item_updates"],
+    }
