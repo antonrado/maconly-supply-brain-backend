@@ -463,7 +463,12 @@ def get_monitoring_timeseries(
     if not metrics:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="metrics query parameter is required",
+            detail={
+                "code": "missing_metrics_query_parameter",
+                "message": "metrics query parameter is required",
+                "field": "metrics",
+                "next_steps": ["provide_at_least_one_metrics_query_parameter"],
+            },
         )
 
     series = build_monitoring_timeseries(db=db, metrics=metrics, limit=limit)

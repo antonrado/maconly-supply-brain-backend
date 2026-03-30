@@ -103,4 +103,9 @@ def test_monitoring_timeseries_missing_metrics_param(client, db_session):  # noq
     resp = client.get("/api/v1/planning/monitoring/timeseries")
     assert resp.status_code == 400, resp.text
     body = resp.json()
-    assert body["detail"] == "metrics query parameter is required"
+    assert body["detail"] == {
+        "code": "missing_metrics_query_parameter",
+        "message": "metrics query parameter is required",
+        "field": "metrics",
+        "next_steps": ["provide_at_least_one_metrics_query_parameter"],
+    }
