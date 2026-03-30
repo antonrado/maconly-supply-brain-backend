@@ -54,13 +54,45 @@ def get_purchase_order(order_id: int, db: Session = Depends(get_db)) -> Purchase
     return po
 
 
-_ALLOWED_STATUSES = {"draft", "approved", "cancelled"}
+_ALLOWED_STATUSES = {"draft", "approved", "cancelled", "ordered", "received"}
 
 _ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"draft", "approved", "cancelled"},
-    "approved": {"approved", "cancelled"},
+    "approved": {"approved", "ordered", "cancelled"},
+    "ordered": {"ordered", "received", "cancelled"},
+    "received": {"received"},
     "cancelled": {"cancelled"},
 }
+
+
+def _build_invalid_purchase_order_status_detail(*, order_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "invalid_purchase_order_status",
+        "message": f"Invalid status '{status_value}'",
+        "order_id": int(order_id),
+        "field": "status",
+        "status": str(status_value),
+        "allowed_values": sorted(_ALLOWED_STATUSES),
+        "next_steps": ["use_supported_purchase_order_status"],
+    }
+
+
+def _build_invalid_purchase_order_status_transition_detail(
+    *,
+    order_id: int,
+    current_status: str,
+    target_status: str,
+) -> dict[str, object]:
+    return {
+        "code": "invalid_purchase_order_status_transition",
+        "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
+        "order_id": int(order_id),
+        "field": "status",
+        "current_status": str(current_status),
+        "target_status": str(target_status),
+        "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
 
 @router.patch("/{order_id}", response_model=PurchaseOrderRead)
@@ -82,14 +114,21 @@ def update_purchase_order(
         if new_status not in _ALLOWED_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status '{new_status}', must be one of: {sorted(_ALLOWED_STATUSES)}",
+                detail=_build_invalid_purchase_order_status_detail(
+                    order_id=order_id,
+                    status_value=new_status,
+                ),
             )
         old_status = po.status
         allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(old_status, set())
         if new_status not in allowed_targets:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status transition from '{old_status}' to '{new_status}'",
+                detail=_build_invalid_purchase_order_status_transition_detail(
+                    order_id=order_id,
+                    current_status=old_status,
+                    target_status=new_status,
+                ),
             )
         if new_status != old_status:
             po.status = new_status

@@ -180,7 +180,15 @@ def test_patch_purchase_order_status_and_fields(client, db_session):
         json={"status": "something-weird"},
     )
     assert resp_bad.status_code == 400
-    assert "Invalid status" in resp_bad.json().get("detail", "")
+    assert resp_bad.json()["detail"] == {
+        "code": "invalid_purchase_order_status",
+        "message": "Invalid status 'something-weird'",
+        "order_id": po.id,
+        "field": "status",
+        "status": "something-weird",
+        "allowed_values": ["approved", "cancelled", "draft", "ordered", "received"],
+        "next_steps": ["use_supported_purchase_order_status"],
+    }
 
 
 def test_allowed_status_transitions(client, db_session):
@@ -239,21 +247,48 @@ def test_invalid_status_transitions(client, db_session):
         f"/api/v1/purchase-order/{po_approved.id}", json={"status": "draft"}
     )
     assert resp_back_to_draft.status_code == 400
-    assert "Invalid status transition" in resp_back_to_draft.json().get("detail", "")
+    assert resp_back_to_draft.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'approved' to 'draft'",
+        "order_id": po_approved.id,
+        "field": "status",
+        "current_status": "approved",
+        "target_status": "draft",
+        "allowed_target_statuses": ["approved", "cancelled", "ordered"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
     # cancelled -> approved is forbidden
     resp_cancelled_to_approved = client.patch(
         f"/api/v1/purchase-order/{po_cancelled.id}", json={"status": "approved"}
     )
     assert resp_cancelled_to_approved.status_code == 400
-    assert "Invalid status transition" in resp_cancelled_to_approved.json().get("detail", "")
+    assert resp_cancelled_to_approved.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'cancelled' to 'approved'",
+        "order_id": po_cancelled.id,
+        "field": "status",
+        "current_status": "cancelled",
+        "target_status": "approved",
+        "allowed_target_statuses": ["cancelled"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
     # cancelled -> draft is forbidden
     resp_cancelled_to_draft = client.patch(
         f"/api/v1/purchase-order/{po_cancelled.id}", json={"status": "draft"}
     )
     assert resp_cancelled_to_draft.status_code == 400
-    assert "Invalid status transition" in resp_cancelled_to_draft.json().get("detail", "")
+    assert resp_cancelled_to_draft.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'cancelled' to 'draft'",
+        "order_id": po_cancelled.id,
+        "field": "status",
+        "current_status": "cancelled",
+        "target_status": "draft",
+        "allowed_target_statuses": ["cancelled"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
 
 def test_purchase_order_updated_at_changes_on_patch(client, db_session):
