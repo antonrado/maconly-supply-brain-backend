@@ -57,7 +57,7 @@ def _setup_basic_article_with_deficit(db_session):
     )
 
     wb_sku = "SKU-EXPL-A-1"
-    target_date = date(2025, 1, 31)
+    target_date = date.today()
     create_wb_mapping(db_session, article, wb_sku=wb_sku)
     add_wb_sales(db_session, wb_sku=wb_sku, day=target_date, sales_qty=10)
     add_wb_stock(db_session, wb_sku=wb_sku, stock_qty=0)

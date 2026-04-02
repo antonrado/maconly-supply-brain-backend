@@ -57,10 +57,22 @@ def compute_bundle_capacity_for_article(db: Session, article_id: int) -> Dict[Ca
 
     nsk_warehouse = (
         db.query(Warehouse)
-        .filter(Warehouse.type == "internal")
+        .join(StockBalance, StockBalance.warehouse_id == Warehouse.id)
+        .join(SkuUnit, SkuUnit.id == StockBalance.sku_unit_id)
+        .filter(
+            Warehouse.type == "internal",
+            SkuUnit.article_id == article_id,
+        )
         .order_by(Warehouse.id)
         .first()
     )
+    if nsk_warehouse is None:
+        nsk_warehouse = (
+            db.query(Warehouse)
+            .filter(Warehouse.type == "internal")
+            .order_by(Warehouse.id)
+            .first()
+        )
     if nsk_warehouse is None:
         # No internal warehouse configured; no capacity from singles
         return {}

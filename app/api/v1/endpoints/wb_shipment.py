@@ -298,8 +298,8 @@ def list_shipment_headers(
         .outerjoin(WbShipmentItem, WbShipmentItem.shipment_id == WbShipment.id)
     )
 
-    if status is not None:
-        query = query.filter(WbShipment.status == status)
+    if shipment_status is not None:
+        query = query.filter(WbShipment.status == shipment_status)
     if date_from is not None:
         query = query.filter(WbShipment.target_date >= date_from)
     if date_to is not None:
@@ -532,7 +532,7 @@ def update_shipment(
             ),
         )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
     changed = False
 
     if "status" in data:
@@ -619,7 +619,7 @@ def update_shipment_item(
             ),
         )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
     if "final_qty" in data:
         new_final_qty = int(data["final_qty"])
         if new_final_qty > item.nsk_stock_available:
