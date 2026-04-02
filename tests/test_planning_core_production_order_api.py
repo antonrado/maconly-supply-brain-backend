@@ -6761,6 +6761,75 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_selects_bound_t
     assert compact_meta["elastic_uplift"]["scope"] == "binding_scope"
 
 
+def test_production_order_proposal_from_wb_applies_fabric_minimum(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ColorPlanningSettings(
+            article_id=seeded["article"].id,
+            color_id=seeded["color_1"].id,
+            fabric_min_batch_qty=7500,
+        )
+    )
+
+    as_of_date = date(2026, 1, 30)
+    wb_sku = "WB-PO-FABRIC-MINIMUM"
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku,
+                date=as_of_date,
+                sales_qty=150,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=0,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    fabric_constraints = body["constraints_applied"]["fabric_min_batches"]
+    assert fabric_constraints
+    assert any(item["applied_min"] >= item["required"] for item in fabric_constraints)
+    assert any(item["sibling_proxy_required"] == 0 for item in fabric_constraints)
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_fabric_constraints = compact_body["constraints_applied"]["fabric_min_batches"]
+    assert compact_fabric_constraints == fabric_constraints
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
