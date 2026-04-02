@@ -6937,6 +6937,141 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_skips_when_no_m
     assert compact_meta["elastic_uplift"]["affected_lines"] == 0
 
 
+def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_scoped_sku(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    as_of_date = date(2026, 1, 30)
+    wb_sku = "WB-PO-ELASTIC-SCOPE-SKU"
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku,
+                date=as_of_date,
+                sales_qty=150,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=0,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    baseline_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert baseline_response.status_code == 200, baseline_response.text
+
+    baseline_body = baseline_response.json()
+    baseline_by_key: dict[tuple[int, int], int] = {
+        (line["color_id"], line["size_id"]): line["recommended_qty"]
+        for line in baseline_body["recommendation"]["lines"]
+    }
+
+    sku_scope = (
+        db_session.query(SkuUnit)
+        .filter(
+            SkuUnit.article_id == seeded["article"].id,
+            SkuUnit.color_id == seeded["color_1"].id,
+            SkuUnit.size_id == seeded["size_s"].id,
+        )
+        .one()
+    )
+
+    elastic_type = ElasticType(code="PO-WB-EL-SCOPE-SKU", name="PO-WB-EL-SCOPE-SKU")
+    db_session.add(elastic_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                elastic_min_batch_qty=22000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                sku_unit_id=sku_scope.id,
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    scoped_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert scoped_response.status_code == 200, scoped_response.text
+
+    scoped_body = scoped_response.json()
+    scoped_by_key: dict[tuple[int, int], int] = {
+        (line["color_id"], line["size_id"]): line["recommended_qty"]
+        for line in scoped_body["recommendation"]["lines"]
+    }
+
+    scoped_key = (seeded["color_1"].id, seeded["size_s"].id)
+    assert scoped_by_key[scoped_key] > baseline_by_key[scoped_key]
+
+    for key, baseline_qty in baseline_by_key.items():
+        if key == scoped_key:
+            continue
+        assert scoped_by_key[key] == baseline_qty
+
+    scope_step = next(
+        (step for step in scoped_body["explanation"]["steps"] if "Elastic scope" in step),
+        "",
+    )
+    uplift_step = next(
+        (step for step in scoped_body["explanation"]["steps"] if "Elastic uplift" in step),
+        "",
+    )
+    assert "scoped_lines=1" in scope_step
+    assert "scope=binding_scope" in uplift_step
+    assert "affected_lines=1" in uplift_step
+    assert "line_alloc={" in uplift_step
+    assert f"{scoped_key}:" in uplift_step
+
+    meta = scoped_body["explanation"]["meta"]
+    assert meta["elastic_scope"]["scoped_lines"] == 1
+    assert meta["elastic_uplift"]["scope"] == "binding_scope"
+    assert meta["elastic_uplift"]["affected_lines"] == 1
+    alloc_pairs = {
+        (item["color_id"], item["size_id"])
+        for item in meta["elastic_uplift"]["line_alloc"]
+    }
+    assert alloc_pairs == {scoped_key}
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["elastic_scope"]["scoped_lines"] == 1
+    assert compact_meta["elastic_uplift"]["affected_lines"] == 1
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
