@@ -115,6 +115,7 @@
   - [x] `admin_defaults`
   - [x] `global_default`
   - [x] `code_default_constants`
+- [x] Layer 2 calibration coefficients are regression-locked for source-tier precedence on the production-order API path: `layer2_capital_cost_rate`, `layer2_stockout_penalty_weight`, and `layer2_overstock_penalty_weight` resolve deterministically across `request -> admin_defaults -> global_default -> code_default_constants`, with effective values mirrored in `layer_2_allocation.objective_parameters` and `alpha_proxy_economics.layer_2_objective_parameters`.
 - [x] Capital governance mode behavior is regression-locked for direct/from-WB flows: default `strict` unresolved `available_capital` returns deterministic `422` with actionable detail and explicit status `missing_available_capital_strict`, while opt-in `safe_default` applies zero-capital fallback with `HIGH` severity warning and `capital_governance` explainability tracing.
 - [x] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
 - [x] Multi-regime end-to-end evidence is regression-locked for three distinct economics regimes (`stockout_dominates`, `overstock_dominates`, `commission_price_conflict`) across both direct and `from-wb` proposal paths, and the same release evidence survives compact mode, proving objective-vs-profit disagreement and expected Layer 5 intervention signals without adapter or compaction drift.
