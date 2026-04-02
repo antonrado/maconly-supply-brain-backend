@@ -7037,6 +7037,107 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         )
 
 
+def test_production_order_proposal_from_wb_request_layer2_coefficients_preserve_full_compact_parity(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-L2-PRECEDENCE",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-L2-PRECEDENCE",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-L2-PRECEDENCE",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    base_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+            "layer2_capital_cost_rate": 0.07,
+            "layer2_stockout_penalty_weight": 0.52,
+            "layer2_overstock_penalty_weight": 0.16,
+        },
+    }
+
+    full_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=base_payload,
+    )
+    assert full_response.status_code == 200, full_response.text
+
+    compact_payload = deepcopy(base_payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    full_body = full_response.json()
+    compact_body = compact_response.json()
+    assert _business_projection(full_body) == _business_projection(compact_body)
+
+    expected_objective_parameters = {
+        "capital_cost_rate": 0.07,
+        "stockout_penalty_weight": 0.52,
+        "overstock_penalty_weight": 0.16,
+    }
+    expected_objective_source = {
+        "capital_cost_rate": "request",
+        "stockout_penalty_weight": "request",
+        "overstock_penalty_weight": "request",
+    }
+
+    full_meta = full_body["explanation"]["meta"]
+    compact_meta = compact_body["explanation"]["meta"]
+    full_layer2 = full_meta["layer_2_allocation"]
+    compact_layer2 = compact_meta["layer_2_allocation"]
+
+    assert full_layer2["objective_parameters"] == expected_objective_parameters
+    assert full_layer2["objective_source"] == expected_objective_source
+    assert compact_layer2["objective_parameters"] == expected_objective_parameters
+    assert compact_layer2["objective_source"] == expected_objective_source
+    assert full_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == expected_objective_parameters
+    assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == expected_objective_parameters
+    assert full_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_capital_cost_rate"] == "request"
+    assert full_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_stockout_penalty_weight"] == "request"
+    assert full_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_overstock_penalty_weight"] == "request"
+    assert compact_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_capital_cost_rate"] == "request"
+    assert compact_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_stockout_penalty_weight"] == "request"
+    assert compact_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_overstock_penalty_weight"] == "request"
+
+
 @pytest.mark.parametrize(
     ("profile_name", "sales_qty", "stock_qty"),
     [
