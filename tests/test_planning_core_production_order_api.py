@@ -61,6 +61,10 @@ from app.services.planning_production_order import (
     _build_layer5_intervention_signals,
     _choose_action,
 )
+from app.services.planning_production_order_recommendation import (
+    _build_alternatives as extracted_build_alternatives,
+    _choose_action as extracted_choose_action,
+)
 from app.services.planning_production_order_scope import (
     build_physical_scope_and_arrival_projection,
 )
@@ -6093,6 +6097,31 @@ def test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5
         # Explicit guardrail: intervention signal does not override recommendation action policy.
         assert layer5_intervention["signals"] == ["accelerate_production"]
         assert action == "order_minimum_only"
+
+
+def test_recommendation_helper_matches_facade_action_and_alternatives():
+    cases = [
+        ("critical", 10, False),
+        ("warning", 10, True),
+        ("ok", 10, True),
+        ("no_data", 0, False),
+    ]
+
+    for risk_level, candidate_units, allow_order_with_buffer in cases:
+        facade_action = _choose_action(
+            risk_level=risk_level,
+            candidate_units=candidate_units,
+            allow_order_with_buffer=allow_order_with_buffer,
+        )
+        extracted_action = extracted_choose_action(
+            risk_level=risk_level,
+            candidate_units=candidate_units,
+            allow_order_with_buffer=allow_order_with_buffer,
+        )
+        assert extracted_action == facade_action
+        assert [item.action for item in extracted_build_alternatives(extracted_action)] == [
+            item.action for item in planning_production_order_service._build_alternatives(facade_action)
+        ]
 
 
 def test_production_order_proposal_competition_aware_raw_stock_breakdown(client, db_session):

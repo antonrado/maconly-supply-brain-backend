@@ -7,16 +7,23 @@ import time
 
 from fastapi import HTTPException, status
 import httpx
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.models import (
     Article,
+    ArticlePlanningSettings,
     ArticleWbMapping,
     BundleRecipe,
     WbIntegrationAccount,
     WbSalesDaily,
     WbStock,
+)
+from app.services.planning_production_order_freshness import (
+    build_from_wb_freshness_blocker,
+    build_from_wb_freshness_next_steps,
+    build_from_wb_freshness_snapshot,
+    resolve_from_wb_freshness_thresholds,
 )
 from app.schemas.wb import (
     ArticleWbMappingItem,
@@ -1058,7 +1065,115 @@ def build_from_wb_readiness_next_steps(blocker: str | None) -> list[str]:
         return [
             "run_wb_stock_sync_live",
         ]
+    if blocker == "stale_wb_sales_and_stock_data":
+        return [
+            "run_wb_sales_daily_sync_live",
+            "run_wb_stock_sync_live",
+        ]
+    if blocker == "stale_wb_sales_data":
+        return [
+            "run_wb_sales_daily_sync_live",
+        ]
+    if blocker == "stale_wb_stock_data":
+        return [
+            "run_wb_stock_sync_live",
+        ]
     return []
+
+
+def _build_from_wb_readiness_freshness_state(
+    db: Session,
+    *,
+    article_id: int,
+    mapped_bundle_type_ids: list[int],
+) -> dict[str, object]:
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == article_id)
+        .first()
+    )
+
+    admin_sales_stale_after_days = (
+        int(article_settings.production_order_freshness_sales_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_sales_stale_after_days is not None
+        else None
+    )
+    admin_stock_stale_after_days = (
+        int(article_settings.production_order_freshness_stock_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_stock_stale_after_days is not None
+        else None
+    )
+
+    sales_stale_after_days, stock_stale_after_days, threshold_source = resolve_from_wb_freshness_thresholds(
+        request_sales_stale_after_days=None,
+        request_stock_stale_after_days=None,
+        admin_sales_stale_after_days=admin_sales_stale_after_days,
+        admin_stock_stale_after_days=admin_stock_stale_after_days,
+    )
+
+    effective_as_of_date = (
+        db.query(func.max(WbSalesDaily.date))
+        .join(ArticleWbMapping, ArticleWbMapping.wb_sku == WbSalesDaily.wb_sku)
+        .filter(ArticleWbMapping.article_id == article_id)
+        .scalar()
+    )
+    stock_updated_rows = (
+        db.query(
+            ArticleWbMapping.bundle_type_id,
+            func.max(WbStock.updated_at).label("last_updated_at"),
+        )
+        .join(WbStock, WbStock.wb_sku == ArticleWbMapping.wb_sku)
+        .filter(
+            ArticleWbMapping.article_id == article_id,
+            ArticleWbMapping.bundle_type_id.in_(mapped_bundle_type_ids),
+        )
+        .group_by(ArticleWbMapping.bundle_type_id)
+        .all()
+    )
+
+    wb_stock_updated_at_by_bundle = {
+        int(bundle_type_id): (last_updated_at.isoformat() if last_updated_at is not None else None)
+        for bundle_type_id, last_updated_at in stock_updated_rows
+        if bundle_type_id is not None
+    }
+    for bundle_type_id in mapped_bundle_type_ids:
+        wb_stock_updated_at_by_bundle.setdefault(int(bundle_type_id), None)
+
+    freshness_status, sales_age_days, stock_oldest_age_days, _stock_age_days_by_bundle = build_from_wb_freshness_snapshot(
+        effective_as_of_date=effective_as_of_date,
+        wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+        now=datetime.now(timezone.utc),
+    )
+    blocker = build_from_wb_freshness_blocker(
+        freshness_status=freshness_status,
+        sales_age_days=sales_age_days,
+        stock_oldest_age_days=stock_oldest_age_days,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+    )
+
+    return {
+        "freshness_status": freshness_status,
+        "sales_age_days": sales_age_days,
+        "stock_oldest_age_days": stock_oldest_age_days,
+        "threshold_days": {
+            "sales": int(sales_stale_after_days),
+            "stock": int(stock_stale_after_days),
+        },
+        "threshold_source": dict(threshold_source),
+        "blocker": blocker,
+        "next_steps": build_from_wb_freshness_next_steps(
+            freshness_status=freshness_status,
+            sales_age_days=sales_age_days,
+            stock_oldest_age_days=stock_oldest_age_days,
+            sales_stale_after_days=sales_stale_after_days,
+            stock_stale_after_days=stock_stale_after_days,
+        ),
+    }
 
 
 def get_from_wb_readiness_summary(
@@ -1202,20 +1317,45 @@ def get_from_wb_readiness_summary(
 
         blocker: str | None = None
         ready_for_from_wb = False
+        freshness_status: str | None = None
+        sales_age_days: int | None = None
+        stock_oldest_age_days: int | None = None
+        threshold_days: dict[str, int] = {}
+        threshold_source: dict[str, str] = {}
+        next_steps: list[str] = []
         if not mapped_bundle_types:
             blocker = "no_bundle_type_in_mapping"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         elif not recipe_bundle_types:
             blocker = "no_bundle_recipe"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         elif missing_recipe_bundle_type_ids:
             blocker = "missing_bundle_recipe_bundle_types"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         elif mapped_wb_skus_with_sales <= 0 and mapped_wb_skus_with_stock <= 0:
             blocker = "no_wb_sales_or_stock_data"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         elif mapped_wb_skus_with_sales <= 0:
             blocker = "no_wb_sales_data"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         elif mapped_wb_skus_with_stock <= 0:
             blocker = "no_wb_stock_data"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
         else:
-            ready_for_from_wb = True
+            freshness_state = _build_from_wb_readiness_freshness_state(
+                db,
+                article_id=current_article_id,
+                mapped_bundle_type_ids=mapped_bundle_types,
+            )
+            freshness_status_value = freshness_state.get("freshness_status")
+            freshness_status = str(freshness_status_value) if freshness_status_value is not None else None
+            sales_age_days = freshness_state.get("sales_age_days")
+            stock_oldest_age_days = freshness_state.get("stock_oldest_age_days")
+            threshold_days = dict(freshness_state.get("threshold_days") or {})
+            threshold_source = dict(freshness_state.get("threshold_source") or {})
+            blocker = str(freshness_state["blocker"]) if freshness_state.get("blocker") is not None else None
+            next_steps = list(freshness_state.get("next_steps") or [])
+            ready_for_from_wb = blocker is None
 
         if ready_for_from_wb:
             ready_articles += 1
@@ -1235,7 +1375,12 @@ def get_from_wb_readiness_summary(
                 missing_recipe_bundle_type_ids=missing_recipe_bundle_type_ids,
                 ready_for_from_wb=ready_for_from_wb,
                 blocker=blocker,
-                next_steps=build_from_wb_readiness_next_steps(blocker),
+                next_steps=next_steps,
+                freshness_status=freshness_status,
+                sales_age_days=sales_age_days,
+                stock_oldest_age_days=stock_oldest_age_days,
+                threshold_days=threshold_days,
+                threshold_source=threshold_source,
             )
         )
 

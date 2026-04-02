@@ -172,6 +172,11 @@ class WbFromWbReadinessItem(BaseModel):
     recipe_bundle_type_ids: list[int]
     missing_recipe_bundle_type_ids: list[int]
     ready_for_from_wb: bool
+    freshness_status: str | None = None
+    sales_age_days: int | None = None
+    stock_oldest_age_days: int | None = None
+    threshold_days: dict[str, int] = Field(default_factory=dict)
+    threshold_source: dict[str, str] = Field(default_factory=dict)
     blocker: str | None = None
     next_steps: list[str] = Field(default_factory=list)
 

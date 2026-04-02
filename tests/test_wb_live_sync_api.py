@@ -847,7 +847,7 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-R-1",
-            date=date(2026, 1, 10),
+            date=seed_created_at.date(),
             sales_qty=5,
             revenue=None,
             created_at=seed_created_at,
@@ -874,7 +874,7 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-NST-1",
-            date=date(2026, 1, 10),
+            date=seed_created_at.date(),
             sales_qty=4,
             revenue=None,
             created_at=seed_created_at,
@@ -920,6 +920,65 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_sales"] == 1
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_stock"] == 0
     assert items["BLOCK-NO-STOCK"]["next_steps"] == ["run_wb_stock_sync_live"]
+
+
+def test_wb_from_wb_readiness_reports_stale_freshness_blocker(client, db_session):
+    article_stale = Article(code="STALE-1", name="Stale")
+    bundle_type = BundleType(code="BT-STALE", name="Stale bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE", pantone_code=None, description=None)
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(article_id=article_stale.id, wb_sku="WB-STALE-1", bundle_type_id=bundle_type.id)
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-1",
+            date=date(2026, 1, 10),
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    response = client.post("/api/v1/wb/from-wb/readiness", json={"article_id": article_stale.id, "limit": 10})
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-1"
+    assert item["ready_for_from_wb"] is False
+    assert item["freshness_status"] == "stale"
+    assert item["blocker"] == "stale_wb_sales_data"
+    assert item["sales_age_days"] is not None
+    assert item["stock_oldest_age_days"] == 0
+    assert item["threshold_days"] == {"sales": 3, "stock": 2}
+    assert item["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert item["next_steps"] == ["run_wb_sales_daily_sync_live"]
 
 
 def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeypatch):

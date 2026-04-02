@@ -86,6 +86,10 @@ from app.services.planning_production_order_explainability import (
 from app.services.planning_production_order_scope import (
     build_physical_scope_and_arrival_projection,
 )
+from app.services.planning_production_order_recommendation import (
+    _build_alternatives as _extracted_build_alternatives,
+    _choose_action as _extracted_choose_action,
+)
 from app.services.planning_production_order_layer_proxy import (
     LAYER2_CAPITAL_COST_RATE as EXTRACTED_LAYER2_CAPITAL_COST_RATE,
     LAYER2_OVERSTOCK_PENALTY_WEIGHT as EXTRACTED_LAYER2_OVERSTOCK_PENALTY_WEIGHT,
@@ -100,12 +104,20 @@ from app.services.planning_production_order_layer_proxy import (
     _EffectiveLayerProxySettings,
     _resolve_layer_proxy_settings,
 )
+from app.services.planning_production_order_freshness import (
+    FROM_WB_SALES_STALE_AFTER_DAYS as EXTRACTED_FROM_WB_SALES_STALE_AFTER_DAYS,
+    FROM_WB_STOCK_STALE_AFTER_DAYS as EXTRACTED_FROM_WB_STOCK_STALE_AFTER_DAYS,
+    build_from_wb_freshness_next_steps,
+    build_from_wb_freshness_snapshot as _extracted_build_from_wb_freshness_snapshot,
+    parse_iso_datetime as _extracted_parse_iso_datetime,
+    resolve_from_wb_freshness_thresholds as _resolve_shared_from_wb_freshness_thresholds,
+)
 from app.services.wb_ingest import build_from_wb_readiness_next_steps
 
 # Ownership: this module keeps orchestration, shared estimators, and response assembly.
 
-FROM_WB_SALES_STALE_AFTER_DAYS = 3
-FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+FROM_WB_SALES_STALE_AFTER_DAYS = EXTRACTED_FROM_WB_SALES_STALE_AFTER_DAYS
+FROM_WB_STOCK_STALE_AFTER_DAYS = EXTRACTED_FROM_WB_STOCK_STALE_AFTER_DAYS
 FROM_WB_OBSERVED_ECONOMIC_SOURCE = EXTRACTED_FROM_WB_OBSERVED_ECONOMIC_SOURCE
 FROM_WB_TARIFFS_COMMISSION_SOURCE = "from_wb_tariffs_commission"
 FROM_WB_PRICE_ANOMALY_MAX_DEVIATION = 0.30
@@ -234,7 +246,6 @@ LAYER5_ACCELERATE_ACTION_COST_RATE = EXTRACTED_LAYER5_ACCELERATE_ACTION_COST_RAT
 LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE = EXTRACTED_LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE
 LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE = EXTRACTED_LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE
 
-
 @dataclass
 class _EffectiveSettings:
     include_in_planning: bool
@@ -248,137 +259,8 @@ class _EffectiveSettings:
     elastic_min_batch_default: int
     allow_order_with_buffer: bool
 
-
-def _ceil_to_int(value: float) -> int:
-    as_int = int(value)
-    if value > as_int:
-        return as_int + 1
-    return as_int
-
-
-def _build_layer2_legacy_alias_deprecation_plan() -> dict[str, object]:
-    return {
-        "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
-        "policy": LAYER2_LEGACY_ALIAS_DEPRECATION_POLICY,
-        "canonical_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
-        "legacy_decision_gate_aliases": list(LAYER2_LEGACY_DECISION_GATE_ALIASES),
-        "field_alias_replacements": dict(LAYER2_LEGACY_ALIAS_FIELD_REPLACEMENTS),
-    }
-
-
-def _normalize_weights(size_ids: list[int], raw_weights: dict[int, float]) -> dict[int, float]:
-    if not size_ids:
-        return {}
-
-    weights: dict[int, float] = {}
-    for size_id in size_ids:
-        weight = raw_weights.get(size_id)
-        if weight is not None and weight > 0:
-            weights[size_id] = float(weight)
-
-    if not weights:
-        uniform = 1.0 / len(size_ids)
-        return {size_id: uniform for size_id in size_ids}
-
-    total = sum(weights.values())
-    if total <= 0:
-        uniform = 1.0 / len(size_ids)
-        return {size_id: uniform for size_id in size_ids}
-
-    normalized = {size_id: weight / total for size_id, weight in weights.items()}
-
-    # Ensure all requested sizes exist in output map.
-    for size_id in size_ids:
-        normalized.setdefault(size_id, 0.0)
-
-    norm_total = sum(normalized.values())
-    if norm_total <= 0:
-        uniform = 1.0 / len(size_ids)
-        return {size_id: uniform for size_id in size_ids}
-
-    return {size_id: normalized[size_id] / norm_total for size_id in size_ids}
-
-
-def _allocate_units(total_units: int, weights: dict[int, float]) -> dict[int, int]:
-    if total_units <= 0 or not weights:
-        return {key: 0 for key in weights}
-
-    keys = sorted(weights.keys())
-    raw_values: dict[int, float] = {
-        key: float(total_units) * max(weights.get(key, 0.0), 0.0) for key in keys
-    }
-
-    allocated: dict[int, int] = {key: int(raw_values[key]) for key in keys}
-    assigned = sum(allocated.values())
-    remainder = max(total_units - assigned, 0)
-
-    if remainder > 0:
-        remainders = sorted(
-            keys,
-            key=lambda key: (raw_values[key] - allocated[key], -key),
-            reverse=True,
-        )
-        for index in range(remainder):
-            allocated[remainders[index % len(remainders)]] += 1
-
-    return allocated
-
-
-def _choose_action(
-    risk_level: str,
-    candidate_units: int,
-    allow_order_with_buffer: bool,
-) -> str:
-    if candidate_units <= 0:
-        return "wait"
-
-    if risk_level in {"critical", "warning"}:
-        if allow_order_with_buffer:
-            return "order_with_buffer"
-        return "order_minimum_only"
-
-    if risk_level in {"overstock", "ok", "no_data"}:
-        return "wait"
-
-    return "order_minimum_only"
-
-
-def _build_alternatives(action: str) -> list[ProductionOrderAlternative]:
-    alternatives = {
-        "wait": ProductionOrderAlternative(
-            action="wait",
-            pros=["Минимальная заморозка средств"],
-            cons=["Риск недозаказа при резком росте спроса"],
-        ),
-        "order_with_buffer": ProductionOrderAlternative(
-            action="order_with_buffer",
-            pros=["Снижает риск OOS до следующего цикла"],
-            cons=["Увеличивает объем замороженного капитала"],
-        ),
-        "order_minimum_only": ProductionOrderAlternative(
-            action="order_minimum_only",
-            pros=["Соблюдает фабричные минималки без избыточного буфера"],
-            cons=["Может не покрыть всплеск спроса"],
-        ),
-    }
-
-    # Return at least two alternatives, excluding the recommended action from the first slot.
-    ordered_actions = ["wait", "order_with_buffer", "order_minimum_only"]
-    result: list[ProductionOrderAlternative] = []
-    for alt_action in ordered_actions:
-        if alt_action == action:
-            continue
-        result.append(alternatives[alt_action])
-
-    if len(result) < 2:
-        for alt_action in ordered_actions:
-            if alt_action != action and all(item.action != alt_action for item in result):
-                result.append(alternatives[alt_action])
-            if len(result) >= 2:
-                break
-
-    return result
-
+_choose_action = _extracted_choose_action
+_build_alternatives = _extracted_build_alternatives
 
 def _build_effective_settings(
     article_settings: ArticlePlanningSettings | None,
@@ -414,8 +296,6 @@ def _build_effective_settings(
             target_coverage_days = overrides.target_coverage_days
         if overrides.service_level_percent is not None:
             service_level_percent = overrides.service_level_percent
-        if overrides.alert_threshold_days is not None:
-            alert_threshold_days = overrides.alert_threshold_days
         if overrides.fabric_min_batch_qty_default is not None:
             fabric_min_batch_default = overrides.fabric_min_batch_qty_default
         if overrides.elastic_min_batch_qty_default is not None:
@@ -466,7 +346,6 @@ def _build_effective_settings(
         allow_order_with_buffer=allow_order_with_buffer,
     )
 
-
 def _bounded_unit_float(value: object) -> float:
     try:
         normalized = float(value)
@@ -474,6 +353,76 @@ def _bounded_unit_float(value: object) -> float:
         return 0.0
     return max(min(normalized, 1.0), 0.0)
 
+def _ceil_to_int(value: float) -> int:
+    as_int = int(value)
+    if value > as_int:
+        return as_int + 1
+    return as_int
+
+def _build_layer2_legacy_alias_deprecation_plan() -> dict[str, object]:
+    return {
+        "deprecated_after": LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW,
+        "policy": LAYER2_LEGACY_ALIAS_DEPRECATION_POLICY,
+        "canonical_decision_gate": LAYER2_DECISION_GATE_CANONICAL,
+        "legacy_decision_gate_aliases": list(LAYER2_LEGACY_DECISION_GATE_ALIASES),
+        "field_alias_replacements": dict(LAYER2_LEGACY_ALIAS_FIELD_REPLACEMENTS),
+    }
+
+def _normalize_weights(size_ids: list[int], raw_weights: dict[int, float]) -> dict[int, float]:
+    if not size_ids:
+        return {}
+
+    weights: dict[int, float] = {}
+    for size_id in size_ids:
+        weight = raw_weights.get(size_id)
+        if weight is not None and weight > 0:
+            weights[size_id] = float(weight)
+
+    if not weights:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    total = sum(weights.values())
+    if total <= 0:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    normalized = {size_id: weight / total for size_id, weight in weights.items()}
+
+    # Ensure all requested sizes exist in output map.
+    for size_id in size_ids:
+        normalized.setdefault(size_id, 0.0)
+
+    norm_total = sum(normalized.values())
+    if norm_total <= 0:
+        uniform = 1.0 / len(size_ids)
+        return {size_id: uniform for size_id in size_ids}
+
+    return {size_id: normalized[size_id] / norm_total for size_id in size_ids}
+
+def _allocate_units(total_units: int, weights: dict[int, float]) -> dict[int, int]:
+    if total_units <= 0 or not weights:
+        return {key: 0 for key in weights}
+
+    keys = sorted(weights.keys())
+    raw_values: dict[int, float] = {
+        key: float(total_units) * max(weights.get(key, 0.0), 0.0) for key in keys
+    }
+
+    allocated: dict[int, int] = {key: int(raw_values[key]) for key in keys}
+    assigned = sum(allocated.values())
+    remainder = max(total_units - assigned, 0)
+
+    if remainder > 0:
+        remainders = sorted(
+            keys,
+            key=lambda key: (raw_values[key] - allocated[key], -key),
+            reverse=True,
+        )
+        for index in range(remainder):
+            allocated[remainders[index % len(remainders)]] += 1
+
+    return allocated
 
 def _compute_objective_components(
     *,
@@ -611,14 +560,15 @@ def _build_layer1_stock_health_metrics(
 
         velocity_main = max(float(velocity_main_by_color_size.get(key, 0.0)), 0.0)
         velocity_assorti = max(float(velocity_assorti_by_color_size.get(key, 0.0)), 0.0)
-        velocity_total = velocity_main + velocity_assorti
+        stockout_risk = _bounded_unit_float(current_stock_by_color_size.get("stockout_risk", 0.0))
+        overstock_risk = _bounded_unit_float(current_stock_by_color_size.get("overstock_risk", 0.0))
 
         available_units = current_stock + in_flight_effective
-        if velocity_total <= 0:
+        if velocity_main + velocity_assorti <= 0:
             coverage_days = 9999.0
             stockout_risk = 0.0
         else:
-            coverage_days = float(available_units) / velocity_total
+            coverage_days = float(available_units) / (velocity_main + velocity_assorti)
             stockout_risk = max(
                 0.0,
                 min(
@@ -635,11 +585,11 @@ def _build_layer1_stock_health_metrics(
             ),
         )
 
-        if velocity_total > 0:
+        if velocity_main + velocity_assorti > 0:
             gross_margin = (
                 (velocity_main * margin_main)
                 + (velocity_assorti * margin_assorti)
-            ) / velocity_total
+            ) / (velocity_main + velocity_assorti)
         else:
             gross_margin = 0.0
 
@@ -3123,7 +3073,7 @@ def _load_wb_bundle_stock_updated_at_by_bundle(
         .all()
     )
     if not mappings:
-        return {}
+        return {bundle_type_id: None for bundle_type_id in bundle_type_ids}
 
     wb_skus = {mapping.wb_sku for mapping in mappings if mapping.wb_sku}
     if not wb_skus:
@@ -3166,25 +3116,7 @@ def _load_wb_bundle_stock_updated_at_by_bundle(
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-
-    text = str(value).strip()
-    if not text:
-        return None
-
-    if text.endswith("Z"):
-        text = f"{text[:-1]}+00:00"
-
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-
-    return parsed.astimezone(timezone.utc)
+    return _extracted_parse_iso_datetime(value)
 
 
 def _build_resource_allocation_contract_summary(
@@ -3332,6 +3264,7 @@ def _build_competition_aware_resource_allocation(
             recipe_colors = recipe_colors_by_bundle.get(bundle_type_id, set())
             if not recipe_colors:
                 continue
+
             reserved_color_qty = [
                 color_bundle_alloc.get((int(color_id), int(bundle_type_id)), 0)
                 for color_id in recipe_colors
@@ -3542,45 +3475,12 @@ def _build_from_wb_freshness_snapshot(
     stock_stale_after_days: int,
     now: datetime,
 ) -> tuple[str, int | None, int | None, dict[int, int | None]]:
-    anchor_date = now.date()
-
-    sales_age_days_value: int | None = None
-    if effective_as_of_date is not None:
-        sales_age_days_value = max((anchor_date - effective_as_of_date).days, 0)
-
-    stock_age_days_by_bundle: dict[int, int | None] = {}
-    for bundle_type_id, updated_at_text in wb_stock_updated_at_by_bundle.items():
-        updated_at = _parse_iso_datetime(updated_at_text)
-        if updated_at is None:
-            stock_age_days_by_bundle[bundle_type_id] = None
-            continue
-
-        stock_age_days_by_bundle[bundle_type_id] = max((anchor_date - updated_at.date()).days, 0)
-
-    stock_known_ages = [age for age in stock_age_days_by_bundle.values() if age is not None]
-    stock_oldest_age_days_value = max(stock_known_ages) if stock_known_ages else None
-
-    stale_sales = (
-        sales_age_days_value is not None
-        and sales_age_days_value > sales_stale_after_days
-    )
-    stale_stock = (
-        stock_oldest_age_days_value is not None
-        and stock_oldest_age_days_value > stock_stale_after_days
-    )
-
-    if sales_age_days_value is None and stock_oldest_age_days_value is None:
-        freshness_status = "no_data"
-    elif stale_sales or stale_stock:
-        freshness_status = "stale"
-    else:
-        freshness_status = "fresh"
-
-    return (
-        freshness_status,
-        sales_age_days_value,
-        stock_oldest_age_days_value,
-        stock_age_days_by_bundle,
+    return _extracted_build_from_wb_freshness_snapshot(
+        effective_as_of_date=effective_as_of_date,
+        wb_stock_updated_at_by_bundle=wb_stock_updated_at_by_bundle,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+        now=now,
     )
 
 
@@ -3823,33 +3723,11 @@ def _resolve_from_wb_freshness_thresholds(
         else None
     )
 
-    if request_sales_stale_after_days is not None:
-        sales_stale_after_days = int(request_sales_stale_after_days)
-        sales_source = "request"
-    elif admin_sales_stale_after_days is not None:
-        sales_stale_after_days = admin_sales_stale_after_days
-        sales_source = "admin_defaults"
-    else:
-        sales_stale_after_days = FROM_WB_SALES_STALE_AFTER_DAYS
-        sales_source = "global_default"
-
-    if request_stock_stale_after_days is not None:
-        stock_stale_after_days = int(request_stock_stale_after_days)
-        stock_source = "request"
-    elif admin_stock_stale_after_days is not None:
-        stock_stale_after_days = admin_stock_stale_after_days
-        stock_source = "admin_defaults"
-    else:
-        stock_stale_after_days = FROM_WB_STOCK_STALE_AFTER_DAYS
-        stock_source = "global_default"
-
-    return (
-        sales_stale_after_days,
-        stock_stale_after_days,
-        {
-            "sales": sales_source,
-            "stock": stock_source,
-        },
+    return _resolve_shared_from_wb_freshness_thresholds(
+        request_sales_stale_after_days=request_sales_stale_after_days,
+        request_stock_stale_after_days=request_stock_stale_after_days,
+        admin_sales_stale_after_days=admin_sales_stale_after_days,
+        admin_stock_stale_after_days=admin_stock_stale_after_days,
     )
 
 
