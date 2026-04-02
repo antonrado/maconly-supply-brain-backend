@@ -1176,6 +1176,31 @@ def _build_from_wb_readiness_freshness_state(
     }
 
 
+def _resolve_from_wb_readiness_structural_state(
+    *,
+    mapped_bundle_type_ids: list[int],
+    recipe_bundle_type_ids: list[int],
+    missing_recipe_bundle_type_ids: list[int],
+    mapped_wb_skus_with_sales: int,
+    mapped_wb_skus_with_stock: int,
+) -> tuple[str | None, list[str]]:
+    blocker: str | None = None
+    if not mapped_bundle_type_ids:
+        blocker = "no_bundle_type_in_mapping"
+    elif not recipe_bundle_type_ids:
+        blocker = "no_bundle_recipe"
+    elif missing_recipe_bundle_type_ids:
+        blocker = "missing_bundle_recipe_bundle_types"
+    elif mapped_wb_skus_with_sales <= 0 and mapped_wb_skus_with_stock <= 0:
+        blocker = "no_wb_sales_or_stock_data"
+    elif mapped_wb_skus_with_sales <= 0:
+        blocker = "no_wb_sales_data"
+    elif mapped_wb_skus_with_stock <= 0:
+        blocker = "no_wb_stock_data"
+
+    return blocker, build_from_wb_readiness_next_steps(blocker)
+
+
 def get_from_wb_readiness_summary(
     db: Session,
     *,
@@ -1323,25 +1348,14 @@ def get_from_wb_readiness_summary(
         threshold_days: dict[str, int] = {}
         threshold_source: dict[str, str] = {}
         next_steps: list[str] = []
-        if not mapped_bundle_types:
-            blocker = "no_bundle_type_in_mapping"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        elif not recipe_bundle_types:
-            blocker = "no_bundle_recipe"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        elif missing_recipe_bundle_type_ids:
-            blocker = "missing_bundle_recipe_bundle_types"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        elif mapped_wb_skus_with_sales <= 0 and mapped_wb_skus_with_stock <= 0:
-            blocker = "no_wb_sales_or_stock_data"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        elif mapped_wb_skus_with_sales <= 0:
-            blocker = "no_wb_sales_data"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        elif mapped_wb_skus_with_stock <= 0:
-            blocker = "no_wb_stock_data"
-            next_steps = build_from_wb_readiness_next_steps(blocker)
-        else:
+        blocker, next_steps = _resolve_from_wb_readiness_structural_state(
+            mapped_bundle_type_ids=mapped_bundle_types,
+            recipe_bundle_type_ids=recipe_bundle_types,
+            missing_recipe_bundle_type_ids=missing_recipe_bundle_type_ids,
+            mapped_wb_skus_with_sales=mapped_wb_skus_with_sales,
+            mapped_wb_skus_with_stock=mapped_wb_skus_with_stock,
+        )
+        if blocker is None:
             freshness_state = _build_from_wb_readiness_freshness_state(
                 db,
                 article_id=current_article_id,
