@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Generator
 
 import pytest
@@ -18,6 +19,19 @@ engine = create_engine(
     future=True,
 )
 SessionTesting = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def disable_monitoring_scheduler() -> Generator[None, None, None]:
+    original_value = os.environ.get("MONITORING_SCHEDULER_ENABLED")
+    os.environ["MONITORING_SCHEDULER_ENABLED"] = "false"
+    try:
+        yield
+    finally:
+        if original_value is None:
+            os.environ.pop("MONITORING_SCHEDULER_ENABLED", None)
+        else:
+            os.environ["MONITORING_SCHEDULER_ENABLED"] = original_value
 
 
 @pytest.fixture(scope="session", autouse=True)
