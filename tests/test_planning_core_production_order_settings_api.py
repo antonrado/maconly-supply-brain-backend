@@ -178,6 +178,11 @@ def test_production_order_settings_returns_404_for_unknown_article(client, db_se
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -285,8 +290,52 @@ def test_production_order_settings_rejects_sku_from_other_article(client, db_ses
         "message": "sku_unit_id does not belong to article",
         "article_id": seeded["article"].id,
         "field": "elastic_bindings.sku_unit_id",
+        "field_metadata": {
+            "description": "SKU unit identifier from elastic_bindings input",
+            "type": "int",
+        },
         "next_steps": ["use_article_sku_unit_ids_only"],
         "invalid_sku_unit_id": seeded["sku_other"].id,
+    }
+
+
+def test_production_order_settings_rejects_elastic_binding_color_out_of_article_scope_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_scope(db_session)
+    color_other = Color(inner_code="PO-SC-OUT", pantone_code="P-OUT", description="OUT")
+    db_session.add(color_other)
+    db_session.commit()
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": seeded["elastic_1"].id,
+                "color_id": color_other.id,
+                "is_active": True,
+            }
+        ],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "elastic_binding_color_out_of_article_scope",
+        "message": "color_id does not belong to article SKU scope",
+        "article_id": seeded["article"].id,
+        "field": "elastic_bindings.color_id",
+        "field_metadata": {
+            "description": "Color identifier from elastic_bindings input",
+            "type": "int",
+        },
+        "next_steps": ["use_article_color_ids_only"],
+        "invalid_color_id": color_other.id,
     }
 
 
@@ -311,6 +360,10 @@ def test_production_order_settings_rejects_unknown_size_ids_with_structured_deta
         "message": "Unknown size_id(s)",
         "article_id": seeded["article"].id,
         "field": "size_weights.size_id",
+        "field_metadata": {
+            "description": "Size identifiers from size_weights input",
+            "type": "list[int]",
+        },
         "next_steps": ["use_existing_size_ids"],
         "invalid_size_ids": [999999],
     }
@@ -344,6 +397,10 @@ def test_production_order_settings_rejects_unknown_elastic_type_ids_with_structu
         "message": "Unknown elastic_type_id(s)",
         "article_id": seeded["article"].id,
         "field": "elastic_bindings.elastic_type_id",
+        "field_metadata": {
+            "description": "Elastic type identifiers from elastic_bindings input",
+            "type": "list[int]",
+        },
         "next_steps": ["use_existing_elastic_type_ids"],
         "invalid_elastic_type_ids": [999999],
     }
@@ -378,6 +435,10 @@ def test_production_order_settings_rejects_elastic_binding_sku_color_mismatch_wi
         "message": "sku_unit_id color mismatch with color_id",
         "article_id": seeded["article"].id,
         "field": "elastic_bindings.color_id",
+        "field_metadata": {
+            "description": "Color identifier from elastic_bindings input",
+            "type": "int",
+        },
         "next_steps": ["align_elastic_binding_color_with_sku"],
         "sku_unit_id": seeded["sku_22"].id,
         "requested_color_id": seeded["color_1"].id,
@@ -413,6 +474,10 @@ def test_production_order_settings_rejects_invalid_in_flight_scope_with_structur
         "message": "In-flight default does not match any SKU for article",
         "article_id": seeded["article"].id,
         "field": "in_flight_supply_defaults",
+        "field_metadata": {
+            "description": "In-flight supply default entries from request input",
+            "type": "list[object]",
+        },
         "next_steps": ["use_article_color_size_pairs_only"],
         "color_id": seeded["color_1"].id,
         "size_id": 999999,
@@ -442,6 +507,10 @@ def test_production_order_settings_rejects_unknown_assorti_bundle_type_ids_with_
         "message": "Unknown assorti_bundle_type_id(s)",
         "article_id": seeded["article"].id,
         "field": "assorti_bundle_type_ids",
+        "field_metadata": {
+            "description": "Assorti bundle type identifiers",
+            "type": "list[int]",
+        },
         "next_steps": ["use_existing_bundle_type_ids"],
         "invalid_bundle_type_ids": [999999],
     }

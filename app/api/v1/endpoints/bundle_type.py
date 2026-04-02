@@ -14,6 +14,11 @@ def _build_bundle_type_not_found_detail(*, bundle_type_id: int) -> dict[str, obj
         "code": "bundle_type_not_found",
         "message": "BundleType not found",
         "bundle_type_id": int(bundle_type_id),
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_type_id"],
     }
 
@@ -23,6 +28,10 @@ def _build_bundle_type_code_already_exists_detail(*, bundle_type_code: str) -> d
         "code": "bundle_type_code_already_exists",
         "message": "BundleType code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested bundle type code",
+            "type": "string",
+        },
         "bundle_type_code": str(bundle_type_code),
         "next_steps": ["use_unique_bundle_type_code"],
     }

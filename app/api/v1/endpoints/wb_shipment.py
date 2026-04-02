@@ -43,6 +43,11 @@ def _build_wb_shipment_not_found_detail(*, shipment_id: int) -> dict[str, object
         "code": "wb_shipment_not_found",
         "message": "WbShipment not found",
         "shipment_id": int(shipment_id),
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_id"],
     }
 
@@ -53,6 +58,11 @@ def _build_wb_shipment_item_not_found_detail(*, shipment_id: int, item_id: int) 
         "message": "WbShipmentItem not found",
         "shipment_id": int(shipment_id),
         "item_id": int(item_id),
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_item_id"],
     }
 
@@ -62,6 +72,10 @@ def _build_invalid_sort_by_detail(*, sort_by: str, allowed_fields: list[str]) ->
         "code": "invalid_sort_by",
         "message": f"Invalid sort_by '{sort_by}'",
         "field": "sort_by",
+        "field_metadata": {
+            "description": "Shipment header sort field query parameter",
+            "type": "string",
+        },
         "sort_by": str(sort_by),
         "allowed_values": list(allowed_fields),
         "next_steps": ["use_supported_shipment_sort_by"],
@@ -73,6 +87,10 @@ def _build_invalid_sort_dir_detail(*, sort_dir: str) -> dict[str, object]:
         "code": "invalid_sort_dir",
         "message": "Invalid sort_dir",
         "field": "sort_dir",
+        "field_metadata": {
+            "description": "Shipment header sort direction query parameter",
+            "type": "Literal['asc','desc']",
+        },
         "sort_dir": str(sort_dir),
         "allowed_values": ["asc", "desc"],
         "next_steps": ["use_sort_dir_asc_or_desc"],
@@ -84,6 +102,11 @@ def _build_wb_shipment_final_status_locked_detail(*, shipment_id: int, status_va
         "code": "wb_shipment_final_status_locked",
         "message": "Cannot modify a shipment in final status",
         "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking the requested mutation",
+            "type": "string",
+        },
         "status": str(status_value),
         "next_steps": ["use_draft_or_approved_shipment_for_updates"],
     }
@@ -94,6 +117,11 @@ def _build_wb_shipment_item_non_draft_locked_detail(*, shipment_id: int, status_
         "code": "wb_shipment_item_non_draft_locked",
         "message": "Cannot modify items of a non-draft shipment",
         "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking item updates",
+            "type": "string",
+        },
         "status": str(status_value),
         "next_steps": ["use_draft_shipment_for_item_updates"],
     }
@@ -114,6 +142,10 @@ def _build_wb_shipment_item_final_qty_exceeds_stock_detail(
         "final_qty": int(final_qty),
         "nsk_stock_available": int(nsk_stock_available),
         "field": "final_qty",
+        "field_metadata": {
+            "description": "Requested final shipment quantity",
+            "type": "int",
+        },
         "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
     }
 
@@ -124,6 +156,10 @@ def _build_invalid_wb_shipment_status_detail(*, shipment_id: int, status_value: 
         "message": f"Invalid status '{status_value}'",
         "shipment_id": int(shipment_id),
         "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status",
+            "type": "string",
+        },
         "status": str(status_value),
         "allowed_values": sorted(_ALLOWED_STATUSES),
         "next_steps": ["use_supported_wb_shipment_status"],
@@ -141,6 +177,10 @@ def _build_invalid_wb_shipment_status_transition_detail(
         "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
         "shipment_id": int(shipment_id),
         "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status transition target",
+            "type": "string",
+        },
         "current_status": str(current_status),
         "target_status": str(target_status),
         "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
@@ -153,6 +193,10 @@ def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_dat
         "code": "wb_arrival_date_before_target_date",
         "message": "wb_arrival_date cannot be earlier than target_date",
         "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
         "target_date": str(target_date),
         "wb_arrival_date": str(wb_arrival_date),
         "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],

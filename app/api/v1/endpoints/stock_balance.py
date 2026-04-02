@@ -20,6 +20,11 @@ def _build_stock_balance_not_found_detail(*, stock_balance_id: int) -> dict[str,
         "code": "stock_balance_not_found",
         "message": "StockBalance not found",
         "stock_balance_id": int(stock_balance_id),
+        "field": "stock_balance_id",
+        "field_metadata": {
+            "description": "Requested stock balance identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_stock_balance_id"],
     }
 
@@ -29,6 +34,10 @@ def _build_stock_balance_pair_already_exists_detail(*, sku_unit_id: int, warehou
         "code": "stock_balance_pair_already_exists",
         "message": "StockBalance for this sku_unit and warehouse already exists",
         "field": "sku_unit_id,warehouse_id",
+        "field_metadata": {
+            "description": "Requested stock balance uniqueness pair",
+            "type": "tuple[int,int]",
+        },
         "sku_unit_id": int(sku_unit_id),
         "warehouse_id": int(warehouse_id),
         "next_steps": ["use_unique_stock_balance_sku_unit_warehouse_pair"],

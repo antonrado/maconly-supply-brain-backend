@@ -163,6 +163,11 @@ def test_delete_alert_rule_and_404(client, db_session):
         "code": "alert_rule_not_found",
         "message": "Alert rule not found",
         "rule_id": rule.id,
+        "field": "rule_id",
+        "field_metadata": {
+            "description": "Requested monitoring alert rule identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_alert_rule_id"],
     }
 
@@ -174,5 +179,10 @@ def test_delete_alert_rule_and_404(client, db_session):
         "code": "alert_rule_not_found",
         "message": "Alert rule not found",
         "rule_id": rule.id,
+        "field": "rule_id",
+        "field_metadata": {
+            "description": "Requested monitoring alert rule identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_alert_rule_id"],
     }

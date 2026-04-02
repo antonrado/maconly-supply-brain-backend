@@ -63,6 +63,11 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -88,6 +93,43 @@ def _get_article_sku_index(db: Session, article_id: int) -> tuple[set[int], set[
     return color_ids, size_ids, sku_by_id, sku_by_color_size
 
 
+def _build_admin_settings_field_metadata(*, field: str) -> dict[str, str]:
+    if field == "size_weights.size_id":
+        return {
+            "description": "Size identifiers from size_weights input",
+            "type": "list[int]",
+        }
+    if field == "elastic_bindings.elastic_type_id":
+        return {
+            "description": "Elastic type identifiers from elastic_bindings input",
+            "type": "list[int]",
+        }
+    if field == "elastic_bindings.color_id":
+        return {
+            "description": "Color identifier from elastic_bindings input",
+            "type": "int",
+        }
+    if field == "elastic_bindings.sku_unit_id":
+        return {
+            "description": "SKU unit identifier from elastic_bindings input",
+            "type": "int",
+        }
+    if field == "assorti_bundle_type_ids":
+        return {
+            "description": "Assorti bundle type identifiers",
+            "type": "list[int]",
+        }
+    if field == "in_flight_supply_defaults":
+        return {
+            "description": "In-flight supply default entries from request input",
+            "type": "list[object]",
+        }
+    return {
+        "description": "Production-order admin settings input field",
+        "type": "unknown",
+    }
+
+
 def _build_admin_settings_validation_detail(
     *,
     code: str,
@@ -102,6 +144,7 @@ def _build_admin_settings_validation_detail(
         "message": message,
         "article_id": int(article_id),
         "field": field,
+        "field_metadata": _build_admin_settings_field_metadata(field=field),
         "next_steps": list(next_steps),
     }
     if extra:

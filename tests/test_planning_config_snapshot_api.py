@@ -171,6 +171,11 @@ def test_planning_config_snapshot_article_not_found(client):
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -188,6 +193,11 @@ def test_planning_config_snapshot_article_without_settings_returns_404(client, d
         "code": "no_planning_settings_found",
         "message": "No planning settings found for this article",
         "article_id": article.id,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings lookup",
+            "type": "int",
+        },
         "next_steps": ["configure_article_planning_settings"],
     }
 

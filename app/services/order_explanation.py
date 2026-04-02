@@ -30,8 +30,21 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
+
+
+def _is_article_not_found_detail(detail: object) -> bool:
+    if detail == "Article not found":
+        return True
+    if isinstance(detail, dict):
+        return detail.get("code") == "article_not_found"
+    return False
 
 
 def _resolve_article(db: Session, article_id: int) -> Article:
@@ -307,9 +320,7 @@ def build_order_explanation_portfolio(
         try:
             explanation = build_order_explanation_for_article(db=db, article_id=aid)
         except HTTPException as exc:  # type: ignore[py310-no-except-type-comments]
-            if exc.status_code == status.HTTP_404_NOT_FOUND and exc.detail == _build_article_not_found_detail(
-                article_id=aid,
-            ):
+            if exc.status_code == status.HTTP_404_NOT_FOUND and _is_article_not_found_detail(exc.detail):
                 continue
             raise
 

@@ -21,6 +21,10 @@ def _build_invalid_target_count_detail(*, target_count: int) -> dict[str, object
         "message": "target_count must be positive",
         "target_count": int(target_count),
         "field": "target_count",
+        "field_metadata": {
+            "description": "Requested bundle target count",
+            "type": "int",
+        },
         "next_steps": ["use_positive_target_count"],
     }
 
@@ -30,6 +34,11 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -39,6 +48,11 @@ def _build_bundle_type_not_found_detail(*, bundle_type_id: int) -> dict[str, obj
         "code": "bundle_type_not_found",
         "message": "BundleType not found",
         "bundle_type_id": int(bundle_type_id),
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_type_id"],
     }
 
@@ -48,6 +62,11 @@ def _build_warehouse_not_found_detail(*, warehouse_id: int) -> dict[str, object]
         "code": "warehouse_not_found",
         "message": "Warehouse not found",
         "warehouse_id": int(warehouse_id),
+        "field": "warehouse_id",
+        "field_metadata": {
+            "description": "Requested warehouse identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_warehouse_id"],
     }
 
@@ -58,6 +77,11 @@ def _build_no_bundle_recipe_detail(*, article_id: int, bundle_type_id: int) -> d
         "message": "No bundle recipe defined for this article and bundle type",
         "article_id": int(article_id),
         "bundle_type_id": int(bundle_type_id),
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier for bundle recipe lookup",
+            "type": "int",
+        },
         "next_steps": ["create_bundle_recipe_for_bundle_type"],
     }
 

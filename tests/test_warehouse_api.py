@@ -30,6 +30,11 @@ def test_get_warehouse_returns_structured_404(client):
         "code": "warehouse_not_found",
         "message": "Warehouse not found",
         "warehouse_id": 999999,
+        "field": "warehouse_id",
+        "field_metadata": {
+            "description": "Requested warehouse identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_warehouse_id"],
     }
 
@@ -48,6 +53,10 @@ def test_create_warehouse_returns_structured_409_for_duplicate_code(client, db_s
         "code": "warehouse_code_already_exists",
         "message": "Warehouse code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested warehouse code",
+            "type": "string",
+        },
         "warehouse_code": "NSK",
         "next_steps": ["use_unique_warehouse_code"],
     }
@@ -69,6 +78,10 @@ def test_patch_warehouse_returns_structured_409_for_duplicate_code(client, db_se
         "code": "warehouse_code_already_exists",
         "message": "Warehouse code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested warehouse code",
+            "type": "string",
+        },
         "warehouse_code": "MSK",
         "next_steps": ["use_unique_warehouse_code"],
     }

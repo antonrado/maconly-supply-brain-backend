@@ -16,6 +16,10 @@ def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_dat
         "code": "wb_arrival_date_before_target_date",
         "message": "wb_arrival_date cannot be earlier than target_date",
         "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
         "target_date": str(target_date),
         "wb_arrival_date": str(wb_arrival_date),
         "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],

@@ -14,6 +14,11 @@ def _build_size_not_found_detail(*, size_id: int) -> dict[str, object]:
         "code": "size_not_found",
         "message": "Size not found",
         "size_id": int(size_id),
+        "field": "size_id",
+        "field_metadata": {
+            "description": "Requested size identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_size_id"],
     }
 
@@ -23,6 +28,10 @@ def _build_size_label_already_exists_detail(*, size_label: str) -> dict[str, obj
         "code": "size_label_already_exists",
         "message": "Size label already exists",
         "field": "label",
+        "field_metadata": {
+            "description": "Requested size label",
+            "type": "string",
+        },
         "size_label": str(size_label),
         "next_steps": ["use_unique_size_label"],
     }

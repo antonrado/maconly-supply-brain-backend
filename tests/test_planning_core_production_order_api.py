@@ -4114,10 +4114,21 @@ def test_production_order_proposal_requires_available_capital_in_strict_mode(cli
     response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
     assert response.status_code == 422, response.text
 
-    detail = response.json()["detail"]
-    assert detail["capital_constraint_status"] == CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
-    assert detail["severity"] == "HIGH"
-    assert "Provide overrides.available_capital" in detail["action"]
+    assert response.json()["detail"] == {
+        "code": "missing_available_capital_strict",
+        "message": "available_capital is required for production-order proposal in strict capital governance mode",
+        "article_id": seeded["article"].id,
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input for strict capital governance mode",
+            "type": "number",
+        },
+        "capital_constraint_status": CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
+        "severity": "HIGH",
+        "action": "Provide overrides.available_capital or configure article/global available_capital defaults.",
+        "economics_trust_level": ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
 
 
 def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
@@ -5627,9 +5638,21 @@ def test_production_order_proposal_from_wb_requires_available_capital_in_strict_
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 422, response.text
 
-    detail = response.json()["detail"]
-    assert detail["capital_constraint_status"] == CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
-    assert detail["severity"] == "HIGH"
+    assert response.json()["detail"] == {
+        "code": "missing_available_capital_strict",
+        "message": "available_capital is required for production-order proposal in strict capital governance mode",
+        "article_id": seeded["article"].id,
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input for strict capital governance mode",
+            "type": "number",
+        },
+        "capital_constraint_status": CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
+        "severity": "HIGH",
+        "action": "Provide overrides.available_capital or configure article/global available_capital defaults.",
+        "economics_trust_level": ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
 
 
 def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_economics(client, db_session):
@@ -6784,17 +6807,26 @@ def test_production_order_proposal_from_wb_strict_rejects_stale_data(client, db_
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 400, response.text
+    today_utc = datetime.now(timezone.utc).date()
 
-    detail = response.json()["detail"]
-    assert detail["code"] == "wb_data_freshness_failed"
-    assert detail["message"] == "WB data freshness check failed"
-    assert detail["article_id"] == seeded["article"].id
-    assert detail["freshness_mode"] == "strict"
-    assert detail["freshness_status"] == "stale"
-    assert detail["threshold_days"] == {"sales": 3, "stock": 2}
-    assert detail["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
-    assert detail["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
-    assert set(detail["stale_components"]) == {"sales", "stock"}
+    assert response.json()["detail"] == {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": seeded["article"].id,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "stale",
+        "sales_age_days": (today_utc - datetime(2020, 1, 1, tzinfo=timezone.utc).date()).days,
+        "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
+        "threshold_days": {"sales": 3, "stock": 2},
+        "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "stale_components": ["sales", "stock"],
+        "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+    }
 
 
 def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_session):
@@ -6828,18 +6860,24 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 400, response.text
 
-    detail = response.json()["detail"]
-    assert detail["code"] == "wb_data_freshness_failed"
-    assert detail["message"] == "WB data freshness check failed"
-    assert detail["article_id"] == seeded["article"].id
-    assert detail["freshness_mode"] == "strict"
-    assert detail["freshness_status"] == "no_data"
-    assert detail["sales_age_days"] is None
-    assert detail["stock_oldest_age_days"] is None
-    assert detail["threshold_days"] == {"sales": 3, "stock": 2}
-    assert detail["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
-    assert detail["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
-    assert detail["stale_components"] == []
+    assert response.json()["detail"] == {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": seeded["article"].id,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "no_data",
+        "sales_age_days": None,
+        "stock_oldest_age_days": None,
+        "threshold_days": {"sales": 3, "stock": 2},
+        "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "stale_components": [],
+        "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+    }
 
 
 def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaults(client, db_session):
@@ -7036,6 +7074,11 @@ def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(
         "code": "no_wb_mapped_bundle_types",
         "message": "No WB-mapped bundle types found for the article",
         "article_id": article.id,
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "next_steps": [
@@ -7064,6 +7107,11 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
         "code": "missing_wb_mapping_for_requested_bundle_types",
         "message": "Missing WB mapping for requested bundle_type_id(s)",
         "article_id": seeded["article"].id,
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "missing_bundle_type_ids": [seeded["bundle_type"].id],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
@@ -7100,6 +7148,11 @@ def test_production_order_proposal_rejects_without_bundle_recipe_with_structured
         "code": "no_bundle_recipe",
         "message": "No bundle recipe defined for the requested bundle types",
         "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "missing_bundle_type_ids": [seeded["bundle_type"].id],
         "next_steps": ["create_bundle_recipe_for_requested_bundle_type_ids"],
@@ -7130,6 +7183,11 @@ def test_production_order_proposal_rejects_with_partial_missing_bundle_recipe_wi
         "code": "missing_bundle_recipe_bundle_types",
         "message": "Bundle recipe is missing for some requested bundle types",
         "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
         "missing_bundle_type_ids": [second_bundle_type.id],
         "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
@@ -7167,6 +7225,11 @@ def test_production_order_proposal_rejects_without_sku_scope_with_structured_det
         "code": "no_sku_units_for_recipe_colors",
         "message": "No SKU units found for article and recipe colors",
         "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "recipe_color_ids": [seeded["color_1"].id, seeded["color_2"].id],
         "next_steps": ["create_sku_units_for_recipe_colors"],
@@ -7201,6 +7264,11 @@ def test_production_order_proposal_returns_404_for_unknown_article(client, db_se
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -7222,6 +7290,11 @@ def test_production_order_proposal_from_wb_returns_404_for_unknown_article(clien
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 

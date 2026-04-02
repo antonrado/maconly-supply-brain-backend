@@ -14,6 +14,11 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -23,6 +28,10 @@ def _build_article_code_already_exists_detail(*, article_code: str) -> dict[str,
         "code": "article_code_already_exists",
         "message": "Article code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested article code",
+            "type": "string",
+        },
         "article_code": str(article_code),
         "next_steps": ["use_unique_article_code"],
     }

@@ -127,6 +127,7 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
 
 def test_create_shipment_from_proposal_invalid_dates(client):
     payload = {
+        "items": [],
         "target_date": "2025-01-31",
         "wb_arrival_date": "2025-01-01",
         "target_coverage_days": 30,
@@ -146,6 +147,10 @@ def test_create_shipment_from_proposal_invalid_dates(client):
         "code": "wb_arrival_date_before_target_date",
         "message": "wb_arrival_date cannot be earlier than target_date",
         "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
         "target_date": "2025-01-31",
         "wb_arrival_date": "2025-01-01",
         "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
@@ -266,6 +271,11 @@ def test_get_shipment_by_id(client, db_session):
         "code": "wb_shipment_not_found",
         "message": "WbShipment not found",
         "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_id"],
     }
 
@@ -280,6 +290,11 @@ def test_update_shipment_returns_structured_404_for_unknown_shipment(client):
         "code": "wb_shipment_not_found",
         "message": "WbShipment not found",
         "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_id"],
     }
 
@@ -291,6 +306,11 @@ def test_get_shipment_item_summary_returns_structured_404_for_unknown_shipment(c
         "code": "wb_shipment_not_found",
         "message": "WbShipment not found",
         "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_id"],
     }
 
@@ -321,6 +341,11 @@ def test_get_shipment_item_summary_returns_structured_404_for_unknown_item(clien
         "message": "WbShipmentItem not found",
         "shipment_id": shipment.id,
         "item_id": 999999,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_item_id"],
     }
 
@@ -437,6 +462,10 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
         "message": "Invalid status 'weird'",
         "shipment_id": shipment.id,
         "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status",
+            "type": "string",
+        },
         "status": "weird",
         "allowed_values": ["approved", "cancelled", "draft", "shipped"],
         "next_steps": ["use_supported_wb_shipment_status"],
@@ -472,6 +501,10 @@ def test_update_shipment_returns_structured_400_for_invalid_status_transition(cl
         "message": "Invalid status transition from 'approved' to 'draft'",
         "shipment_id": shipment.id,
         "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status transition target",
+            "type": "string",
+        },
         "current_status": "approved",
         "target_status": "draft",
         "allowed_target_statuses": ["approved", "cancelled", "shipped"],
@@ -507,6 +540,11 @@ def test_update_shipment_returns_structured_400_for_final_status(client, db_sess
         "code": "wb_shipment_final_status_locked",
         "message": "Cannot modify a shipment in final status",
         "shipment_id": shipment.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking the requested mutation",
+            "type": "string",
+        },
         "status": "shipped",
         "next_steps": ["use_draft_or_approved_shipment_for_updates"],
     }
@@ -560,6 +598,11 @@ def test_shipment_item_editing_respects_status(client, db_session):
         "code": "wb_shipment_not_found",
         "message": "WbShipment not found",
         "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_id"],
     }
 
@@ -574,6 +617,11 @@ def test_shipment_item_editing_respects_status(client, db_session):
         "message": "WbShipmentItem not found",
         "shipment_id": shipment_id,
         "item_id": 999999,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
         "next_steps": ["use_existing_wb_shipment_item_id"],
     }
 
@@ -594,6 +642,11 @@ def test_shipment_item_editing_respects_status(client, db_session):
         "code": "wb_shipment_item_non_draft_locked",
         "message": "Cannot modify items of a non-draft shipment",
         "shipment_id": shipment_id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking item updates",
+            "type": "string",
+        },
         "status": "approved",
         "next_steps": ["use_draft_shipment_for_item_updates"],
     }
@@ -632,6 +685,10 @@ def test_update_shipment_item_returns_structured_400_when_final_qty_exceeds_stoc
         "final_qty": int(item["nsk_stock_available"]) + 1,
         "nsk_stock_available": int(item["nsk_stock_available"]),
         "field": "final_qty",
+        "field_metadata": {
+            "description": "Requested final shipment quantity",
+            "type": "int",
+        },
         "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
     }
 
@@ -952,6 +1009,10 @@ def test_shipment_headers_invalid_sort_by(client):
 		"code": "invalid_sort_by",
 		"message": "Invalid sort_by 'nonexistent_field'",
 		"field": "sort_by",
+		"field_metadata": {
+			"description": "Shipment header sort field query parameter",
+			"type": "string",
+		},
 		"sort_by": "nonexistent_field",
 		"allowed_values": ["created_at", "id", "status", "target_date", "updated_at", "wb_arrival_date"],
 		"next_steps": ["use_supported_shipment_sort_by"],
@@ -968,6 +1029,10 @@ def test_shipment_headers_invalid_sort_dir(client):
 		"code": "invalid_sort_dir",
 		"message": "Invalid sort_dir",
 		"field": "sort_dir",
+		"field_metadata": {
+			"description": "Shipment header sort direction query parameter",
+			"type": "Literal['asc','desc']",
+		},
 		"sort_dir": "sideways",
 		"allowed_values": ["asc", "desc"],
 		"next_steps": ["use_sort_dir_asc_or_desc"],

@@ -18,6 +18,11 @@ def _build_planning_settings_not_found_detail(*, planning_settings_id: int) -> d
         "code": "planning_settings_not_found",
         "message": "PlanningSettings not found",
         "planning_settings_id": int(planning_settings_id),
+        "field": "planning_settings_id",
+        "field_metadata": {
+            "description": "Requested planning settings identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_planning_settings_id"],
     }
 
@@ -27,6 +32,10 @@ def _build_planning_settings_article_already_exists_detail(*, article_id: int) -
         "code": "planning_settings_article_already_exists",
         "message": "PlanningSettings for this article already exists",
         "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings uniqueness",
+            "type": "int",
+        },
         "article_id": int(article_id),
         "next_steps": ["use_article_without_existing_planning_settings"],
     }

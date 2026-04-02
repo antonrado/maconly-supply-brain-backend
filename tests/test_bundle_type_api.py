@@ -30,6 +30,11 @@ def test_get_bundle_type_returns_structured_404(client):
         "code": "bundle_type_not_found",
         "message": "BundleType not found",
         "bundle_type_id": 999999,
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_type_id"],
     }
 
@@ -48,6 +53,10 @@ def test_create_bundle_type_returns_structured_409_for_duplicate_code(client, db
         "code": "bundle_type_code_already_exists",
         "message": "BundleType code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested bundle type code",
+            "type": "string",
+        },
         "bundle_type_code": "SET",
         "next_steps": ["use_unique_bundle_type_code"],
     }
@@ -69,6 +78,10 @@ def test_patch_bundle_type_returns_structured_409_for_duplicate_code(client, db_
         "code": "bundle_type_code_already_exists",
         "message": "BundleType code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested bundle type code",
+            "type": "string",
+        },
         "bundle_type_code": "SET",
         "next_steps": ["use_unique_bundle_type_code"],
     }

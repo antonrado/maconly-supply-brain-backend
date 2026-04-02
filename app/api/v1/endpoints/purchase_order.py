@@ -74,6 +74,10 @@ def _build_invalid_purchase_order_status_detail(*, order_id: int, status_value: 
         "message": f"Invalid status '{status_value}'",
         "order_id": int(order_id),
         "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status",
+            "type": "string",
+        },
         "status": str(status_value),
         "allowed_values": sorted(_ALLOWED_STATUSES),
         "next_steps": ["use_supported_purchase_order_status"],
@@ -91,6 +95,10 @@ def _build_invalid_purchase_order_status_transition_detail(
         "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
         "order_id": int(order_id),
         "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status transition target",
+            "type": "string",
+        },
         "current_status": str(current_status),
         "target_status": str(target_status),
         "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
@@ -103,6 +111,11 @@ def _build_purchase_order_not_found_detail(*, order_id: int) -> dict[str, object
         "code": "purchase_order_not_found",
         "message": "PurchaseOrder not found",
         "order_id": int(order_id),
+        "field": "order_id",
+        "field_metadata": {
+            "description": "Requested purchase order identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_purchase_order_id"],
     }
 
@@ -113,6 +126,11 @@ def _build_purchase_order_item_not_found_detail(*, order_id: int, item_id: int) 
         "message": "PurchaseOrderItem not found",
         "order_id": int(order_id),
         "item_id": int(item_id),
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested purchase order item identifier within order scope",
+            "type": "int",
+        },
         "next_steps": ["use_existing_purchase_order_item_id"],
     }
 
@@ -122,6 +140,11 @@ def _build_purchase_order_item_non_draft_locked_detail(*, order_id: int, status_
         "code": "purchase_order_item_non_draft_locked",
         "message": "Cannot modify items of a non-draft purchase order",
         "order_id": int(order_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current purchase order status blocking item updates",
+            "type": "string",
+        },
         "status": str(status_value),
         "next_steps": ["use_draft_purchase_order_for_item_updates"],
     }

@@ -37,6 +37,11 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 

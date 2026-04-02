@@ -46,6 +46,11 @@ def test_get_stock_balance_returns_structured_404(client):
         "code": "stock_balance_not_found",
         "message": "StockBalance not found",
         "stock_balance_id": 999999,
+        "field": "stock_balance_id",
+        "field_metadata": {
+            "description": "Requested stock balance identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_stock_balance_id"],
     }
 
@@ -76,6 +81,10 @@ def test_create_stock_balance_returns_structured_409_for_duplicate_pair(client, 
         "code": "stock_balance_pair_already_exists",
         "message": "StockBalance for this sku_unit and warehouse already exists",
         "field": "sku_unit_id,warehouse_id",
+        "field_metadata": {
+            "description": "Requested stock balance uniqueness pair",
+            "type": "tuple[int,int]",
+        },
         "sku_unit_id": sku.id,
         "warehouse_id": warehouse.id,
         "next_steps": ["use_unique_stock_balance_sku_unit_warehouse_pair"],
@@ -118,6 +127,10 @@ def test_patch_stock_balance_returns_structured_409_for_duplicate_pair(client, d
         "code": "stock_balance_pair_already_exists",
         "message": "StockBalance for this sku_unit and warehouse already exists",
         "field": "sku_unit_id,warehouse_id",
+        "field_metadata": {
+            "description": "Requested stock balance uniqueness pair",
+            "type": "tuple[int,int]",
+        },
         "sku_unit_id": sku_one.id,
         "warehouse_id": warehouse_one.id,
         "next_steps": ["use_unique_stock_balance_sku_unit_warehouse_pair"],

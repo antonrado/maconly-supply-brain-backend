@@ -103,7 +103,17 @@ def test_shipment_aggregates_happy_path(client, db_session):
 def test_shipment_aggregates_not_found(client):
     resp = client.get("/api/v1/wb/manager/shipment/999999/aggregates")
     assert resp.status_code == 404
-    assert resp.json()["detail"] == "WbShipment not found"
+    assert resp.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
 
 
 def test_shipment_item_summary_happy_path(client, db_session):
@@ -142,7 +152,18 @@ def test_shipment_item_summary_item_not_in_shipment(client, db_session):
         f"/api/v1/wb/manager/shipment/{shipment2.id}/items/{item.id}/summary",
     )
     assert resp.status_code == 404
-    assert resp.json()["detail"] == "WbShipmentItem not found"
+    assert resp.json()["detail"] == {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": shipment2.id,
+        "item_id": item.id,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
 
 
 def test_shipment_item_summary_shipment_not_found(client, db_session):
@@ -153,7 +174,17 @@ def test_shipment_item_summary_shipment_not_found(client, db_session):
         f"/api/v1/wb/manager/shipment/999999/items/{item.id}/summary",
     )
     assert resp.status_code == 404
-    assert resp.json()["detail"] == "WbShipment not found"
+    assert resp.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
 
 
 def test_shipment_status_list_basic(client):
@@ -211,7 +242,20 @@ def test_patch_shipment_item_final_qty_exceeds_nsk_stock(client, db_session):
         json={"final_qty": 60},
     )
     assert resp.status_code == 400
-    assert resp.json()["detail"] == "final_qty exceeds available NSC stock"
+    assert resp.json()["detail"] == {
+        "code": "wb_shipment_item_final_qty_exceeds_stock",
+        "message": "final_qty exceeds available NSC stock",
+        "shipment_id": shipment.id,
+        "item_id": item.id,
+        "final_qty": 60,
+        "nsk_stock_available": 50,
+        "field": "final_qty",
+        "field_metadata": {
+            "description": "Requested final shipment quantity",
+            "type": "int",
+        },
+        "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
+    }
 
 
 def test_patch_shipment_item_final_qty_valid_change(client, db_session):

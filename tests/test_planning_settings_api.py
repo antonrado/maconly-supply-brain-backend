@@ -31,6 +31,11 @@ def test_get_planning_settings_returns_structured_404(client):
         "code": "planning_settings_not_found",
         "message": "PlanningSettings not found",
         "planning_settings_id": 999999,
+        "field": "planning_settings_id",
+        "field_metadata": {
+            "description": "Requested planning settings identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_planning_settings_id"],
     }
 
@@ -70,6 +75,10 @@ def test_create_planning_settings_returns_structured_409_for_duplicate_article(c
         "code": "planning_settings_article_already_exists",
         "message": "PlanningSettings for this article already exists",
         "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings uniqueness",
+            "type": "int",
+        },
         "article_id": article.id,
         "next_steps": ["use_article_without_existing_planning_settings"],
     }
@@ -112,6 +121,10 @@ def test_patch_planning_settings_returns_structured_409_for_duplicate_article(cl
         "code": "planning_settings_article_already_exists",
         "message": "PlanningSettings for this article already exists",
         "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings uniqueness",
+            "type": "int",
+        },
         "article_id": article_one.id,
         "next_steps": ["use_article_without_existing_planning_settings"],
     }

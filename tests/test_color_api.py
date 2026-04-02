@@ -30,6 +30,11 @@ def test_get_color_returns_structured_404(client):
         "code": "color_not_found",
         "message": "Color not found",
         "color_id": 999999,
+        "field": "color_id",
+        "field_metadata": {
+            "description": "Requested color identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_color_id"],
     }
 
@@ -48,6 +53,10 @@ def test_create_color_returns_structured_409_for_duplicate_inner_code(client, db
         "code": "color_inner_code_already_exists",
         "message": "Color inner_code already exists",
         "field": "inner_code",
+        "field_metadata": {
+            "description": "Requested color inner_code",
+            "type": "string",
+        },
         "inner_code": "BLK",
         "next_steps": ["use_unique_color_inner_code"],
     }
@@ -69,6 +78,10 @@ def test_patch_color_returns_structured_409_for_duplicate_inner_code(client, db_
         "code": "color_inner_code_already_exists",
         "message": "Color inner_code already exists",
         "field": "inner_code",
+        "field_metadata": {
+            "description": "Requested color inner_code",
+            "type": "string",
+        },
         "inner_code": "BLK",
         "next_steps": ["use_unique_color_inner_code"],
     }

@@ -31,6 +31,11 @@ def test_get_bundle_recipe_returns_structured_404(client):
         "code": "bundle_recipe_not_found",
         "message": "BundleRecipe not found",
         "bundle_recipe_id": 999999,
+        "field": "bundle_recipe_id",
+        "field_metadata": {
+            "description": "Requested bundle recipe identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_recipe_id"],
     }
 
@@ -52,6 +57,10 @@ def test_create_bundle_recipe_returns_structured_409_for_duplicate_combination(c
         "code": "bundle_recipe_combination_already_exists",
         "message": "BundleRecipe with same combination already exists",
         "field": "article_id,bundle_type_id,color_id,position",
+        "field_metadata": {
+            "description": "Requested bundle recipe uniqueness tuple",
+            "type": "tuple[int,int,int,int]",
+        },
         "article_id": article.id,
         "bundle_type_id": 1,
         "color_id": color.id,
@@ -80,6 +89,10 @@ def test_patch_bundle_recipe_returns_structured_409_for_duplicate_combination(cl
         "code": "bundle_recipe_combination_already_exists",
         "message": "BundleRecipe with same combination already exists",
         "field": "article_id,bundle_type_id,color_id,position",
+        "field_metadata": {
+            "description": "Requested bundle recipe uniqueness tuple",
+            "type": "tuple[int,int,int,int]",
+        },
         "article_id": article.id,
         "bundle_type_id": 1,
         "color_id": color_one.id,

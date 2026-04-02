@@ -14,6 +14,11 @@ def _build_bundle_recipe_not_found_detail(*, bundle_recipe_id: int) -> dict[str,
         "code": "bundle_recipe_not_found",
         "message": "BundleRecipe not found",
         "bundle_recipe_id": int(bundle_recipe_id),
+        "field": "bundle_recipe_id",
+        "field_metadata": {
+            "description": "Requested bundle recipe identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_recipe_id"],
     }
 
@@ -29,6 +34,10 @@ def _build_bundle_recipe_combination_already_exists_detail(
         "code": "bundle_recipe_combination_already_exists",
         "message": "BundleRecipe with same combination already exists",
         "field": "article_id,bundle_type_id,color_id,position",
+        "field_metadata": {
+            "description": "Requested bundle recipe uniqueness tuple",
+            "type": "tuple[int,int,int,int]",
+        },
         "article_id": int(article_id),
         "bundle_type_id": int(bundle_type_id),
         "color_id": int(color_id),

@@ -14,6 +14,11 @@ def _build_color_not_found_detail(*, color_id: int) -> dict[str, object]:
         "code": "color_not_found",
         "message": "Color not found",
         "color_id": int(color_id),
+        "field": "color_id",
+        "field_metadata": {
+            "description": "Requested color identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_color_id"],
     }
 
@@ -23,6 +28,10 @@ def _build_color_inner_code_already_exists_detail(*, inner_code: str) -> dict[st
         "code": "color_inner_code_already_exists",
         "message": "Color inner_code already exists",
         "field": "inner_code",
+        "field_metadata": {
+            "description": "Requested color inner_code",
+            "type": "string",
+        },
         "inner_code": str(inner_code),
         "next_steps": ["use_unique_color_inner_code"],
     }

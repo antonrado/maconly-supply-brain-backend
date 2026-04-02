@@ -30,6 +30,11 @@ def test_get_size_returns_structured_404(client):
         "code": "size_not_found",
         "message": "Size not found",
         "size_id": 999999,
+        "field": "size_id",
+        "field_metadata": {
+            "description": "Requested size identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_size_id"],
     }
 
@@ -48,6 +53,10 @@ def test_create_size_returns_structured_409_for_duplicate_label(client, db_sessi
         "code": "size_label_already_exists",
         "message": "Size label already exists",
         "field": "label",
+        "field_metadata": {
+            "description": "Requested size label",
+            "type": "string",
+        },
         "size_label": "XL",
         "next_steps": ["use_unique_size_label"],
     }
@@ -69,6 +78,10 @@ def test_patch_size_returns_structured_409_for_duplicate_label(client, db_sessio
         "code": "size_label_already_exists",
         "message": "Size label already exists",
         "field": "label",
+        "field_metadata": {
+            "description": "Requested size label",
+            "type": "string",
+        },
         "size_label": "S",
         "next_steps": ["use_unique_size_label"],
     }

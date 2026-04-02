@@ -212,5 +212,10 @@ def test_article_dashboard_article_not_found(client, db_session, monkeypatch):  
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 9999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }

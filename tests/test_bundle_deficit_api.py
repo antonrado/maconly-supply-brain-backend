@@ -43,6 +43,10 @@ def test_bundle_deficit_returns_400_for_non_positive_target_count(client):
         "message": "target_count must be positive",
         "target_count": 0,
         "field": "target_count",
+        "field_metadata": {
+            "description": "Requested bundle target count",
+            "type": "int",
+        },
         "next_steps": ["use_positive_target_count"],
     }
 
@@ -62,6 +66,11 @@ def test_bundle_deficit_returns_404_for_unknown_article(client):
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -86,6 +95,11 @@ def test_bundle_deficit_returns_404_for_unknown_bundle_type(client, db_session):
         "code": "bundle_type_not_found",
         "message": "BundleType not found",
         "bundle_type_id": 999999,
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_bundle_type_id"],
     }
 
@@ -110,6 +124,11 @@ def test_bundle_deficit_returns_404_for_unknown_warehouse(client, db_session):
         "code": "warehouse_not_found",
         "message": "Warehouse not found",
         "warehouse_id": 999999,
+        "field": "warehouse_id",
+        "field_metadata": {
+            "description": "Requested warehouse identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_warehouse_id"],
     }
 
@@ -136,5 +155,10 @@ def test_bundle_deficit_returns_400_for_missing_bundle_recipe(client, db_session
         "message": "No bundle recipe defined for this article and bundle type",
         "article_id": article.id,
         "bundle_type_id": bundle_type.id,
+        "field": "bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type identifier for bundle recipe lookup",
+            "type": "int",
+        },
         "next_steps": ["create_bundle_recipe_for_bundle_type"],
     }

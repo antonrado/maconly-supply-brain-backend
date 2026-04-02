@@ -31,6 +31,11 @@ def test_get_sku_unit_returns_structured_404(client):
         "code": "sku_unit_not_found",
         "message": "SkuUnit not found",
         "sku_unit_id": 999999,
+        "field": "sku_unit_id",
+        "field_metadata": {
+            "description": "Requested SKU unit identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_sku_unit_id"],
     }
 
@@ -52,6 +57,10 @@ def test_create_sku_unit_returns_structured_409_for_duplicate_combination(client
         "code": "sku_unit_combination_already_exists",
         "message": "SkuUnit combination already exists",
         "field": "article_id,color_id,size_id",
+        "field_metadata": {
+            "description": "Requested SKU unit uniqueness tuple",
+            "type": "tuple[int,int,int]",
+        },
         "article_id": article.id,
         "color_id": color.id,
         "size_id": size.id,
@@ -81,6 +90,10 @@ def test_patch_sku_unit_returns_structured_409_for_duplicate_combination(client,
         "code": "sku_unit_combination_already_exists",
         "message": "SkuUnit combination already exists",
         "field": "article_id,color_id,size_id",
+        "field_metadata": {
+            "description": "Requested SKU unit uniqueness tuple",
+            "type": "tuple[int,int,int]",
+        },
         "article_id": article_one.id,
         "color_id": color_one.id,
         "size_id": size_one.id,

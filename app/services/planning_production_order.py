@@ -3585,6 +3585,11 @@ def _build_from_wb_no_mapping_detail(
         "code": "no_wb_mapped_bundle_types",
         "message": "No WB-mapped bundle types found for the article",
         "article_id": int(article_id),
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in (requested_bundle_type_ids or [])],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "next_steps": build_from_wb_readiness_next_steps("no_wb_mapping"),
@@ -3601,6 +3606,11 @@ def _build_from_wb_missing_requested_bundle_type_detail(
         "code": "missing_wb_mapping_for_requested_bundle_types",
         "message": "Missing WB mapping for requested bundle_type_id(s)",
         "article_id": int(article_id),
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
         "missing_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in missing_bundle_type_ids],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
@@ -3643,6 +3653,11 @@ def _build_from_wb_freshness_failure_detail(
         "code": "wb_data_freshness_failed",
         "message": "WB data freshness check failed",
         "article_id": int(article_id),
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
         "freshness_mode": freshness_mode,
         "freshness_status": freshness_status,
         "sales_age_days": sales_age_days,
@@ -3680,6 +3695,11 @@ def _build_direct_missing_bundle_recipe_detail(
         "code": code,
         "message": message,
         "article_id": int(article_id),
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": requested,
         "missing_bundle_type_ids": all_missing,
         "next_steps": next_steps,
@@ -3696,6 +3716,11 @@ def _build_direct_missing_sku_scope_detail(
         "code": "no_sku_units_for_recipe_colors",
         "message": "No SKU units found for article and recipe colors",
         "article_id": int(article_id),
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
         "recipe_color_ids": [int(color_id) for color_id in recipe_color_ids],
         "next_steps": ["create_sku_units_for_recipe_colors"],
@@ -3707,7 +3732,34 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
+    }
+
+
+def _build_missing_available_capital_strict_detail(
+    *,
+    article_id: int,
+    economics_trust_level: object,
+) -> dict[str, object]:
+    return {
+        "code": "missing_available_capital_strict",
+        "message": "available_capital is required for production-order proposal in strict capital governance mode",
+        "article_id": int(article_id),
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input for strict capital governance mode",
+            "type": "number",
+        },
+        "capital_constraint_status": CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
+        "severity": "HIGH",
+        "action": "Provide overrides.available_capital or configure article/global available_capital defaults.",
+        "economics_trust_level": economics_trust_level,
+        "next_steps": ["provide_available_capital_override_or_default"],
     }
 
 
@@ -4804,19 +4856,10 @@ def build_production_order_proposal(
     if economic_settings.available_capital is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={
-                "message": (
-                    "available_capital is required for production-order proposal in strict capital "
-                    "governance mode"
-                ),
-                "capital_constraint_status": CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
-                "severity": "HIGH",
-                "action": (
-                    "Provide overrides.available_capital or configure article/global available_capital "
-                    "defaults."
-                ),
-                "economics_trust_level": economics_trust.get("economics_trust_level"),
-            },
+            detail=_build_missing_available_capital_strict_detail(
+                article_id=request.article_id,
+                economics_trust_level=economics_trust.get("economics_trust_level"),
+            ),
         )
 
     bundle_type_ids = sorted({item.bundle_type_id for item in request.bundle_daily_sales})

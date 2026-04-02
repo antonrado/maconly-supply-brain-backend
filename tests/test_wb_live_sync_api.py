@@ -54,6 +54,11 @@ def test_wb_live_sales_sync_rejects_unknown_active_account_id_with_structured_de
     assert response.json()["detail"] == {
         "code": "wb_integration_account_not_found",
         "message": "Active WB integration account not found",
+        "field": "account_id",
+        "field_metadata": {
+            "description": "WB integration account identifier",
+            "type": "int",
+        },
         "account_id": 999999,
         "next_steps": ["use_existing_active_wb_account_id"],
     }
@@ -77,6 +82,11 @@ def test_wb_live_sales_sync_rejects_empty_api_token_with_structured_detail(clien
     assert response.json()["detail"] == {
         "code": "wb_integration_account_empty_api_token",
         "message": "WB integration account has empty api_token",
+        "field": "api_token",
+        "field_metadata": {
+            "description": "WB integration account API token",
+            "type": "string",
+        },
         "account_id": account.id,
         "next_steps": ["set_wb_integration_account_api_token"],
     }
@@ -284,6 +294,33 @@ def test_wb_live_article_mapping_sync_matches_article_codes(client, db_session, 
     assert row.article_id == article.id
     assert row.wb_sku == "WB-BAR-1"
     assert row.bundle_type_id == 10
+
+
+def test_wb_article_mapping_import_rejects_unknown_article_with_structured_detail(client):
+    response = client.post(
+        "/api/v1/wb/article-mapping/import",
+        json={
+            "items": [
+                {
+                    "article_id": 999999999,
+                    "wb_sku": "WB-MISSING-ARTICLE",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_mapping_article_not_found",
+        "message": "Referenced article_id does not exist",
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Article identifier in article-to-WB mapping import payload",
+            "type": "int",
+        },
+        "article_id": 999999999,
+        "wb_sku": "WB-MISSING-ARTICLE",
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_wb_live_article_mapping_sync_uses_normalized_match(client, db_session, monkeypatch):
@@ -592,6 +629,8 @@ def test_wb_get_json_rows_raises_429_after_retries(monkeypatch):
         "code": "wb_api_rate_limit_exceeded",
         "message": "WB API rate limit exceeded",
         "next_steps": ["retry_wb_live_sync_later"],
+        "operation": "http_request",
+        "operation_metadata": {"method": "GET"},
         "retry_after_seconds": 2,
         "retry_after_raw": "2",
     }
@@ -611,6 +650,8 @@ def test_wb_request_raises_structured_request_failed_detail(monkeypatch):
         "code": "wb_api_request_failed",
         "message": "WB API request failed",
         "next_steps": ["retry_wb_live_sync"],
+        "operation": "http_request",
+        "operation_metadata": {"method": "GET"},
         "error": "boom",
     }
 
@@ -632,6 +673,32 @@ def test_wb_request_raises_structured_unauthorized_detail(monkeypatch):
         "code": "wb_api_unauthorized",
         "message": "WB API token is unauthorized for this method",
         "next_steps": ["check_wb_api_token_permissions"],
+        "operation": "http_request",
+        "operation_metadata": {"method": "GET"},
+    }
+
+
+def test_wb_request_raises_structured_http_error_detail(monkeypatch):
+    class FakeResponse:
+        def __init__(self):
+            self.status_code = 500
+            self.headers = {}
+            self.text = "upstream boom"
+
+    monkeypatch.setattr(wb_ingest.httpx, "request", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(HTTPException) as exc:
+        wb_ingest._wb_request(method="GET", url="https://example.test", token="t")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == {
+        "code": "wb_api_http_error",
+        "message": "WB API returned an unexpected HTTP error",
+        "next_steps": ["retry_wb_live_sync", "check_wb_api_status_or_request_payload"],
+        "operation": "http_request",
+        "operation_metadata": {"method": "GET"},
+        "upstream_status_code": 500,
+        "body_preview": "upstream boom",
     }
 
 
@@ -648,6 +715,8 @@ def test_wb_parse_json_payload_raises_structured_invalid_json_detail():
         "code": "wb_api_invalid_json",
         "message": "WB API response is not valid JSON",
         "next_steps": ["retry_wb_live_sync", "inspect_wb_api_response_format"],
+        "operation": "parse_json_response",
+        "operation_metadata": {"expected_type": "json"},
     }
 
 
@@ -660,6 +729,8 @@ def test_normalize_wb_json_rows_raises_structured_invalid_rows_format_detail():
         "code": "wb_api_invalid_rows_format",
         "message": "WB API response format is invalid: expected array",
         "next_steps": ["inspect_wb_api_response_format"],
+        "operation": "normalize_json_rows",
+        "operation_metadata": {"expected_type": "list[object]"},
     }
 
 
@@ -686,6 +757,8 @@ def test_wb_get_json_object_raises_structured_invalid_object_format_detail(monke
         "code": "wb_api_invalid_object_format",
         "message": "WB API response format is invalid: expected object",
         "next_steps": ["inspect_wb_api_response_format"],
+        "operation": "normalize_json_object",
+        "operation_metadata": {"expected_type": "object"},
     }
 
 
@@ -699,6 +772,11 @@ def test_wb_from_wb_readiness_returns_404_for_unknown_article(client, db_session
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 

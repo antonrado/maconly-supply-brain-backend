@@ -231,3 +231,24 @@ def test_bundle_risk_portfolio_filters_article_ids_and_is_active(client, db_sess
     items_filtered = resp_filtered.json()["items"]
     codes_filtered = {e["article_code"] for e in items_filtered}
     assert codes_filtered == {a_inactive.code}
+
+
+def test_bundle_risk_portfolio_ignores_unknown_article_ids_with_structured_not_found(client, db_session):
+    article, _ = _create_article_bundle_with_planning_and_sales(
+        db_session,
+        code="RISK-KNOWN",
+        total_available_bundles=20,
+        sales_per_day=2,
+        num_sales_days=5,
+        is_active=True,
+    )
+
+    resp = client.get(
+        "/api/v1/planning/bundle-risk-portfolio",
+        params={"article_ids": [article.id, 999999999]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    items = resp.json()["items"]
+    codes = {entry["article_code"] for entry in items}
+    assert codes == {article.code}

@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
 from app.models.models import PlanningSettings
+from app.services import order_explanation
 from tests.test_utils import (
     add_wb_sales,
     add_wb_stock,
@@ -155,6 +157,27 @@ def test_color_minimum_binds(client, db_session):
 
     assert reason_for_color["final_order_qty"] == 2000
     assert reason_for_color["limiting_constraint"] == "color_min_batch"
+
+
+def test_build_order_explanation_for_article_rejects_unknown_article_with_structured_detail(db_session):
+    with pytest.raises(HTTPException) as exc:
+        order_explanation.build_order_explanation_for_article(
+            db=db_session,
+            article_id=999999999,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_filtering_by_article_ids_and_is_active(client, db_session):

@@ -14,6 +14,11 @@ def _build_warehouse_not_found_detail(*, warehouse_id: int) -> dict[str, object]
         "code": "warehouse_not_found",
         "message": "Warehouse not found",
         "warehouse_id": int(warehouse_id),
+        "field": "warehouse_id",
+        "field_metadata": {
+            "description": "Requested warehouse identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_warehouse_id"],
     }
 
@@ -23,6 +28,10 @@ def _build_warehouse_code_already_exists_detail(*, warehouse_code: str) -> dict[
         "code": "warehouse_code_already_exists",
         "message": "Warehouse code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested warehouse code",
+            "type": "string",
+        },
         "warehouse_code": str(warehouse_code),
         "next_steps": ["use_unique_warehouse_code"],
     }

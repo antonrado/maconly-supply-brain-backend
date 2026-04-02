@@ -63,6 +63,8 @@ def _build_wb_account_resolution_detail(
     code: str,
     message: str,
     next_steps: list[str],
+    field: str | None = None,
+    field_metadata: dict[str, object] | None = None,
     account_id: int | None = None,
 ) -> dict[str, object]:
     detail = {
@@ -70,6 +72,10 @@ def _build_wb_account_resolution_detail(
         "message": message,
         "next_steps": list(next_steps),
     }
+    if field is not None:
+        detail["field"] = field
+    if field_metadata is not None:
+        detail["field_metadata"] = dict(field_metadata)
     if account_id is not None:
         detail["account_id"] = int(account_id)
     return detail
@@ -80,6 +86,8 @@ def _build_wb_api_failure_detail(
     code: str,
     message: str,
     next_steps: list[str],
+    operation: str | None = None,
+    operation_metadata: dict[str, object] | None = None,
     extra: dict[str, object] | None = None,
 ) -> dict[str, object]:
     detail = {
@@ -87,6 +95,10 @@ def _build_wb_api_failure_detail(
         "message": message,
         "next_steps": list(next_steps),
     }
+    if operation is not None:
+        detail["operation"] = operation
+    if operation_metadata is not None:
+        detail["operation_metadata"] = dict(operation_metadata)
     if extra:
         detail.update(extra)
     return detail
@@ -97,6 +109,26 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
+def _build_wb_mapping_article_not_found_detail(*, article_id: int, wb_sku: str) -> dict[str, object]:
+    return {
+        "code": "wb_mapping_article_not_found",
+        "message": "Referenced article_id does not exist",
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Article identifier in article-to-WB mapping import payload",
+            "type": "int",
+        },
+        "article_id": int(article_id),
+        "wb_sku": str(wb_sku),
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -118,6 +150,11 @@ def _resolve_wb_integration_account(
                 detail=_build_wb_account_resolution_detail(
                     code="wb_integration_account_not_found",
                     message="Active WB integration account not found",
+                    field="account_id",
+                    field_metadata={
+                        "description": "WB integration account identifier",
+                        "type": "int",
+                    },
                     account_id=account_id,
                     next_steps=["use_existing_active_wb_account_id"],
                 ),
@@ -138,6 +175,11 @@ def _resolve_wb_integration_account(
             detail=_build_wb_account_resolution_detail(
                 code="wb_integration_account_empty_api_token",
                 message="WB integration account has empty api_token",
+                field="api_token",
+                field_metadata={
+                    "description": "WB integration account API token",
+                    "type": "string",
+                },
                 account_id=account.id,
                 next_steps=["set_wb_integration_account_api_token"],
             ),
@@ -264,6 +306,8 @@ def _wb_request(
                     code="wb_api_request_failed",
                     message="WB API request failed",
                     next_steps=["retry_wb_live_sync"],
+                    operation="http_request",
+                    operation_metadata={"method": str(method)},
                     extra={"error": str(exc)},
                 ),
             ) from exc
@@ -286,6 +330,8 @@ def _wb_request(
                     code="wb_api_rate_limit_exceeded",
                     message="WB API rate limit exceeded",
                     next_steps=["retry_wb_live_sync_later"],
+                    operation="http_request",
+                    operation_metadata={"method": str(method)},
                     extra={
                         "retry_after_seconds": retry_after,
                         "retry_after_raw": retry_after_header,
@@ -302,6 +348,8 @@ def _wb_request(
                 code="wb_api_no_response",
                 message="WB API request failed: no response",
                 next_steps=["retry_wb_live_sync"],
+                operation="http_request",
+                operation_metadata={"method": str(method)},
             ),
         )
 
@@ -312,6 +360,8 @@ def _wb_request(
                 code="wb_api_unauthorized",
                 message="WB API token is unauthorized for this method",
                 next_steps=["check_wb_api_token_permissions"],
+                operation="http_request",
+                operation_metadata={"method": str(method)},
             ),
         )
 
@@ -323,6 +373,8 @@ def _wb_request(
                 code="wb_api_http_error",
                 message="WB API returned an unexpected HTTP error",
                 next_steps=["retry_wb_live_sync", "check_wb_api_status_or_request_payload"],
+                operation="http_request",
+                operation_metadata={"method": str(method)},
                 extra={
                     "upstream_status_code": int(response.status_code),
                     "body_preview": body_preview,
@@ -343,6 +395,8 @@ def _wb_parse_json_payload(response: httpx.Response) -> object:
                 code="wb_api_invalid_json",
                 message="WB API response is not valid JSON",
                 next_steps=["retry_wb_live_sync", "inspect_wb_api_response_format"],
+                operation="parse_json_response",
+                operation_metadata={"expected_type": "json"},
             ),
         ) from exc
 
@@ -355,6 +409,8 @@ def _normalize_wb_json_rows(payload: object) -> list[dict[str, object]]:
                 code="wb_api_invalid_rows_format",
                 message="WB API response format is invalid: expected array",
                 next_steps=["inspect_wb_api_response_format"],
+                operation="normalize_json_rows",
+                operation_metadata={"expected_type": "list[object]"},
             ),
         )
 
@@ -403,6 +459,8 @@ def _wb_get_json_object(
                 code="wb_api_invalid_object_format",
                 message="WB API response format is invalid: expected object",
                 next_steps=["inspect_wb_api_response_format"],
+                operation="normalize_json_object",
+                operation_metadata={"expected_type": "object"},
             ),
         )
     return payload
@@ -1489,9 +1547,9 @@ def map_bundles_to_sku(
         if item.article_id not in valid_article_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"article_id={item.article_id} for wb_sku={item.wb_sku} "
-                    "does not exist in article table"
+                detail=_build_wb_mapping_article_not_found_detail(
+                    article_id=item.article_id,
+                    wb_sku=item.wb_sku,
                 ),
             )
 

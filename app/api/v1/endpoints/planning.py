@@ -120,6 +120,11 @@ def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -129,6 +134,11 @@ def _build_no_planning_settings_found_detail(*, article_id: int) -> dict[str, ob
         "code": "no_planning_settings_found",
         "message": "No planning settings found for this article",
         "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings lookup",
+            "type": "int",
+        },
         "next_steps": ["configure_article_planning_settings"],
     }
 
@@ -467,6 +477,10 @@ def get_monitoring_timeseries(
                 "code": "missing_metrics_query_parameter",
                 "message": "metrics query parameter is required",
                 "field": "metrics",
+                "field_metadata": {
+                    "description": "Monitoring timeseries metrics query parameter",
+                    "type": "list[string]",
+                },
                 "next_steps": ["provide_at_least_one_metrics_query_parameter"],
             },
         )
@@ -480,6 +494,11 @@ def _build_alert_rule_not_found_detail(*, rule_id: int) -> dict[str, object]:
         "code": "alert_rule_not_found",
         "message": "Alert rule not found",
         "rule_id": int(rule_id),
+        "field": "rule_id",
+        "field_metadata": {
+            "description": "Requested monitoring alert rule identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_alert_rule_id"],
     }
 

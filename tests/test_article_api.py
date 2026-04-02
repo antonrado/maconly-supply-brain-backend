@@ -30,6 +30,11 @@ def test_get_article_returns_structured_404(client):
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 
@@ -48,6 +53,10 @@ def test_create_article_returns_structured_409_for_duplicate_code(client, db_ses
         "code": "article_code_already_exists",
         "message": "Article code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested article code",
+            "type": "string",
+        },
         "article_code": "ART-1",
         "next_steps": ["use_unique_article_code"],
     }
@@ -69,6 +78,10 @@ def test_patch_article_returns_structured_409_for_duplicate_code(client, db_sess
         "code": "article_code_already_exists",
         "message": "Article code already exists",
         "field": "code",
+        "field_metadata": {
+            "description": "Requested article code",
+            "type": "string",
+        },
         "article_code": "ART-1",
         "next_steps": ["use_unique_article_code"],
     }

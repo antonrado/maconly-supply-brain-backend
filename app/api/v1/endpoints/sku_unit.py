@@ -14,6 +14,11 @@ def _build_sku_unit_not_found_detail(*, sku_unit_id: int) -> dict[str, object]:
         "code": "sku_unit_not_found",
         "message": "SkuUnit not found",
         "sku_unit_id": int(sku_unit_id),
+        "field": "sku_unit_id",
+        "field_metadata": {
+            "description": "Requested SKU unit identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_sku_unit_id"],
     }
 
@@ -28,6 +33,10 @@ def _build_sku_unit_combination_already_exists_detail(
         "code": "sku_unit_combination_already_exists",
         "message": "SkuUnit combination already exists",
         "field": "article_id,color_id,size_id",
+        "field_metadata": {
+            "description": "Requested SKU unit uniqueness tuple",
+            "type": "tuple[int,int,int]",
+        },
         "article_id": int(article_id),
         "color_id": int(color_id),
         "size_id": int(size_id),
