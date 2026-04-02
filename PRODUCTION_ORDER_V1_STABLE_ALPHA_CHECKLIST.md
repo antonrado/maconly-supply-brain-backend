@@ -84,6 +84,8 @@
 ## 9) From-WB ingestion/freshness
 - [x] Freshness mode (`warn|strict`) behavior is deterministic and covered.
 - [x] Freshness threshold source precedence (`request > admin_defaults > global_default`) is traceable.
+- [x] `/api/v1/wb/from-wb/readiness` honors request-level freshness threshold overrides with the same precedence/source tracing as the live `from-wb` proposal path.
+- [x] `/api/v1/wb/from-wb/readiness` preserves proposal-path partial-data acceptance: sales-only or stock-only mapped articles can still be ready when freshness resolves to `fresh`.
 - [x] Observed realized-price calibration from WB revenue window is traceable in `meta.from_wb.economic_observed_prices` and deterministic anomaly filtering (`max deviation=30%`) is covered.
 - [x] `meta.from_wb` contains stable as-of trace and compact/full-consistent diagnostics.
 
