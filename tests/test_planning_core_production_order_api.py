@@ -6396,6 +6396,69 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_skipped_when_article_excluded(client, db_session):
+    seeded = _seed_article_bundle_base(db_session, include_in_planning=False)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-SKIPPED",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-SKIPPED",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-SKIPPED",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["status"] == "skipped"
+    assert body["risk_level"] == "no_data"
+    assert body["recommendation"] is None
+    assert body["alternatives"] == []
+    assert body["days_of_cover_estimate"] == 0.0
+    assert "исключен" in body["explanation"]["summary"].lower()
+    assert any("WB ingestion adapter" in step for step in body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert "исключен" in compact_body["explanation"]["summary"].lower()
+    assert any("WB ingestion adapter" in step for step in compact_body["explanation"]["steps"])
+
+
 def test_production_order_proposal_from_wb_returns_alternatives(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
