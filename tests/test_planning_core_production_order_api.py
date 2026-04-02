@@ -7203,6 +7203,120 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_sco
     assert compact_meta["elastic_uplift"]["affected_lines"] == 2
 
 
+def test_production_order_proposal_from_wb_arrival_projection_safe_cover_until_arrival_forces_wait(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-SAFE-COVER",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-SAFE-COVER",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=600,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-SAFE-COVER",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=10,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [
+            {
+                "article_id": seeded["article"].id,
+                "color_id": seeded["color_1"].id,
+                "size_id": seeded["size_s"].id,
+                "qty": 800,
+                "eta_days": 10,
+                "stage": "nsk_to_wb",
+            },
+            {
+                "article_id": seeded["article"].id,
+                "color_id": seeded["color_1"].id,
+                "size_id": seeded["size_m"].id,
+                "qty": 800,
+                "eta_days": 10,
+                "stage": "nsk_to_wb",
+            },
+            {
+                "article_id": seeded["article"].id,
+                "color_id": seeded["color_2"].id,
+                "size_id": seeded["size_s"].id,
+                "qty": 800,
+                "eta_days": 10,
+                "stage": "nsk_to_wb",
+            },
+            {
+                "article_id": seeded["article"].id,
+                "color_id": seeded["color_2"].id,
+                "size_id": seeded["size_m"].id,
+                "qty": 800,
+                "eta_days": 10,
+                "stage": "nsk_to_wb",
+            },
+        ],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["risk_level"] == "warning"
+    assert body["arrival_projection"]["status"] == "safe_cover_until_arrival"
+    assert body["arrival_projection"]["in_flight_bundle_capacity_at_arrival"] == 1374
+    assert body["arrival_projection"]["projected_supply_units_before_arrival"] == 1404
+    assert body["arrival_projection"]["projected_availability_at_arrival"] == 4
+    assert body["arrival_projection"]["projected_shortage_before_arrival"] == 0
+    assert body["arrival_projection"]["projected_cover_days_at_arrival"] == 0.2
+    assert body["recommendation"]["action"] == "wait"
+    assert body["recommendation"]["total_units"] == 0
+    assert body["recommendation"]["lines"] == []
+    assert len(body["alternatives"]) >= 2
+    assert {item["action"] for item in body["alternatives"]}.issubset(
+        {"wait", "order_with_buffer", "order_minimum_only"}
+    )
+    assert body["explanation"]["meta"]["arrival_projection"] == body["arrival_projection"]
+    assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_body["explanation"]["meta"]["arrival_projection"] == compact_body["arrival_projection"]
+    assert any("Arrival projection:" in step for step in compact_body["explanation"]["steps"])
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
