@@ -6565,6 +6565,109 @@ def test_production_order_proposal_from_wb_economic_buffer_policy(client, db_ses
     assert _business_projection(body_with) == _business_projection(compact_body_with)
 
 
+def test_production_order_proposal_from_wb_applies_safety_stock_days_to_reorder_policy(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-SAFETY-STOCK",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-SAFETY-STOCK",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-SAFETY-STOCK",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response_without_safety_stock = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload,
+    )
+    assert response_without_safety_stock.status_code == 200, response_without_safety_stock.text
+
+    planning_settings = (
+        db_session.query(PlanningSettings)
+        .filter(PlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    planning_settings.safety_stock_days = 21
+    db_session.commit()
+
+    response_with_safety_stock = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload,
+    )
+    assert response_with_safety_stock.status_code == 200, response_with_safety_stock.text
+
+    body_without = response_without_safety_stock.json()
+    body_with = response_with_safety_stock.json()
+
+    assert body_without["recommendation"] is not None
+    assert body_with["recommendation"] is not None
+    assert body_with["recommendation"]["total_units"] > body_without["recommendation"]["total_units"]
+
+    reorder_step = next(
+        (step for step in body_with["explanation"]["steps"] if "Reorder policy" in step),
+        "",
+    )
+    assert "lead_time_days=70" in reorder_step
+    assert "safety_stock_days=21" in reorder_step
+    assert "reorder_point_days=91" in reorder_step
+
+    assert body_with["explanation"]["meta"]["reorder_policy"] == {
+        "lead_time_days_total": 70,
+        "safety_stock_days": 21,
+        "reorder_point_days": 91,
+    }
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body_with) == _business_projection(compact_body)
+    assert compact_body["explanation"]["meta"]["reorder_policy"] == {
+        "lead_time_days_total": 70,
+        "safety_stock_days": 21,
+        "reorder_point_days": 91,
+    }
+
+
 def test_production_order_proposal_from_wb_returns_alternatives(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
