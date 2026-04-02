@@ -700,6 +700,63 @@ def test_overstock_penalty_weight_boundary_flips_documented_overstock_profile():
     assert above_boundary["overstock_penalty_weight"] == 0.03
 
 
+def test_commission_conflict_stockout_penalty_boundary_flips_documented_profile():
+    stock_metric = {
+        "color_id": 10,
+        "size_id": 1,
+        "eta_days": 30,
+        "current_stock": 10,
+        "in_flight": 0,
+        "velocity_main": 8.0,
+        "velocity_assorti": 8.0,
+        "capital_locked": 10.0,
+        "stockout_risk": 1.0,
+        "overstock_risk": 0.0,
+    }
+
+    below_boundary_decisions, below_boundary_summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=[stock_metric],
+        lead_time_days_total=30,
+        margin_main_per_unit=0.88,
+        margin_assorti_per_unit=0.795,
+        unit_capital_per_unit=1.0,
+        stockout_penalty_weight=0.04,
+    )
+    above_boundary_decisions, above_boundary_summary = _build_layer2_allocation_decisions(
+        stock_health_metrics=[stock_metric],
+        lead_time_days_total=30,
+        margin_main_per_unit=0.88,
+        margin_assorti_per_unit=0.795,
+        unit_capital_per_unit=1.0,
+        stockout_penalty_weight=0.05,
+    )
+
+    assert below_boundary_summary == {"main": 1, "assorti": 0, "hold": 0}
+    assert above_boundary_summary == {"main": 0, "assorti": 1, "hold": 0}
+
+    below_boundary = below_boundary_decisions[0]
+    above_boundary = above_boundary_decisions[0]
+
+    assert below_boundary["profit_if_main_until_eta"] > below_boundary["profit_if_assorti_until_eta"]
+    assert above_boundary["profit_if_main_until_eta"] > above_boundary["profit_if_assorti_until_eta"]
+
+    assert below_boundary["allocation_decision"] == "main"
+    assert below_boundary["decision_reason_objective_score"] == "objective_score_main_gt_assorti"
+    assert (
+        below_boundary["objective_score_if_main_until_eta"]
+        > below_boundary["objective_score_if_assorti_until_eta"]
+    )
+    assert below_boundary["stockout_penalty_weight"] == 0.04
+
+    assert above_boundary["allocation_decision"] == "assorti"
+    assert above_boundary["decision_reason_objective_score"] == "objective_score_assorti_gt_main"
+    assert (
+        above_boundary["objective_score_if_main_until_eta"]
+        < above_boundary["objective_score_if_assorti_until_eta"]
+    )
+    assert above_boundary["stockout_penalty_weight"] == 0.05
+
+
 def test_line_objective_capital_rankings_prioritize_objective_per_capital_over_profit():
     candidate_lines = [
         planning_production_order_service.ProductionOrderRecommendationLine(

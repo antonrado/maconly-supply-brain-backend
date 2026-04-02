@@ -170,4 +170,4 @@ Calibration is documented against deterministic helper/e2e profiles. "Flip bound
 ## Release-gate traceability
 - This casebook is intended to be locked by regression tests in `tests/test_planning_core_production_order_api.py`.
 - Coverage includes deterministic helper snapshots (`test_decision_quality_case_studies_are_deterministic`) and full helper-chain coverage from computed Layer 1 metrics (`test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5`).
-- Regressions verify deterministic outputs, recommendation action integrity, scenario capital deltas, objective-vs-profit regime disagreement evidence, emitted objective-parameter tracing, compact/full parity of the same release evidence, and Layer 5 signal behavior.
+- Regressions verify deterministic outputs, recommendation action integrity, scenario capital deltas, objective-vs-profit regime disagreement evidence, emitted objective-parameter tracing, helper-locked documented calibration boundaries, compact/full parity of the same release evidence, and Layer 5 signal behavior.
