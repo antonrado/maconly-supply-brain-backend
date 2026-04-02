@@ -142,7 +142,7 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
 
 ## Objective-vs-profit regime evidence (R3 release block)
 
-The following deterministic e2e regimes are locked to prove that allocation is driven by the composite objective (not raw expected gross profit) and that Layer 5 emits the expected intervention signal for each economic regime. Coverage now includes both the direct planner path and the `from-wb` adapter path to prevent evidence drift between façade-equivalent request modes.
+The following deterministic e2e regimes are locked to prove that allocation is driven by the composite objective (not raw expected gross profit) and that Layer 5 emits the expected intervention signal for each economic regime. Coverage now includes both the direct planner path and the `from-wb` adapter path to prevent evidence drift between façade-equivalent request modes, and compact-mode parity now locks that the same business output, Layer 2 objective tracing, and Layer 5 signal evidence survive payload compaction.
 
 | Case | Profit winner (until ETA) | Objective winner (until ETA) | Expected Layer 5 signal | Regression |
 | --- | --- | --- | --- | --- |
@@ -170,4 +170,4 @@ Calibration is documented against deterministic helper/e2e profiles. "Flip bound
 ## Release-gate traceability
 - This casebook is intended to be locked by regression tests in `tests/test_planning_core_production_order_api.py`.
 - Coverage includes deterministic helper snapshots (`test_decision_quality_case_studies_are_deterministic`) and full helper-chain coverage from computed Layer 1 metrics (`test_decision_quality_case_studies_are_deterministic_across_layer1_to_layer5`).
-- Regressions verify deterministic outputs, recommendation action integrity, scenario capital deltas, objective-vs-profit regime disagreement evidence, emitted objective-parameter tracing, and Layer 5 signal behavior.
+- Regressions verify deterministic outputs, recommendation action integrity, scenario capital deltas, objective-vs-profit regime disagreement evidence, emitted objective-parameter tracing, compact/full parity of the same release evidence, and Layer 5 signal behavior.

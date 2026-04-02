@@ -2344,6 +2344,28 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
     if expected_layer5_signal == "reduce_order_size":
         assert layer5["reason"] == "overstock_penalty_exceeds_marginal_profit"
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_layer2 = compact_meta["layer_2_allocation"]
+    assert "decisions" not in compact_layer2
+    assert compact_layer2["objective_parameters"] == objective_parameters
+    assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+    compact_layer5 = compact_meta["layer_5_intervention"]
+    assert compact_layer5["contract"]["status"] == "ok"
+    assert compact_layer5["signal_policy"] == "critical_risk_thresholds"
+    assert expected_layer5_signal in compact_layer5["signals"]
+
 
 @pytest.mark.parametrize(
     (
@@ -2604,6 +2626,28 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         }
     if expected_layer5_signal == "reduce_order_size":
         assert layer5["reason"] == "overstock_penalty_exceeds_marginal_profit"
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_layer2 = compact_meta["layer_2_allocation"]
+    assert "decisions" not in compact_layer2
+    assert compact_layer2["objective_parameters"] == objective_parameters
+    assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+    compact_layer5 = compact_meta["layer_5_intervention"]
+    assert compact_layer5["contract"]["status"] == "ok"
+    assert compact_layer5["signal_policy"] == "critical_risk_thresholds"
+    assert expected_layer5_signal in compact_layer5["signals"]
 
 
 def test_production_order_proposal_compact_explainability_mode(client, db_session):
