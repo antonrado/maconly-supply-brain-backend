@@ -6315,6 +6315,8 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "bundle_stock=request" in source_step
     assert "ready stock наборов (WB+локальный)=20" in stock_step
+    assert body["physical_scope"]["wb_stock_scope"] == "request_explicit_bundle_stock"
+    assert body["physical_scope"]["ready_bundle_source"] == "request"
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
     assert "reason_counts={" in layer2_step
@@ -6356,6 +6358,42 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     }
     assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
+
+    helper_physical_scope, helper_arrival_projection = build_physical_scope_and_arrival_projection(
+        bundle_stock_source="request",
+        in_flight_source="none",
+        size_weights_source="uniform_fallback",
+        bundle_type_ids=[seeded["bundle_type"].id],
+        recipe_colors_by_bundle={
+            seeded["bundle_type"].id: {seeded["color_1"].id, seeded["color_2"].id},
+        },
+        all_recipe_color_ids=[seeded["color_1"].id, seeded["color_2"].id],
+        size_ids=[seeded["size_s"].id, seeded["size_m"].id],
+        current_stock_by_color_size={
+            (seeded["color_1"].id, seeded["size_s"].id): 10,
+            (seeded["color_1"].id, seeded["size_m"].id): 10,
+            (seeded["color_2"].id, seeded["size_s"].id): 10,
+            (seeded["color_2"].id, seeded["size_m"].id): 10,
+        },
+        in_flight_effective_by_color_size={
+            (seeded["color_1"].id, seeded["size_s"].id): 0,
+            (seeded["color_1"].id, seeded["size_m"].id): 0,
+            (seeded["color_2"].id, seeded["size_s"].id): 0,
+            (seeded["color_2"].id, seeded["size_m"].id): 0,
+        },
+        shares_by_bundle={seeded["bundle_type"].id: 1.0},
+        ready_bundle_stock_total=20,
+        total_daily_sales=2.0,
+        lead_time_days_total=70,
+        estimate_raw_bundle_stock=planning_production_order_service._estimate_competition_aware_raw_bundle_stock,
+    )
+
+    assert helper_physical_scope.model_dump(mode="json") == body["physical_scope"]
+    assert helper_arrival_projection.model_dump(mode="json") == body["arrival_projection"]
+    assert body["explanation"]["meta"]["physical_scope"] == body["physical_scope"]
+    assert body["explanation"]["meta"]["arrival_projection"] == body["arrival_projection"]
+    assert any("Physical scope:" in step for step in body["explanation"]["steps"])
+    assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
 
 
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
