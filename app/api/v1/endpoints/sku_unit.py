@@ -115,7 +115,7 @@ def partial_update_sku_unit(id: int, data: SkuUnitUpdate, db: Session = Depends(
             detail=_build_sku_unit_not_found_detail(sku_unit_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     new_article_id = update_data.get("article_id", item.article_id)
     new_color_id = update_data.get("color_id", item.color_id)

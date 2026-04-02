@@ -99,7 +99,7 @@ def partial_update_color(id: int, data: ColorUpdate, db: Session = Depends(get_d
             detail=_build_color_not_found_detail(color_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "inner_code" in update_data:
         existing = db.query(Color).filter(Color.inner_code == update_data["inner_code"], Color.id != id).first()

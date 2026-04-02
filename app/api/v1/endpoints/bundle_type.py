@@ -94,7 +94,7 @@ def partial_update_bundle_type(id: int, data: BundleTypeUpdate, db: Session = De
             detail=_build_bundle_type_not_found_detail(bundle_type_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "code" in update_data:
         existing = db.query(BundleType).filter(BundleType.code == update_data["code"], BundleType.id != id).first()

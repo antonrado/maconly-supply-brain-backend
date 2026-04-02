@@ -135,7 +135,7 @@ def partial_update_planning_settings(
             detail=_build_planning_settings_not_found_detail(planning_settings_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "article_id" in update_data:
         new_article_id = update_data["article_id"]

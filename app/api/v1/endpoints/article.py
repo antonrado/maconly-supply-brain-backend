@@ -94,7 +94,7 @@ def partial_update_article(id: int, data: ArticleUpdate, db: Session = Depends(g
             detail=_build_article_not_found_detail(article_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "code" in update_data:
         existing = db.query(Article).filter(Article.code == update_data["code"], Article.id != id).first()

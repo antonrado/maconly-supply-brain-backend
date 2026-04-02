@@ -140,7 +140,7 @@ def update_purchase_order(
             detail=_build_purchase_order_not_found_detail(order_id=order_id),
         )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
 
     changed = False
 

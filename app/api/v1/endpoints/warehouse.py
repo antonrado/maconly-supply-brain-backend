@@ -95,7 +95,7 @@ def partial_update_warehouse(id: int, data: WarehouseUpdate, db: Session = Depen
             detail=_build_warehouse_not_found_detail(warehouse_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "code" in update_data:
         existing = db.query(Warehouse).filter(Warehouse.code == update_data["code"], Warehouse.id != id).first()

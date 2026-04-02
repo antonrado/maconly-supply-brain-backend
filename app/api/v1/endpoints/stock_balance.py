@@ -129,7 +129,7 @@ def partial_update_stock_balance(
             detail=_build_stock_balance_not_found_detail(stock_balance_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     new_sku_unit_id = update_data.get("sku_unit_id", item.sku_unit_id)
     new_warehouse_id = update_data.get("warehouse_id", item.warehouse_id)

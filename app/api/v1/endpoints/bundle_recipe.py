@@ -149,7 +149,7 @@ def partial_update_bundle_recipe(id: int, data: BundleRecipeUpdate, db: Session 
             detail=_build_bundle_recipe_not_found_detail(bundle_recipe_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     new_article_id = update_data.get("article_id", item.article_id)
     new_bundle_type_id = update_data.get("bundle_type_id", item.bundle_type_id)

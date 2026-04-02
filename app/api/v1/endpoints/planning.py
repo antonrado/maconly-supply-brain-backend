@@ -528,7 +528,7 @@ def get_monitoring_dashboard(
     history_items = get_monitoring_history(db=db, limit=30)
     alert_items = evaluate_active_alerts(db=db)
     rules = list_alert_rules(db=db)
-    rule_items = [AlertRuleSchema.from_orm(rule) for rule in rules]
+    rule_items = [AlertRuleSchema.model_validate(rule) for rule in rules]
 
     status_response = build_monitoring_status(db=db)
     status_summary = MonitoringStatusSummary(
@@ -554,7 +554,7 @@ def get_alert_rules(
     db: Session = Depends(get_db),
 ) -> AlertRuleListResponse:
     rules = list_alert_rules(db=db)
-    items = [AlertRuleSchema.from_orm(rule) for rule in rules]
+    items = [AlertRuleSchema.model_validate(rule) for rule in rules]
     return AlertRuleListResponse(items=items)
 
 
@@ -567,7 +567,7 @@ def create_alert_rule_api(
     db: Session = Depends(get_db),
 ) -> AlertRuleSchema:
     rule = create_alert_rule(db=db, data=payload)
-    return AlertRuleSchema.from_orm(rule)
+    return AlertRuleSchema.model_validate(rule)
 
 
 @router.patch(
@@ -585,7 +585,7 @@ def update_alert_rule_api(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_build_alert_rule_not_found_detail(rule_id=rule_id),
         )
-    return AlertRuleSchema.from_orm(rule)
+    return AlertRuleSchema.model_validate(rule)
 
 
 @router.delete(

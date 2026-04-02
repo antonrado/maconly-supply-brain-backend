@@ -94,7 +94,7 @@ def partial_update_size(id: int, data: SizeUpdate, db: Session = Depends(get_db)
             detail=_build_size_not_found_detail(size_id=id),
         )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     if "label" in update_data:
         existing = db.query(Size).filter(Size.label == update_data["label"], Size.id != id).first()
