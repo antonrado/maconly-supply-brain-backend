@@ -26,6 +26,10 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+def _expected_utc_json_timestamp(value: datetime) -> str:
+    return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def test_monitoring_status_critical_alerts_dominate(client, db_session, monkeypatch):  # noqa: ARG001
     fixed_datetime = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -93,7 +97,7 @@ def test_monitoring_status_critical_alerts_dominate(client, db_session, monkeypa
     assert body_status["overall_status"] == "critical"
     assert body_status["critical_alerts"] == 1
     assert body_status["warning_alerts"] == 1
-    assert body_status["updated_at"] == fixed_datetime.isoformat()
+    assert body_status["updated_at"] == _expected_utc_json_timestamp(fixed_datetime)
 
     resp_boot = client.get("/api/v1/planning/monitoring/bootstrap")
     assert resp_boot.status_code == 200, resp_boot.text
@@ -150,7 +154,7 @@ def test_monitoring_status_warning_from_snapshot_without_alerts(client, db_sessi
     assert body["overall_status"] == "warning"
     assert body["critical_alerts"] == 0
     assert body["warning_alerts"] == 0
-    assert body["updated_at"] == fixed_datetime.isoformat()
+    assert body["updated_at"] == _expected_utc_json_timestamp(fixed_datetime)
 
 
 def test_monitoring_status_ok_when_clean_snapshot_and_no_alerts(client, db_session, monkeypatch):  # noqa: ARG001
@@ -199,7 +203,7 @@ def test_monitoring_status_ok_when_clean_snapshot_and_no_alerts(client, db_sessi
     assert body_status["overall_status"] == "ok"
     assert body_status["critical_alerts"] == 0
     assert body_status["warning_alerts"] == 0
-    assert body_status["updated_at"] == fixed_datetime.isoformat()
+    assert body_status["updated_at"] == _expected_utc_json_timestamp(fixed_datetime)
 
     resp_boot = client.get("/api/v1/planning/monitoring/bootstrap")
     assert resp_boot.status_code == 200, resp_boot.text

@@ -67,10 +67,11 @@ async def create_planning_core_proposal(
 
     service = PlanningService()
     proposal = service.build_proposal(request.sales_window_days, request.horizon_days)
+    proposal_payload = proposal.model_dump() if hasattr(proposal, "model_dump") else proposal.dict()
 
     return {
         "status": "ok",
-        "proposal": proposal.dict(),
+        "proposal": proposal_payload,
     }
 
 

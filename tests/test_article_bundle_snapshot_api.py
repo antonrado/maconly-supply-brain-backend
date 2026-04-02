@@ -15,6 +15,7 @@ from app.models.models import (
     Warehouse,
 )
 from tests.test_utils import (
+    add_wb_sales,
     add_wb_stock,
     create_article,
     create_color,
@@ -186,6 +187,11 @@ def test_article_bundle_snapshot_article_not_found(client):
         "code": "article_not_found",
         "message": "Article not found",
         "article_id": 999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
         "next_steps": ["use_existing_article_id"],
     }
 

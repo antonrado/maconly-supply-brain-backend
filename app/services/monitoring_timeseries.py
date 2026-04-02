@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
+from datetime import timezone
 
 from app.models.models import MonitoringSnapshotRecord
 from app.schemas.monitoring_timeseries import (
@@ -11,6 +12,12 @@ from app.services.monitoring_metrics import get_timeseries_metrics
 
 
 SUPPORTED_METRICS = get_timeseries_metrics()
+
+
+def _normalize_timestamp_to_utc(timestamp):
+    if timestamp.tzinfo is None:
+        return timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc)
 
 
 def build_monitoring_timeseries(
@@ -49,7 +56,7 @@ def build_monitoring_timeseries(
     for metric in filtered_metrics:
         points = [
             MonitoringMetricPoint(
-                timestamp=record.created_at,
+                timestamp=_normalize_timestamp_to_utc(record.created_at),
                 value=getattr(record, metric),
             )
             for record in records
