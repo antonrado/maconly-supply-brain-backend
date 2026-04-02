@@ -6396,6 +6396,109 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_competition_aware_raw_stock_breakdown(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    competing_bundle_type = BundleType(code="PO-WB-BT-2", name="PO-WB-BT-2")
+    db_session.add(competing_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=competing_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=competing_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-RAW-STOCK-MAIN",
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-RAW-STOCK-COMPETING",
+                bundle_type_id=competing_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku="WB-PO-RAW-STOCK-MAIN",
+                date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+                sales_qty=600,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbSalesDaily(
+                wb_sku="WB-PO-RAW-STOCK-COMPETING",
+                date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+                sales_qty=300,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku="WB-PO-RAW-STOCK-MAIN",
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=10,
+                updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+            ),
+            WbStock(
+                wb_sku="WB-PO-RAW-STOCK-COMPETING",
+                warehouse_id=2,
+                warehouse_name="WB-2",
+                stock_qty=0,
+                updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id, competing_bundle_type.id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    raw_stock_step = next(
+        (
+            step
+            for step in body["explanation"]["steps"]
+            if "competition-aware by bundle" in step
+        ),
+        "",
+    )
+    assert "оценка сырьевого потенциала=20" in raw_stock_step
+    assert f"{seeded['bundle_type'].id}:14" in raw_stock_step
+    assert f"{competing_bundle_type.id}:6" in raw_stock_step
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+
+
 def test_production_order_proposal_from_wb_shared_color_pool_reduces_local_fabric_min_uplift(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     seeded["color_2"].pantone_code = seeded["color_1"].pantone_code
