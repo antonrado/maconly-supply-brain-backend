@@ -23,26 +23,7 @@ from app.schemas.planning_production_order_admin import (
     ProductionOrderInFlightDefaultInput,
     ProductionOrderSizeWeightInput,
 )
-
-
-def _parse_assorti_bundle_type_ids(raw_value: str | None) -> list[int]:
-    if raw_value is None:
-        return []
-
-    bundle_type_ids: set[int] = set()
-    for token in raw_value.split(","):
-        candidate = token.strip()
-        if not candidate:
-            continue
-        try:
-            bundle_type_id = int(candidate)
-        except ValueError:
-            continue
-        if bundle_type_id <= 0:
-            continue
-        bundle_type_ids.add(bundle_type_id)
-
-    return sorted(bundle_type_ids)
+from app.services.planning_production_order_assorti import _parse_assorti_bundle_type_ids
 
 
 def _serialize_assorti_bundle_type_ids(bundle_type_ids: list[int]) -> str | None:
@@ -386,7 +367,7 @@ def get_production_order_admin_settings(
         elastic_bindings=elastic_bindings,
         in_flight_supply_defaults=in_flight_supply_defaults,
         assorti_bundle_type_ids=(
-            _parse_assorti_bundle_type_ids(article_settings.production_order_assorti_bundle_type_ids)
+            sorted(_parse_assorti_bundle_type_ids(article_settings.production_order_assorti_bundle_type_ids))
             if article_settings is not None
             else []
         ),

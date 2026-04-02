@@ -61,6 +61,9 @@ from app.services.planning_production_order import (
     _build_layer5_intervention_signals,
     _choose_action,
 )
+from app.services.planning_production_order_scope import (
+    build_physical_scope_and_arrival_projection,
+)
 from app.models.models import (
     Article,
     ArticleWbMapping,
@@ -1844,6 +1847,52 @@ def test_production_order_proposal_happy_path(client, db_session):
     assert body["explanation"]["meta"]["arrival_projection"] == body["arrival_projection"]
     assert any("Physical scope:" in step for step in body["explanation"]["steps"])
     assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
+
+
+def test_production_order_scope_helper_matches_happy_path_api_contract(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    helper_physical_scope, helper_arrival_projection = build_physical_scope_and_arrival_projection(
+        bundle_stock_source="request",
+        in_flight_source="none",
+        size_weights_source="request",
+        bundle_type_ids=[seeded["bundle_type"].id],
+        recipe_colors_by_bundle={
+            seeded["bundle_type"].id: {seeded["color_1"].id, seeded["color_2"].id},
+        },
+        all_recipe_color_ids=[seeded["color_1"].id, seeded["color_2"].id],
+        size_ids=[seeded["size_s"].id, seeded["size_m"].id],
+        current_stock_by_color_size={
+            (seeded["color_1"].id, seeded["size_s"].id): 10,
+            (seeded["color_1"].id, seeded["size_m"].id): 10,
+            (seeded["color_2"].id, seeded["size_s"].id): 10,
+            (seeded["color_2"].id, seeded["size_m"].id): 10,
+        },
+        in_flight_effective_by_color_size={
+            (seeded["color_1"].id, seeded["size_s"].id): 0,
+            (seeded["color_1"].id, seeded["size_m"].id): 0,
+            (seeded["color_2"].id, seeded["size_s"].id): 0,
+            (seeded["color_2"].id, seeded["size_m"].id): 0,
+        },
+        shares_by_bundle={seeded["bundle_type"].id: 1.0},
+        ready_bundle_stock_total=10,
+        total_daily_sales=20.0,
+        lead_time_days_total=70,
+        estimate_raw_bundle_stock=planning_production_order_service._estimate_competition_aware_raw_bundle_stock,
+    )
+
+    assert helper_physical_scope.model_dump(mode="json") == body["physical_scope"]
+    assert helper_arrival_projection.model_dump(mode="json") == body["arrival_projection"]
 
 
 def test_production_order_proposal_exposes_resource_allocation_consumption(client, db_session):
