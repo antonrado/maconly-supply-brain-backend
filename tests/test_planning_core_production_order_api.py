@@ -6830,6 +6830,113 @@ def test_production_order_proposal_from_wb_applies_fabric_minimum(client, db_ses
     assert compact_fabric_constraints == fabric_constraints
 
 
+def test_production_order_proposal_from_wb_elastic_binding_scope_skips_when_no_match(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    elastic_type = ElasticType(code="PO-WB-EL-NOMATCH", name="PO-WB-EL-NOMATCH")
+    color_3 = Color(inner_code="PO-WB-C3", pantone_code="BLACK-03", description="Blue")
+    db_session.add_all([elastic_type, color_3])
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ElasticPlanningSettings(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                elastic_min_batch_qty=15000,
+            ),
+            ProductionOrderElasticBinding(
+                article_id=seeded["article"].id,
+                elastic_type_id=elastic_type.id,
+                color_id=color_3.id,
+                is_active=True,
+            ),
+        ]
+    )
+
+    as_of_date = date(2026, 1, 30)
+    wb_sku = "WB-PO-ELASTIC-NOMATCH"
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku,
+                date=as_of_date,
+                sales_qty=150,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=0,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["constraints_applied"]["elastic_min_batches"] == []
+
+    scope_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic scope" in step),
+        "",
+    )
+    uplift_step = next(
+        (step for step in body["explanation"]["steps"] if "Elastic uplift" in step),
+        "",
+    )
+    assert "mode=binding_scope" in scope_step
+    assert "applicable_types=[]" in scope_step
+    assert "scoped_settings=0" in scope_step
+    assert "delta=0" in uplift_step
+    assert "scope=none" in uplift_step
+    assert "affected_lines=0" in uplift_step
+    assert "line_alloc={}" in uplift_step
+
+    meta = body["explanation"]["meta"]
+    assert meta["elastic_scope"]["mode"] == "binding_scope"
+    assert meta["elastic_scope"]["applicable_types"] == []
+    assert meta["elastic_scope"]["scoped_settings"] == 0
+    assert meta["elastic_uplift"]["delta"] == 0
+    assert meta["elastic_uplift"]["scope"] == "none"
+    assert meta["elastic_uplift"]["affected_lines"] == 0
+    assert meta["elastic_uplift"]["line_alloc"] == []
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["elastic_scope"]["applicable_types"] == []
+    assert compact_meta["elastic_uplift"]["scope"] == "none"
+    assert compact_meta["elastic_uplift"]["affected_lines"] == 0
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
