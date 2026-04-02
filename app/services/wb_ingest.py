@@ -1086,6 +1086,8 @@ def _build_from_wb_readiness_freshness_state(
     *,
     article_id: int,
     mapped_bundle_type_ids: list[int],
+    request_sales_stale_after_days: int | None,
+    request_stock_stale_after_days: int | None,
 ) -> dict[str, object]:
     article_settings = (
         db.query(ArticlePlanningSettings)
@@ -1107,8 +1109,8 @@ def _build_from_wb_readiness_freshness_state(
     )
 
     sales_stale_after_days, stock_stale_after_days, threshold_source = resolve_from_wb_freshness_thresholds(
-        request_sales_stale_after_days=None,
-        request_stock_stale_after_days=None,
+        request_sales_stale_after_days=request_sales_stale_after_days,
+        request_stock_stale_after_days=request_stock_stale_after_days,
         admin_sales_stale_after_days=admin_sales_stale_after_days,
         admin_stock_stale_after_days=admin_stock_stale_after_days,
     )
@@ -1202,6 +1204,8 @@ def get_from_wb_readiness_summary(
     *,
     article_id: int | None,
     limit: int,
+    request_sales_stale_after_days: int | None,
+    request_stock_stale_after_days: int | None,
 ) -> WbFromWbReadinessSummary:
     if article_id is not None:
         article = db.query(Article).filter(Article.id == article_id).first()
@@ -1356,6 +1360,8 @@ def get_from_wb_readiness_summary(
                 db,
                 article_id=current_article_id,
                 mapped_bundle_type_ids=mapped_bundle_types,
+                request_sales_stale_after_days=request_sales_stale_after_days,
+                request_stock_stale_after_days=request_stock_stale_after_days,
             )
             freshness_status_value = freshness_state.get("freshness_status")
             freshness_status = str(freshness_status_value) if freshness_status_value is not None else None

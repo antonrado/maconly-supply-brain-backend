@@ -987,6 +987,71 @@ def test_wb_from_wb_readiness_reports_stale_freshness_blocker(client, db_session
     assert item["next_steps"] == ["run_wb_sales_daily_sync_live"]
 
 
+def test_wb_from_wb_readiness_request_thresholds_override_stale_blocker(client, db_session):
+    article_stale = Article(code="STALE-OVERRIDE-1", name="Stale override")
+    bundle_type = BundleType(code="BT-STALE-OVERRIDE", name="Stale override bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE-OVERRIDE", pantone_code=None, description=None)
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(article_id=article_stale.id, wb_sku="WB-STALE-OVERRIDE-1", bundle_type_id=bundle_type.id)
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-OVERRIDE-1",
+            date=date(2026, 1, 10),
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-OVERRIDE-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    response = client.post(
+        "/api/v1/wb/from-wb/readiness",
+        json={
+            "article_id": article_stale.id,
+            "limit": 10,
+            "freshness_sales_stale_after_days": 3650,
+            "freshness_stock_stale_after_days": 3650,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 1
+    assert body["not_ready_articles"] == 0
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-OVERRIDE-1"
+    assert item["ready_for_from_wb"] is True
+    assert item["freshness_status"] == "fresh"
+    assert item["blocker"] is None
+    assert item["threshold_days"] == {"sales": 3650, "stock": 3650}
+    assert item["threshold_source"] == {"sales": "request", "stock": "request"}
+    assert item["next_steps"] == []
+
+
 def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeypatch):
     account = WbIntegrationAccount(
         name="WB Commission",

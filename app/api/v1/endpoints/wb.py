@@ -144,6 +144,8 @@ def get_wb_from_wb_readiness(
         db=db,
         article_id=payload.article_id,
         limit=payload.limit,
+        request_sales_stale_after_days=payload.freshness_sales_stale_after_days,
+        request_stock_stale_after_days=payload.freshness_stock_stale_after_days,
     )
 
 

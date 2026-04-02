@@ -76,6 +76,8 @@ class WbLiveArticleBootstrapRequest(BaseModel):
 class WbFromWbReadinessRequest(BaseModel):
     article_id: int | None = Field(default=None, ge=1)
     limit: int = Field(default=100, ge=1, le=1000)
+    freshness_sales_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
+    freshness_stock_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
 
 
 class WbLiveCommissionSyncRequest(BaseModel):
