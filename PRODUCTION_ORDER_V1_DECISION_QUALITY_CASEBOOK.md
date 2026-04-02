@@ -142,13 +142,13 @@ All cases follow v1 boundaries: deterministic math only, layered architecture (`
 
 ## Objective-vs-profit regime evidence (R3 release block)
 
-The following deterministic e2e regimes are locked to prove that allocation is driven by the composite objective (not raw expected gross profit) and that Layer 5 emits the expected intervention signal for each economic regime.
+The following deterministic e2e regimes are locked to prove that allocation is driven by the composite objective (not raw expected gross profit) and that Layer 5 emits the expected intervention signal for each economic regime. Coverage now includes both the direct planner path and the `from-wb` adapter path to prevent evidence drift between façade-equivalent request modes.
 
 | Case | Profit winner (until ETA) | Objective winner (until ETA) | Expected Layer 5 signal | Regression |
 | --- | --- | --- | --- | --- |
-| `stockout_dominates` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
-| `overstock_dominates` | `assorti` | `main` | `reduce_order_size` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
-| `commission_price_conflict` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals` |
+| `stockout_dominates` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals`, `test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and_layer5_signals` |
+| `overstock_dominates` | `assorti` | `main` | `reduce_order_size` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals`, `test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and_layer5_signals` |
+| `commission_price_conflict` | `main` | `assorti` | `accelerate_production` | `test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_signals`, `test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and_layer5_signals` |
 
 Additional gate assertion in this regression:
 - Layer 2 emitted objective parameters are frozen and explicitly asserted in response payloads:

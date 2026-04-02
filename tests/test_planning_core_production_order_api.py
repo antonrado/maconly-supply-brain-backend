@@ -2345,6 +2345,267 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
         assert layer5["reason"] == "overstock_penalty_exceeds_marginal_profit"
 
 
+@pytest.mark.parametrize(
+    (
+        "case_name",
+        "bundle_daily_sales",
+        "per_sku_stock_qty",
+        "available_capital",
+        "economic_overrides",
+        "expected_profit_winner",
+        "expected_objective_winner",
+        "expected_layer5_signal",
+    ),
+    [
+        pytest.param(
+            "stockout_dominates",
+            {"main": 8.0, "assorti": 0.2},
+            10,
+            30.0,
+            {
+                "production_cost_per_unit": 1.0,
+                "logistics_cost_per_unit": 0.2,
+                "wb_commission_percent_main": 0.10,
+                "wb_commission_percent_assorti": 0.10,
+                "average_realized_price_main": 2.0,
+                "average_realized_price_assorti": 2.0,
+            },
+            "main",
+            "assorti",
+            "accelerate_production",
+            id="stockout-dominates",
+        ),
+        pytest.param(
+            "overstock_dominates",
+            {"main": 2.0, "assorti": 0.3},
+            400,
+            1000000.0,
+            {
+                "production_cost_per_unit": 0.9,
+                "logistics_cost_per_unit": 0.1,
+                "wb_commission_percent_main": 0.0,
+                "wb_commission_percent_assorti": 0.0,
+                "average_realized_price_main": 1.1,
+                "average_realized_price_assorti": 2.5,
+            },
+            "assorti",
+            "main",
+            "reduce_order_size",
+            id="overstock-dominates",
+        ),
+        pytest.param(
+            "commission_price_conflict",
+            {"main": 8.0, "assorti": 8.0},
+            10,
+            30.0,
+            {
+                "production_cost_per_unit": 1.0,
+                "logistics_cost_per_unit": 0.2,
+                "wb_commission_percent_main": 0.35,
+                "wb_commission_percent_assorti": 0.05,
+                "average_realized_price_main": 3.2,
+                "average_realized_price_assorti": 2.1,
+            },
+            "main",
+            "assorti",
+            "accelerate_production",
+            id="commission-price-conflict",
+        ),
+    ],
+)
+def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and_layer5_signals(
+    client,
+    db_session,
+    case_name,
+    bundle_daily_sales,
+    per_sku_stock_qty,
+    available_capital,
+    economic_overrides,
+    expected_profit_winner,
+    expected_objective_winner,
+    expected_layer5_signal,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    assorti_bundle_type = BundleType(
+        code=f"PO-BT-WB-E2E-{case_name}",
+        name=f"PO-BT-WB-E2E-{case_name}",
+        is_assorti=True,
+    )
+    db_session.add(assorti_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+        ]
+    )
+
+    stock_rows = db_session.query(StockBalance).all()
+    assert stock_rows
+    for row in stock_rows:
+        row.quantity = per_sku_stock_qty
+
+    as_of_date = datetime(2026, 1, 10, tzinfo=timezone.utc).date()
+    observation_window_days = 30
+    wb_sku_main = f"WB-PO-R3-MAIN-{case_name}"
+    wb_sku_assorti = f"WB-PO-R3-ASSORTI-{case_name}"
+
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku_main,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku_assorti,
+                bundle_type_id=assorti_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku_main,
+                date=as_of_date,
+                sales_qty=int(bundle_daily_sales["main"] * observation_window_days),
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku_assorti,
+                date=as_of_date,
+                sales_qty=int(bundle_daily_sales["assorti"] * observation_window_days),
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku_main,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=per_sku_stock_qty,
+                updated_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku_assorti,
+                warehouse_id=2,
+                warehouse_name="WB-2",
+                stock_qty=per_sku_stock_qty,
+                updated_at=datetime.now(timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": observation_window_days,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id, assorti_bundle_type.id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+            "available_capital": available_capital,
+            **economic_overrides,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    layer2 = meta["layer_2_allocation"]
+    objective_parameters = layer2["objective_parameters"]
+    assert objective_parameters == {
+        "capital_cost_rate": 0.08,
+        "stockout_penalty_weight": 1.0,
+        "overstock_penalty_weight": 1.0,
+    }
+    assert layer2["objective_source"] == {
+        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+
+    from_wb_meta = meta["from_wb"]
+    assert from_wb_meta["daily_sales_by_bundle"][str(seeded["bundle_type"].id)] == bundle_daily_sales["main"]
+    assert from_wb_meta["daily_sales_by_bundle"][str(assorti_bundle_type.id)] == bundle_daily_sales["assorti"]
+    assert from_wb_meta["wb_stock_by_bundle"][str(seeded["bundle_type"].id)] == per_sku_stock_qty
+    assert from_wb_meta["wb_stock_by_bundle"][str(assorti_bundle_type.id)] == per_sku_stock_qty
+
+    decisions = layer2["decisions"]
+    assert decisions
+    objective_reason_by_decision = {
+        "main": "objective_score_main_gt_assorti",
+        "assorti": "objective_score_assorti_gt_main",
+    }
+    objective_over_profit_conflicts = 0
+
+    for decision in decisions:
+        profit_main = float(decision["expected_gross_profit_if_main_until_eta"])
+        profit_assorti = float(decision["expected_gross_profit_if_assorti_until_eta"])
+        objective_main = float(decision["objective_score_if_main_until_eta"])
+        objective_assorti = float(decision["objective_score_if_assorti_until_eta"])
+
+        if profit_main > profit_assorti:
+            profit_winner = "main"
+        elif profit_assorti > profit_main:
+            profit_winner = "assorti"
+        else:
+            profit_winner = "hold"
+
+        if objective_main > objective_assorti:
+            objective_winner = "main"
+        elif objective_assorti > objective_main:
+            objective_winner = "assorti"
+        else:
+            objective_winner = "hold"
+
+        assert profit_winner == expected_profit_winner
+        assert objective_winner == expected_objective_winner
+        assert decision["allocation_decision"] == expected_objective_winner
+        assert (
+            decision["decision_reason_objective_score"]
+            == objective_reason_by_decision[expected_objective_winner]
+        )
+
+        if profit_winner != objective_winner:
+            objective_over_profit_conflicts += 1
+
+    assert objective_over_profit_conflicts == len(decisions)
+    assert layer2["summary"][expected_objective_winner] == len(decisions)
+
+    layer5 = meta["layer_5_intervention"]
+    assert layer5["contract"]["status"] == "ok"
+    assert layer5["signal_policy"] == "critical_risk_thresholds"
+    assert expected_layer5_signal in layer5["signals"]
+    if expected_layer5_signal == "accelerate_production":
+        assert layer5["reason"] in {
+            "no_effective_in_flight_and_high_stockout_risk",
+            "in_flight_present_but_severe_stockout_risk",
+            "mixed_risk_and_cost_signals",
+        }
+    if expected_layer5_signal == "reduce_order_size":
+        assert layer5["reason"] == "overstock_penalty_exceeds_marginal_profit"
+
+
 def test_production_order_proposal_compact_explainability_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     payload = _build_payload(
