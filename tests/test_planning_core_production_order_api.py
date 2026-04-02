@@ -8903,6 +8903,21 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
         "end_date": "2026-01-10",
     }
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta["requested_as_of_date"] is None
+    assert compact_from_wb_meta["as_of_date"] == "2026-01-10"
+    assert compact_from_wb_meta["as_of_source"] == "latest_sales"
+    assert compact_from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-12",
+        "end_date": "2026-01-10",
+    }
+
 
 def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -8975,6 +8990,18 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 7
     assert from_wb_meta["freshness"]["sales_age_days"] is None
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta["as_of_date"] is None
+    assert compact_from_wb_meta["as_of_source"] == "none"
+    assert compact_from_wb_meta["sales_window"] is None
+    assert compact_from_wb_meta["freshness"]["sales_age_days"] is None
+
 
 def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_no_stock(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -9033,6 +9060,17 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
     assert from_wb_meta["freshness"]["sales_age_days"] is None
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] is None
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] is None
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta["as_of_date"] is None
+    assert compact_from_wb_meta["as_of_source"] == "none"
+    assert compact_from_wb_meta["freshness"]["status"] == "no_data"
 
 
 def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_session):
@@ -9110,6 +9148,21 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
     assert from_wb_meta["as_of_date"] == "2026-01-10"
     assert from_wb_meta["as_of_source"] == "clamped_to_latest_sales"
     assert from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-12",
+        "end_date": "2026-01-10",
+    }
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta["requested_as_of_date"] == "2026-01-20"
+    assert compact_from_wb_meta["as_of_date"] == "2026-01-10"
+    assert compact_from_wb_meta["as_of_source"] == "clamped_to_latest_sales"
+    assert compact_from_wb_meta["sales_window"] == {
         "start_date": "2025-12-12",
         "end_date": "2026-01-10",
     }
@@ -9227,6 +9280,24 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 1.0
     assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 12
     assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is not None
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta["requested_as_of_date"] == "2026-01-15"
+    assert compact_from_wb_meta["as_of_date"] == "2026-01-15"
+    assert compact_from_wb_meta["as_of_source"] == "request"
+    assert compact_from_wb_meta["sales_window"] == {
+        "start_date": "2025-12-17",
+        "end_date": "2026-01-15",
+    }
 
 
 def test_production_order_proposal_from_wb_strict_rejects_stale_data(client, db_session):
