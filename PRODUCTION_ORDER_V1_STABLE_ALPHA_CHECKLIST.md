@@ -79,6 +79,7 @@
 - [x] `compact` preserves deterministic decisions while trimming payload-heavy explanation blocks.
 - [x] `explanation.meta.explainability` is present in compact mode and reports omitted step count.
 - [x] `compact` preserves contract blocks for Layers 1-5 and `alpha_proxy_economics`.
+- [x] `compact` also preserves Layer 2 economics evidence on direct and `from-wb` flows: `objective_parameters`, `objective_source`, and mirrored `alpha_proxy_economics.layer_2_objective_parameters` remain available after compaction.
 
 ## 9) From-WB ingestion/freshness
 - [x] Freshness mode (`warn|strict`) behavior is deterministic and covered.

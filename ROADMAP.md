@@ -133,6 +133,7 @@
 - Response explainability modes are now supported: `full` (default) and `compact` (summary + compact meta) for production-order direct/from-WB endpoints.
 - Compact mode preserves deterministic planner outputs and trims explainability payload size (steps + heavy meta arrays).
 - Compact-mode regressions now explicitly assert Layer 1-5 contract blocks are preserved for both direct and from-WB flows.
+- Compact-mode regressions now also lock Layer 2 objective parameter/source tracing (`objective_parameters`, `objective_source`) for both direct and `from-wb` flows so economics evidence survives payload compaction.
 - Compact/full parity harness now covers profile-based direct and from-WB scenarios (stockout / balanced / overstock style demand-stock setups) and validates Layer 2 decision-quality diagnostics plus Layer 2 contract decision-quality consistency checks are retained in compact metadata, while Layer 2 compact step text retains key readability fields (`decision_gate`, `reason_counts`, average profit gap, capital locked, contract status).
 - Stabilize/lock compact-mode contract with additional regression coverage as Layer 1-5 semantics finalize.
 
