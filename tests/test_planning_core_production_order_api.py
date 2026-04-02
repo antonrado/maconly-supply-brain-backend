@@ -6459,6 +6459,112 @@ def test_production_order_proposal_from_wb_skipped_when_article_excluded(client,
     assert any("WB ingestion adapter" in step for step in compact_body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_economic_buffer_policy(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BUFFER-POLICY",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BUFFER-POLICY",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BUFFER-POLICY",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload_without_buffer = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+    payload_with_buffer = {
+        **payload_without_buffer,
+        "overrides": {
+            **payload_without_buffer["overrides"],
+            "allow_order_with_buffer": True,
+        },
+    }
+
+    response_without = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload_without_buffer,
+    )
+    response_with = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload_with_buffer,
+    )
+
+    assert response_without.status_code == 200, response_without.text
+    assert response_with.status_code == 200, response_with.text
+
+    body_without = response_without.json()
+    body_with = response_with.json()
+
+    assert body_without["recommendation"] is not None
+    assert body_with["recommendation"] is not None
+    assert body_with["recommendation"]["total_units"] > body_without["recommendation"]["total_units"]
+
+    buffer_step_without = next(
+        (step for step in body_without["explanation"]["steps"] if "Economic buffer policy" in step),
+        "",
+    )
+    buffer_step_with = next(
+        (step for step in body_with["explanation"]["steps"] if "Economic buffer policy" in step),
+        "",
+    )
+
+    assert "enabled=False" in buffer_step_without
+    assert "economic_buffer_days=0" in buffer_step_without
+    assert "enabled=True" in buffer_step_with
+    assert "economic_buffer_days=0" not in buffer_step_with
+
+    payload_without_buffer["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    payload_with_buffer["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response_without = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload_without_buffer,
+    )
+    compact_response_with = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=payload_with_buffer,
+    )
+
+    assert compact_response_without.status_code == 200, compact_response_without.text
+    assert compact_response_with.status_code == 200, compact_response_with.text
+
+    compact_body_without = compact_response_without.json()
+    compact_body_with = compact_response_with.json()
+    assert _business_projection(body_without) == _business_projection(compact_body_without)
+    assert _business_projection(body_with) == _business_projection(compact_body_with)
+
+
 def test_production_order_proposal_from_wb_returns_alternatives(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
