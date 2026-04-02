@@ -84,10 +84,13 @@ from app.services.planning_production_order_explainability import (
     _apply_explainability_mode,
 )
 from app.services.planning_production_order_scope import (
+    _build_physical_scope_contract as _extracted_build_physical_scope_contract,
+    _build_arrival_horizon_projection as _extracted_build_arrival_horizon_projection,
     build_physical_scope_and_arrival_projection,
 )
 from app.services.planning_production_order_recommendation import (
     _build_alternatives as _extracted_build_alternatives,
+    build_recommendation_and_alternatives as _extracted_build_recommendation_and_alternatives,
     _choose_action as _extracted_choose_action,
 )
 from app.services.planning_production_order_layer_proxy import (
@@ -261,6 +264,7 @@ class _EffectiveSettings:
 
 _choose_action = _extracted_choose_action
 _build_alternatives = _extracted_build_alternatives
+_build_recommendation_and_alternatives = _extracted_build_recommendation_and_alternatives
 
 def _build_effective_settings(
     article_settings: ArticlePlanningSettings | None,
@@ -5371,39 +5375,17 @@ def build_production_order_proposal(
         lead_time_days_total=settings.lead_time_days_total,
         estimate_raw_bundle_stock=_estimate_competition_aware_raw_bundle_stock,
     )
-    if arrival_projection.status == "safe_cover_until_arrival" and total_daily_sales > 0:
-        action = "wait"
-    else:
-        action_risk_level = risk_level
-        if (
-            arrival_projection.status == "shortage_before_arrival"
-            and risk_level not in {"critical", "warning"}
-        ):
-            action_risk_level = "critical"
-        action = _choose_action(
-            risk_level=action_risk_level,
-            candidate_units=candidate_total_units,
-            allow_order_with_buffer=settings.allow_order_with_buffer,
-        )
-
-    if action == "wait":
-        recommendation = ProductionOrderRecommendation(
-            action="wait",
-            priority=settings.priority,
-            target_arrival_date=(now + timedelta(days=settings.lead_time_days_total)).date(),
-            total_units=0,
-            lines=[],
-        )
-    else:
-        recommendation = ProductionOrderRecommendation(
-            action=action,
-            priority=settings.priority,
-            target_arrival_date=(now + timedelta(days=settings.lead_time_days_total)).date(),
-            total_units=candidate_total_units,
-            lines=candidate_lines,
-        )
-
-    alternatives = _build_alternatives(action)
+    action, recommendation, alternatives = _build_recommendation_and_alternatives(
+        arrival_projection=arrival_projection,
+        total_daily_sales=total_daily_sales,
+        risk_level=risk_level,
+        candidate_total_units=candidate_total_units,
+        allow_order_with_buffer=settings.allow_order_with_buffer,
+        priority=settings.priority,
+        lead_time_days_total=settings.lead_time_days_total,
+        now=now,
+        candidate_lines=candidate_lines,
+    )
 
     elastic_uplift_line_keys_items = [
         {
