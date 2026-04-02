@@ -6522,6 +6522,122 @@ def test_production_order_proposal_from_wb_shared_color_pool_reduces_local_fabri
     assert any("Shared color pool:" in step for step in compact_body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_exposes_resource_allocation_consumption(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    assorti_bundle_type = BundleType(
+        code="PO-BT-WB-RESOURCE",
+        name="PO-BT-WB-RESOURCE",
+        is_assorti=True,
+    )
+    db_session.add(assorti_bundle_type)
+    db_session.flush()
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+        ]
+    )
+
+    as_of_date = date(2026, 1, 30)
+    observation_window_days = 30
+    main_wb_sku = "WB-PO-RESOURCE-MAIN"
+    assorti_wb_sku = "WB-PO-RESOURCE-ASSORTI"
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=main_wb_sku,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=assorti_wb_sku,
+                bundle_type_id=assorti_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=main_wb_sku,
+                date=as_of_date,
+                sales_qty=18 * observation_window_days,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbSalesDaily(
+                wb_sku=assorti_wb_sku,
+                date=as_of_date,
+                sales_qty=12 * observation_window_days,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=main_wb_sku,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=10,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+            WbStock(
+                wb_sku=assorti_wb_sku,
+                warehouse_id=2,
+                warehouse_name="WB-2",
+                stock_qty=4,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": observation_window_days,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id, assorti_bundle_type.id],
+        "in_flight_supply": [],
+        "size_weights": {},
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    resource_allocation = body["constraints_applied"]["resource_allocation"]
+    assert resource_allocation["mode"] == "per_article_bundle_competition"
+    assert resource_allocation["competing_resource_keys"] > 0
+    assert resource_allocation["contract"]["version"] == RESOURCE_ALLOCATION_CONTRACT_VERSION
+    assert resource_allocation["contract"]["status"] == "ok"
+
+    shared_reservations = [item for item in resource_allocation["reservations"] if item["shared_resource"]]
+    assert shared_reservations
+    for reservation in shared_reservations:
+        assert reservation["total_reserved_qty"] <= reservation["stock_qty"]
+        assert sum(item["reserved_qty"] for item in reservation["allocations"]) == reservation["total_reserved_qty"]
+
+    meta = body["explanation"]["meta"]
+    assert meta["resource_allocation"]["contract"]["status"] == "ok"
+    assert any("Resource allocation:" in step for step in body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["resource_allocation"]["contract"]["status"] == "ok"
+    assert any("Resource allocation:" in step for step in compact_body["explanation"]["steps"])
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
