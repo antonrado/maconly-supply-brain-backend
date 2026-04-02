@@ -106,7 +106,7 @@
   - [x] `logistics_cost_per_unit`
   - [x] `wb_commission_percent_main|assorti`
   - [x] `average_realized_price_main|assorti`
-  - [x] `available_capital` (strict capital governance input: required via `request|admin_defaults|global_default`, missing source rejected)
+  - [x] `available_capital` (explicit capital governance input: default `strict` requires `request|admin_defaults|global_default`; opt-in `safe_default` applies zero-capital fallback with warning/meta tracing)
 - [x] `explanation.meta.alpha_proxy_economics` contains economics source tracing (`economic_source`) and effective inputs (`economic_inputs`).
 - [x] Trusted-economics diagnostics are emitted in full/compact explainability (`explanation.meta.economics_trust`, `explanation.meta.warnings`) and mirrored in `alpha_proxy_economics` (`economics_trust_level`, trust payload, warning block).
 - [x] Source-tier precedence evidence is regression-locked for Economic Alpha inputs:
@@ -114,7 +114,7 @@
   - [x] `admin_defaults`
   - [x] `global_default`
   - [x] `code_default_constants`
-- [x] Capital governance strict behavior is regression-locked for direct/from-WB flows: unresolved `available_capital` now returns deterministic `422` with actionable detail and explicit status `missing_available_capital_strict`.
+- [x] Capital governance mode behavior is regression-locked for direct/from-WB flows: default `strict` unresolved `available_capital` returns deterministic `422` with actionable detail and explicit status `missing_available_capital_strict`, while opt-in `safe_default` applies zero-capital fallback with `HIGH` severity warning and `capital_governance` explainability tracing.
 - [x] Layer 2 allocation is demonstrably sensitive to economics changes in regression tests.
 - [x] Multi-regime end-to-end evidence is regression-locked for three distinct economics regimes (`stockout_dominates`, `overstock_dominates`, `commission_price_conflict`) proving objective-vs-profit disagreement and expected Layer 5 intervention signals.
 - [x] Layer 2 penalty-weight calibration evidence is documented with flip boundaries and frozen defaults, and regressions assert emitted `objective_parameters` + `objective_source` in explainability payloads.

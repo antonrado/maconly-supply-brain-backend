@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from math import floor
 
@@ -152,6 +152,11 @@ ECONOMICS_TRUST_UNTRUSTED_CODE_DEFAULT_THRESHOLD = EXTRACTED_ECONOMICS_TRUST_UNT
 ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED = EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
 ECONOMICS_TRUST_WARNING_CODE_PARTIAL = EXTRACTED_ECONOMICS_TRUST_WARNING_CODE_PARTIAL
 CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT = EXTRACTED_CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT
+CAPITAL_GOVERNANCE_MODE_STRICT = "strict"
+CAPITAL_GOVERNANCE_MODE_SAFE_DEFAULT = "safe_default"
+CAPITAL_GOVERNANCE_WARNING_CODE_SAFE_DEFAULT = "available_capital_safe_default_applied"
+CAPITAL_GOVERNANCE_STATUS_SAFE_DEFAULT_APPLIED = "safe_default_zero_capital_applied"
+CAPITAL_GOVERNANCE_SOURCE_SAFE_DEFAULT = "safe_default_zero_capital"
 LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD = 1.0
 LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD = LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
 LAYER2_CAPITAL_COST_RATE = EXTRACTED_LAYER2_CAPITAL_COST_RATE
@@ -3763,6 +3768,33 @@ def _build_missing_available_capital_strict_detail(
     }
 
 
+def _build_available_capital_safe_default_warning(
+    *,
+    article_id: int,
+    economics_trust_level: object,
+) -> dict[str, object]:
+    return {
+        "code": CAPITAL_GOVERNANCE_WARNING_CODE_SAFE_DEFAULT,
+        "severity": "HIGH",
+        "message": (
+            "available_capital missing; safe_default mode applied zero-capital fallback to avoid "
+            "unconstrained recommendations"
+        ),
+        "article_id": int(article_id),
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input for safe_default capital governance mode",
+            "type": "number",
+        },
+        "capital_governance_status": CAPITAL_GOVERNANCE_STATUS_SAFE_DEFAULT_APPLIED,
+        "capital_governance_mode": CAPITAL_GOVERNANCE_MODE_SAFE_DEFAULT,
+        "available_capital_effective": 0.0,
+        "action": "Provide overrides.available_capital or configure article/global available_capital defaults.",
+        "economics_trust_level": economics_trust_level,
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
+
+
 def _resolve_from_wb_freshness_thresholds(
     db: Session,
     article_id: int,
@@ -4853,14 +4885,55 @@ def build_production_order_proposal(
 
     economics_trust = _build_economics_trust_diagnostics(economic_settings.source)
     economics_warnings = list(economics_trust.get("warnings", []))
+    capital_governance_mode = CAPITAL_GOVERNANCE_MODE_STRICT
+    if request.overrides is not None:
+        capital_governance_mode = str(request.overrides.capital_governance_mode).strip().lower()
+    capital_governance = {
+        "mode": capital_governance_mode,
+        "missing_available_capital_policy": capital_governance_mode,
+        "safe_default_applied": False,
+        "available_capital_effective": economic_settings.available_capital,
+        "effective_source": economic_settings.source.get("available_capital"),
+    }
     if economic_settings.available_capital is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=_build_missing_available_capital_strict_detail(
-                article_id=request.article_id,
-                economics_trust_level=economics_trust.get("economics_trust_level"),
-            ),
-        )
+        if capital_governance_mode == CAPITAL_GOVERNANCE_MODE_SAFE_DEFAULT:
+            economic_settings = replace(
+                economic_settings,
+                available_capital=0.0,
+                source={
+                    **economic_settings.source,
+                    "available_capital": CAPITAL_GOVERNANCE_SOURCE_SAFE_DEFAULT,
+                },
+            )
+            economics_warnings.append(
+                _build_available_capital_safe_default_warning(
+                    article_id=request.article_id,
+                    economics_trust_level=economics_trust.get("economics_trust_level"),
+                )
+            )
+            capital_governance = {
+                "mode": capital_governance_mode,
+                "missing_available_capital_policy": capital_governance_mode,
+                "safe_default_applied": True,
+                "available_capital_effective": 0.0,
+                "effective_source": CAPITAL_GOVERNANCE_SOURCE_SAFE_DEFAULT,
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=_build_missing_available_capital_strict_detail(
+                    article_id=request.article_id,
+                    economics_trust_level=economics_trust.get("economics_trust_level"),
+                ),
+            )
+    else:
+        capital_governance = {
+            "mode": capital_governance_mode,
+            "missing_available_capital_policy": capital_governance_mode,
+            "safe_default_applied": False,
+            "available_capital_effective": economic_settings.available_capital,
+            "effective_source": economic_settings.source.get("available_capital"),
+        }
 
     bundle_type_ids = sorted({item.bundle_type_id for item in request.bundle_daily_sales})
 
@@ -5809,6 +5882,7 @@ def build_production_order_proposal(
         meta={
             "warnings": economics_warnings,
             "economics_trust": economics_trust,
+            "capital_governance": capital_governance,
             "sources": {
                 "size_weights": size_weights_source,
                 "in_flight": in_flight_source,
@@ -5913,6 +5987,7 @@ def build_production_order_proposal(
                 "economic_calibration_state": economic_settings.calibration_state,
                 "economics_trust_level": economics_trust.get("economics_trust_level"),
                 "economics_trust": economics_trust,
+                "capital_governance": capital_governance,
                 "layer_1_high_stockout_risk_threshold": LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
                 "layer_2_allocation_method": LAYER2_ALLOCATION_METHOD_CANONICAL,
                 "layer_2_allocation_method_canonical": LAYER2_ALLOCATION_METHOD_CANONICAL,

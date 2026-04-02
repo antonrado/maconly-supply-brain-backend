@@ -57,6 +57,7 @@ class PlanningOverridesInput(BaseModel):
     average_realized_price_main: float | None = Field(default=None, ge=0)
     average_realized_price_assorti: float | None = Field(default=None, ge=0)
     available_capital: float | None = Field(default=None, ge=0)
+    capital_governance_mode: Literal["strict", "safe_default"] = "strict"
     allow_order_with_buffer: bool = True
 
     @model_validator(mode="after")

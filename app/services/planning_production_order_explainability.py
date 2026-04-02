@@ -64,6 +64,7 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
     compact_meta: dict[str, object] = {
         "warnings": meta.get("warnings", []),
         "economics_trust": meta.get("economics_trust", {}),
+        "capital_governance": meta.get("capital_governance", {}),
         "sources": meta.get("sources", {}),
         "physical_scope": meta.get("physical_scope", {}),
         "arrival_projection": meta.get("arrival_projection", {}),

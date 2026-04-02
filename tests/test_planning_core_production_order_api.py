@@ -4131,6 +4131,68 @@ def test_production_order_proposal_requires_available_capital_in_strict_mode(cli
     }
 
 
+def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallback(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_available_capital = None
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_available_capital = None
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"].pop("available_capital", None)
+    payload["overrides"]["capital_governance_mode"] = "safe_default"
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["recommendation"]["action"] == "wait"
+    assert body["recommendation"]["total_units"] == 0
+
+    meta = body["explanation"]["meta"]
+    assert meta["capital_governance"] == {
+        "mode": "safe_default",
+        "missing_available_capital_policy": "safe_default",
+        "safe_default_applied": True,
+        "available_capital_effective": 0.0,
+        "effective_source": "safe_default_zero_capital",
+    }
+    assert meta["warnings"][-1] == {
+        "code": "available_capital_safe_default_applied",
+        "severity": "HIGH",
+        "message": "available_capital missing; safe_default mode applied zero-capital fallback to avoid unconstrained recommendations",
+        "article_id": seeded["article"].id,
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input for safe_default capital governance mode",
+            "type": "number",
+        },
+        "capital_governance_status": "safe_default_zero_capital_applied",
+        "capital_governance_mode": "safe_default",
+        "available_capital_effective": 0.0,
+        "action": "Provide overrides.available_capital or configure article/global available_capital defaults.",
+        "economics_trust_level": ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
+    assert meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
+    assert meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
+    assert meta["alpha_proxy_economics"]["capital_governance"] == meta["capital_governance"]
+    assert meta["capital_constraint"]["status"] == "budget_limited_applied"
+    assert meta["capital_constraint"]["available_capital"] == 0.0
+    assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
+
+
 def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
@@ -5653,6 +5715,85 @@ def test_production_order_proposal_from_wb_requires_available_capital_in_strict_
         "economics_trust_level": ECONOMICS_TRUST_LEVEL_UNTRUSTED,
         "next_steps": ["provide_available_capital_override_or_default"],
     }
+
+
+def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capital_fallback(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_available_capital = None
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_available_capital = None
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-CAP-SAFE-DEFAULT",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-CAP-SAFE-DEFAULT",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-CAP-SAFE-DEFAULT",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+            "capital_governance_mode": "safe_default",
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["recommendation"]["action"] == "wait"
+    assert body["recommendation"]["total_units"] == 0
+
+    meta = body["explanation"]["meta"]
+    assert meta["capital_governance"] == {
+        "mode": "safe_default",
+        "missing_available_capital_policy": "safe_default",
+        "safe_default_applied": True,
+        "available_capital_effective": 0.0,
+        "effective_source": "safe_default_zero_capital",
+    }
+    assert meta["warnings"][-1]["code"] == "available_capital_safe_default_applied"
+    assert meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
+    assert meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
+    assert meta["alpha_proxy_economics"]["capital_governance"] == meta["capital_governance"]
+    assert meta["capital_constraint"]["status"] == "budget_limited_applied"
+    assert meta["capital_constraint"]["available_capital"] == 0.0
+    assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
 
 
 def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_economics(client, db_session):
