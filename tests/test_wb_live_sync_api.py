@@ -1052,6 +1052,235 @@ def test_wb_from_wb_readiness_request_thresholds_override_stale_blocker(client, 
     assert item["next_steps"] == []
 
 
+def test_wb_from_wb_readiness_reports_no_bundle_type_in_mapping_blocker(client, db_session):
+    article = Article(code="NO-BUNDLE-TYPE-MAP", name="No bundle type mapping")
+    db_session.add(article)
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article.id,
+            wb_sku="WB-NO-BUNDLE-TYPE",
+            bundle_type_id=None,
+        )
+    )
+    db_session.flush()
+
+    response = client.post("/api/v1/wb/from-wb/readiness", json={"article_id": article.id, "limit": 10})
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "NO-BUNDLE-TYPE-MAP"
+    assert item["ready_for_from_wb"] is False
+    assert item["mapped_bundle_type_ids"] == []
+    assert item["blocker"] == "no_bundle_type_in_mapping"
+    assert item["next_steps"] == ["set_bundle_type_id_on_article_wb_mapping"]
+
+
+def test_wb_from_wb_readiness_reports_stock_only_stale_freshness_blocker(client, db_session):
+    article_stale = Article(code="STALE-STOCK-1", name="Stale stock")
+    bundle_type = BundleType(code="BT-STALE-STOCK", name="Stale stock bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE-STOCK", pantone_code=None, description=None)
+    today_utc = datetime.now(timezone.utc).date()
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(article_id=article_stale.id, wb_sku="WB-STALE-STOCK-1", bundle_type_id=bundle_type.id)
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-STOCK-1",
+            date=today_utc,
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-STOCK-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    response = client.post("/api/v1/wb/from-wb/readiness", json={"article_id": article_stale.id, "limit": 10})
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-STOCK-1"
+    assert item["ready_for_from_wb"] is False
+    assert item["freshness_status"] == "stale"
+    assert item["blocker"] == "stale_wb_stock_data"
+    assert item["sales_age_days"] == 0
+    assert item["stock_oldest_age_days"] == (today_utc - date(2020, 1, 2)).days
+    assert item["threshold_days"] == {"sales": 3, "stock": 2}
+    assert item["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert item["next_steps"] == ["run_wb_stock_sync_live"]
+
+
+def test_wb_from_wb_readiness_reports_stale_sales_and_stock_freshness_blocker(client, db_session):
+    article_stale = Article(code="STALE-BOTH-1", name="Stale both")
+    bundle_type = BundleType(code="BT-STALE-BOTH", name="Stale both bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE-BOTH", pantone_code=None, description=None)
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(article_id=article_stale.id, wb_sku="WB-STALE-BOTH-1", bundle_type_id=bundle_type.id)
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-BOTH-1",
+            date=date(2020, 1, 1),
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-BOTH-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    response = client.post("/api/v1/wb/from-wb/readiness", json={"article_id": article_stale.id, "limit": 10})
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-BOTH-1"
+    assert item["ready_for_from_wb"] is False
+    assert item["freshness_status"] == "stale"
+    assert item["blocker"] == "stale_wb_sales_and_stock_data"
+    assert item["sales_age_days"] is not None
+    assert item["stock_oldest_age_days"] is not None
+    assert item["threshold_days"] == {"sales": 3, "stock": 2}
+    assert item["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert item["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
+
+
+def test_wb_from_wb_readiness_uses_mixed_freshness_threshold_sources(client, db_session):
+    article_stale = Article(code="STALE-MIXED-SOURCE-1", name="Stale mixed source")
+    bundle_type = BundleType(code="BT-STALE-MIXED-SOURCE", name="Stale mixed source bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE-MIXED-SOURCE", pantone_code=None, description=None)
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article_stale.id,
+            wb_sku="WB-STALE-MIXED-SOURCE-1",
+            bundle_type_id=bundle_type.id,
+        )
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-MIXED-SOURCE-1",
+            date=date(2020, 1, 1),
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-MIXED-SOURCE-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{article_stale.id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 1,
+            "freshness_stock_stale_after_days": 3650,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    response = client.post(
+        "/api/v1/wb/from-wb/readiness",
+        json={
+            "article_id": article_stale.id,
+            "limit": 10,
+            "freshness_sales_stale_after_days": 3650,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 1
+    assert body["not_ready_articles"] == 0
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-MIXED-SOURCE-1"
+    assert item["ready_for_from_wb"] is True
+    assert item["freshness_status"] == "fresh"
+    assert item["blocker"] is None
+    assert item["threshold_days"] == {"sales": 3650, "stock": 3650}
+    assert item["threshold_source"] == {"sales": "request", "stock": "admin_defaults"}
+    assert item["next_steps"] == []
+
+
 def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeypatch):
     account = WbIntegrationAccount(
         name="WB Commission",
