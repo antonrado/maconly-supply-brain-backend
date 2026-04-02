@@ -2894,6 +2894,20 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is False
     assert compact_layer2["decision_quality"]["composite_objective_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
+    assert compact_layer2["objective_parameters"] == {
+        "capital_cost_rate": 0.08,
+        "stockout_penalty_weight": 1.0,
+        "overstock_penalty_weight": 1.0,
+    }
+    assert compact_layer2["objective_source"] == {
+        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert (
+        compact_body["explanation"]["meta"]["alpha_proxy_economics"]["layer_2_objective_parameters"]
+        == compact_layer2["objective_parameters"]
+    )
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
@@ -6641,6 +6655,20 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is False
     assert compact_layer2["decision_quality"]["composite_objective_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
+    assert compact_layer2["objective_parameters"] == {
+        "capital_cost_rate": 0.08,
+        "stockout_penalty_weight": 1.0,
+        "overstock_penalty_weight": 1.0,
+    }
+    assert compact_layer2["objective_source"] == {
+        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert (
+        compact_body["explanation"]["meta"]["alpha_proxy_economics"]["layer_2_objective_parameters"]
+        == compact_layer2["objective_parameters"]
+    )
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
@@ -6770,6 +6798,20 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is False
     assert compact_layer2["decision_quality"]["composite_objective_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
+    assert compact_layer2["objective_parameters"] == {
+        "capital_cost_rate": 0.08,
+        "stockout_penalty_weight": 1.0,
+        "overstock_penalty_weight": 1.0,
+    }
+    assert compact_layer2["objective_source"] == {
+        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert (
+        compact_body["explanation"]["meta"]["alpha_proxy_economics"]["layer_2_objective_parameters"]
+        == compact_layer2["objective_parameters"]
+    )
     compact_layer2_contract_checks = compact_layer2["contract"]["checks"]
     assert compact_layer2_contract_checks["decision_reason_matches_allocation"] is True
     assert compact_layer2_contract_checks["allocation_matches_profit_gate"] is True
