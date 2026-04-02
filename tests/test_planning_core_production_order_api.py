@@ -6396,6 +6396,132 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_shared_color_pool_reduces_local_fabric_min_uplift(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    seeded["color_2"].pantone_code = seeded["color_1"].pantone_code
+    db_session.flush()
+
+    article_wb_sku = "WB-PO-SHARED-COLOR-PRIMARY"
+    as_of_date = date(2026, 1, 30)
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku=article_wb_sku,
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku=article_wb_sku,
+            date=as_of_date,
+            sales_qty=15,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku=article_wb_sku,
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=0,
+            updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 100,
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    base_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert base_response.status_code == 200, base_response.text
+    base_body = base_response.json()
+    base_recommendation = base_body["recommendation"]
+    assert base_recommendation is not None
+    base_fabric_constraints = base_body["constraints_applied"]["fabric_min_batches"]
+    assert base_fabric_constraints
+    assert base_fabric_constraints[0]["sibling_proxy_required"] == 0
+    base_total_units = base_recommendation["total_units"]
+
+    sibling_article = Article(code="PO-WB-ART-SHARED", name="PO-WB-ART-SHARED")
+    sibling_color = Color(inner_code="PO-WB-C-SHARED", pantone_code=seeded["color_1"].pantone_code, description="Shared Pantone")
+    db_session.add_all([sibling_article, sibling_color])
+    db_session.flush()
+
+    db_session.add(
+        SkuUnit(
+            article_id=sibling_article.id,
+            color_id=sibling_color.id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        ArticlePlanningSettings(
+            article_id=sibling_article.id,
+            include_in_planning=True,
+            priority=1,
+            target_coverage_days=60,
+            lead_time_days=70,
+            service_level_percent=90,
+        )
+    )
+    db_session.add(
+        ArticleWbMapping(
+            article_id=sibling_article.id,
+            wb_sku="WB-SHARED-PANTONE-FROM-WB",
+        )
+    )
+
+    sales_start = date(2026, 1, 1)
+    for day_offset in range(30):
+        sales_date = sales_start + timedelta(days=day_offset)
+        db_session.add(
+            WbSalesDaily(
+                wb_sku="WB-SHARED-PANTONE-FROM-WB",
+                date=sales_date,
+                sales_qty=1,
+                revenue=None,
+                created_at=datetime(sales_date.year, sales_date.month, sales_date.day, tzinfo=timezone.utc),
+            )
+        )
+    db_session.commit()
+
+    shared_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert shared_response.status_code == 200, shared_response.text
+    shared_body = shared_response.json()
+    shared_recommendation = shared_body["recommendation"]
+    assert shared_recommendation is not None
+    assert shared_recommendation["total_units"] < base_total_units
+
+    shared_color_pool = shared_body["explanation"]["meta"]["shared_color_pool"]
+    assert shared_color_pool["status"] == "ok"
+    assert shared_color_pool["sibling_article_count"] >= 1
+    pantone_item = shared_color_pool["pantones"][seeded["color_1"].pantone_code]
+    assert pantone_item["sibling_proxy_required"] > 0
+    assert pantone_item["sibling_article_ids"] == [sibling_article.id]
+    assert any("Shared color pool:" in step for step in shared_body["explanation"]["steps"])
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["shared_color_pool"]["status"] == "ok"
+    assert any("Shared color pool:" in step for step in compact_body["explanation"]["steps"])
+
+
 def test_production_order_proposal_from_wb_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
