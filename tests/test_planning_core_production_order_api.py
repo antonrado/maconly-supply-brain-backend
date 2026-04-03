@@ -6577,8 +6577,27 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert layer5_contract_checks["reason_consistent_with_signals"] is True
 
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["source"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["calibration_state"] == "alpha_proxy_not_calibrated"
     assert alpha_proxy["margin_proxy"] == {"main": 0.8, "assorti": 0.65}
     assert alpha_proxy["unit_capital_proxy"] == 1.0
+    assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
+    assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
+    assert alpha_proxy["layer_2_decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
+    assert alpha_proxy["layer_2_legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        alpha_proxy["layer_2_legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
+    assert (
+        alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
+        == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
+    )
+    assert (
+        alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
+        == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
+    )
     assert alpha_proxy["layer_3_purchase_factors"] == {
         "main": 1.0,
         "assorti": 0.75,
@@ -6612,6 +6631,18 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
                 "max": 0.6,
             },
         },
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": LAYER_PROXY_VALUE_SOURCE,
+        "layer3_overstock_dampen_max": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_unavoidable_stockout_risk_threshold": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_accelerate_production_risk_threshold": LAYER_PROXY_VALUE_SOURCE,
+        "layer2_capital_cost_rate": "code_default_constants",
+        "layer2_stockout_penalty_weight": "code_default_constants",
+        "layer2_overstock_penalty_weight": "code_default_constants",
+        "layer5_accelerate_action_cost_rate": "code_default_constants",
+        "layer5_price_slowdown_lost_volume_rate": "code_default_constants",
+        "layer5_reduce_order_marginal_profit_rate": "code_default_constants",
     }
     assert alpha_proxy["layer_4_scenario_factors"] == body["explanation"]["meta"]["layer_4_scenarios"]["factors"]
     assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
