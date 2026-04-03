@@ -8712,6 +8712,8 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     db_session,
 ):
     seeded = _seed_article_bundle_base(db_session)
+    seeded["bundle_type"].is_assorti = True
+    db_session.flush()
 
     article_settings = (
         db_session.query(ArticlePlanningSettings)
@@ -8812,9 +8814,63 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
         "available_capital": 60.0,
     }
 
+    assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
+    assert alpha_proxy["layer_2_allocation_method_canonical"] == LAYER2_ALLOCATION_METHOD_CANONICAL
+    assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
+    assert alpha_proxy["layer_2_decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
+    assert alpha_proxy["layer_2_decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
+    assert alpha_proxy["layer_2_legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    assert (
+        alpha_proxy["layer_2_legacy_alias_deprecation_plan"]["deprecated_after"]
+        == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    )
+
+    layer2_meta = meta["layer_2_allocation"]
+    assert layer2_meta["method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
+    assert layer2_meta["method_canonical"] == LAYER2_ALLOCATION_METHOD_CANONICAL
+    assert layer2_meta["legacy_method"] == LAYER2_ALLOCATION_METHOD
+    assert layer2_meta["decision_gate"] == LAYER2_DECISION_GATE_CANONICAL
+    assert layer2_meta["decision_gate_canonical"] == LAYER2_DECISION_GATE_CANONICAL
+    assert layer2_meta["legacy_decision_gate"] == LAYER2_DECISION_GATE_LEGACY
+    layer2_legacy_alias_plan = layer2_meta["legacy_alias_deprecation_plan"]
+    assert layer2_legacy_alias_plan["deprecated_after"] == LAYER2_LEGACY_GATE_ALIAS_DEPRECATION_WINDOW
+    assert layer2_meta["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
+    assert alpha_proxy["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
+    layer2_summary = meta["layer_2_allocation"]["summary"]
+    assert layer2_summary["main"] > 0
+    assert layer2_summary["assorti"] == 0
+
     capital_gap = meta["capital_gap"]
     assert capital_gap["status"] == "ok"
     assert capital_gap["available_capital"] == 60.0
+    assert isinstance(capital_gap["required_capital"], float)
+    assert isinstance(capital_gap["deficit_or_surplus"], float)
+
+    scenarios = meta["layer_4_scenarios"]["scenarios"]
+    assert len(scenarios) == 3
+    for scenario in scenarios:
+        assert "expected_revenue" in scenario
+        assert "expected_gross_profit" in scenario
+        assert "expected_margin_percent" in scenario
+        assert "expected_turnover_days" in scenario
+        assert "stockout_probability_proxy" in scenario
+        assert "overstock_risk_proxy" in scenario
+        assert "capital_delta_vs_balanced" in scenario
+        assert "expected_revenue_delta_vs_balanced" in scenario
+        assert "expected_gross_profit_delta_vs_balanced" in scenario
+        assert "objective_score_delta_vs_balanced" in scenario
+        assert (
+            scenario["expected_gross_profit_delta_vs_balanced"]
+            == scenario["gross_profit_delta_vs_balanced"]
+        )
+
+    aggregate = meta["layer_4_scenarios"]["aggregate_deltas"]
+    assert set(aggregate["aggressive_vs_conservative"].keys()) == {
+        "capital_delta",
+        "expected_revenue_delta",
+        "gross_profit_delta",
+        "objective_delta",
+    }
 
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
@@ -8829,6 +8885,9 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["alpha_proxy_economics"]["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
+    assert compact_meta["layer_2_allocation"]["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
+    assert compact_meta["layer_4_scenarios"]["aggregate_deltas"] == aggregate
 
 
 def test_production_order_proposal_from_wb_reports_budget_limited_capital_constraint_summary(
