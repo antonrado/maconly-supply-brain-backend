@@ -2062,7 +2062,8 @@ def test_production_order_proposal_shared_color_pool_reduces_local_fabric_min_up
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
-    assert compact_meta["shared_color_pool"]["status"] == "ok"
+    assert _business_projection(shared_body) == _business_projection(compact_body)
+    assert compact_meta["shared_color_pool"] == shared_color_pool
     assert any("Shared color pool:" in step for step in compact_body["explanation"]["steps"])
 
 
