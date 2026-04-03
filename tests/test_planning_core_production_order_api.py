@@ -9150,6 +9150,127 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
 
 
+def test_production_order_proposal_from_wb_layer3_calibration_changes_qty_but_not_layer2_decisions(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-L3-CALIBRATION",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-L3-CALIBRATION",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-L3-CALIBRATION",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    base_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    low_calibration_payload = deepcopy(base_payload)
+    low_calibration_payload["overrides"]["layer3_stockout_boost_max"] = 0.0
+    low_calibration_payload["overrides"]["layer3_overstock_dampen_max"] = 0.0
+
+    high_calibration_payload = deepcopy(base_payload)
+    high_calibration_payload["overrides"]["layer3_stockout_boost_max"] = 1.0
+    high_calibration_payload["overrides"]["layer3_overstock_dampen_max"] = 0.0
+
+    low_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=low_calibration_payload,
+    )
+    assert low_response.status_code == 200, low_response.text
+
+    high_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=high_calibration_payload,
+    )
+    assert high_response.status_code == 200, high_response.text
+
+    low_body = low_response.json()
+    high_body = high_response.json()
+
+    low_layer2 = low_body["explanation"]["meta"]["layer_2_allocation"]
+    high_layer2 = high_body["explanation"]["meta"]["layer_2_allocation"]
+    assert low_layer2["summary"] == high_layer2["summary"]
+    assert low_layer2["decisions"] == high_layer2["decisions"]
+    assert low_layer2["contract"]["status"] == "ok"
+    assert high_layer2["contract"]["status"] == "ok"
+
+    low_layer3 = low_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    high_layer3 = high_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    assert low_layer3["calibration"]["stockout_boost_max"] == 0.0
+    assert high_layer3["calibration"]["stockout_boost_max"] == 1.0
+    assert low_layer3["calibration"]["overstock_dampen_max"] == 0.0
+    assert high_layer3["calibration"]["overstock_dampen_max"] == 0.0
+    assert high_layer3["qty_after"] > low_layer3["qty_after"]
+    assert high_body["recommendation"]["total_units"] > low_body["recommendation"]["total_units"]
+
+    low_compact_payload = deepcopy(low_calibration_payload)
+    low_compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    low_compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=low_compact_payload,
+    )
+    assert low_compact_response.status_code == 200, low_compact_response.text
+
+    high_compact_payload = deepcopy(high_calibration_payload)
+    high_compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    high_compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=high_compact_payload,
+    )
+    assert high_compact_response.status_code == 200, high_compact_response.text
+
+    low_compact_body = low_compact_response.json()
+    high_compact_body = high_compact_response.json()
+    assert _business_projection(low_body) == _business_projection(low_compact_body)
+    assert _business_projection(high_body) == _business_projection(high_compact_body)
+    assert (
+        low_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
+        == low_layer3["calibration"]
+    )
+    assert low_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["qty_after"] == low_layer3["qty_after"]
+    assert (
+        high_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
+        == high_layer3["calibration"]
+    )
+    assert high_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["qty_after"] == high_layer3["qty_after"]
+
+
 def test_production_order_proposal_from_wb_layer5_signals_do_not_override_recommendation_action(
     client,
     db_session,
