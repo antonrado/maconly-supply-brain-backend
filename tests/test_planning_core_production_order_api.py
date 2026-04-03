@@ -10698,6 +10698,32 @@ def test_production_order_proposal_validation_error_invalid_layer5_threshold_ord
     ) in response.text
 
 
+def test_production_order_proposal_from_wb_validation_error_invalid_layer5_threshold_order(
+    client,
+    db_session,
+):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [1],
+            "in_flight_supply": [],
+            "size_weights": {},
+            "overrides": {
+                "layer5_unavoidable_stockout_risk_threshold": 0.6,
+                "layer5_accelerate_production_risk_threshold": 0.2,
+            },
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert (
+        "layer5_accelerate_production_risk_threshold must be greater than or equal to "
+        "layer5_unavoidable_stockout_risk_threshold"
+    ) in response.text
+
+
 def test_production_order_proposal_validation_error_duplicate_bundle_stock_bundle_type_id(client, db_session):  # noqa: ARG001
     response = client.post(
         "/api/v1/planning/core/production-order/proposal",
