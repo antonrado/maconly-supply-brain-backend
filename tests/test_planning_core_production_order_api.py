@@ -15,7 +15,9 @@ from app.services.planning_production_order import (
     ASSORTI_CLASSIFICATION_SOURCE,
     CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
     CAPITAL_CONSTRAINT_CONTRACT_VERSION,
+    ECONOMICS_TRUST_LEVEL_PARTIAL,
     ECONOMICS_TRUST_LEVEL_UNTRUSTED,
+    ECONOMICS_TRUST_WARNING_CODE_PARTIAL,
     ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED,
     EXPLAINABILITY_MODE_COMPACT,
     FROM_WB_OBSERVED_ECONOMIC_SOURCE,
@@ -4828,6 +4830,69 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
 
 
+def test_production_order_proposal_reports_partial_economics_trust_when_one_key_field_uses_code_default(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_production_cost_per_unit = 0.7
+    article_settings.production_order_logistics_cost_per_unit = 0.3
+    article_settings.production_order_wb_commission_percent_main = 0.11
+    article_settings.production_order_wb_commission_percent_assorti = 0.12
+    article_settings.production_order_average_realized_price_main = 2.2
+    article_settings.production_order_average_realized_price_assorti = None
+    article_settings.production_order_available_capital = 300.0
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_production_cost_per_unit = 0.9
+    global_settings.default_production_order_logistics_cost_per_unit = 0.4
+    global_settings.default_production_order_wb_commission_percent_main = 0.13
+    global_settings.default_production_order_wb_commission_percent_assorti = 0.14
+    global_settings.default_production_order_average_realized_price_main = 2.6
+    global_settings.default_production_order_average_realized_price_assorti = None
+    global_settings.default_production_order_available_capital = 450.0
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"].pop("production_cost_per_unit", None)
+    payload["overrides"].pop("logistics_cost_per_unit", None)
+    payload["overrides"].pop("wb_commission_percent_main", None)
+    payload["overrides"].pop("wb_commission_percent_assorti", None)
+    payload["overrides"].pop("average_realized_price_main", None)
+    payload["overrides"].pop("average_realized_price_assorti", None)
+    payload["overrides"].pop("available_capital", None)
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["economics_formula_version"] == "v1_economic_alpha"
+    assert alpha_proxy["economic_calibration_state"] == "economic_inputs_calibrated"
+    assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == "code_default_constants"
+    assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 1.65
+
+    economics_trust = meta["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_PARTIAL
+    assert economics_trust["code_default_key_fields"] == ["average_realized_price_assorti"]
+    assert economics_trust["code_default_key_fields_count"] == 1
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+    assert economics_trust["warnings"][0]["severity"] == "MEDIUM"
+    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+
+
 def test_production_order_proposal_requires_available_capital_in_strict_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
@@ -8299,6 +8364,113 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["economics_trust"] == economics_trust
     assert compact_meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+
+
+def test_production_order_proposal_from_wb_reports_partial_economics_trust_when_one_key_field_uses_code_default(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_production_cost_per_unit = 0.7
+    article_settings.production_order_logistics_cost_per_unit = 0.3
+    article_settings.production_order_wb_commission_percent_main = 0.11
+    article_settings.production_order_wb_commission_percent_assorti = 0.12
+    article_settings.production_order_average_realized_price_main = 2.2
+    article_settings.production_order_average_realized_price_assorti = None
+    article_settings.production_order_available_capital = 300.0
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_production_cost_per_unit = 0.9
+    global_settings.default_production_order_logistics_cost_per_unit = 0.4
+    global_settings.default_production_order_wb_commission_percent_main = 0.13
+    global_settings.default_production_order_wb_commission_percent_assorti = 0.14
+    global_settings.default_production_order_average_realized_price_main = 2.6
+    global_settings.default_production_order_average_realized_price_assorti = None
+    global_settings.default_production_order_available_capital = 450.0
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-ECON-PARTIAL-TRUST",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-ECON-PARTIAL-TRUST",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-ECON-PARTIAL-TRUST",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["economics_formula_version"] == "v1_economic_alpha"
+    assert alpha_proxy["economic_calibration_state"] == "economic_inputs_calibrated"
+    assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == "code_default_constants"
+    assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 1.65
+
+    economics_trust = meta["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_PARTIAL
+    assert economics_trust["code_default_key_fields"] == ["average_realized_price_assorti"]
+    assert economics_trust["code_default_key_fields_count"] == 1
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+    assert economics_trust["warnings"][0]["severity"] == "MEDIUM"
+    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["economics_trust"] == economics_trust
+    assert compact_meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
 
 
 def test_production_order_proposal_from_wb_uses_global_economic_defaults_when_admin_and_request_missing(
