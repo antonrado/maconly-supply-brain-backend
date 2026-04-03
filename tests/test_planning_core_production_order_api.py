@@ -8211,6 +8211,19 @@ def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(
     assert from_wb_observed["sample_counts"]["main"]["anomaly_filtered"] == 1
     assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_main"] == (
+        FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    )
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_main"] == 2.0
+    assert compact_meta["from_wb"]["economic_observed_prices"] == from_wb_observed
+
 
 def test_production_order_proposal_from_wb_request_price_override_has_precedence_over_observed_price(
     client,
@@ -8263,9 +8276,26 @@ def test_production_order_proposal_from_wb_request_price_override_has_precedence
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert response.status_code == 200, response.text
 
-    alpha_proxy = response.json()["explanation"]["meta"]["alpha_proxy_economics"]
+    body = response.json()
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
     assert alpha_proxy["economic_source"]["average_realized_price_main"] == "request"
     assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 4.4
+
+    from_wb_observed = body["explanation"]["meta"]["from_wb"]["economic_observed_prices"]
+    assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    assert from_wb_observed["prices"]["main"] == 2.0
+    assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_main"] == "request"
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_main"] == 4.4
+    assert compact_meta["from_wb"]["economic_observed_prices"] == from_wb_observed
 
 
 def test_production_order_proposal_from_wb_uses_live_commission_calibration(client, db_session, monkeypatch):
