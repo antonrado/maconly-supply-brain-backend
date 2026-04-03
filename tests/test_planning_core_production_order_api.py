@@ -8127,6 +8127,183 @@ def test_production_order_proposal_from_wb_reports_budget_limited_capital_constr
     assert compact_meta["capital_constraint"] == capital_constraint
 
 
+def test_production_order_proposal_from_wb_assorti_classification_prefers_admin_fallback_over_global(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-ASSORTI-ADMIN-FALLBACK",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-ASSORTI-ADMIN-FALLBACK",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-ASSORTI-ADMIN-FALLBACK",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE: 1,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+        }
+    ]
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_assorti_classification = compact_body["explanation"]["meta"]["layer_1_stock_health"][
+        "assorti_classification"
+    ]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_assorti_classification["summary"] == assorti_classification["summary"]
+    assert compact_assorti_classification["source_breakdown"] == assorti_classification["source_breakdown"]
+    assert "bundle_types" not in compact_assorti_classification
+
+
+def test_production_order_proposal_from_wb_assorti_classification_uses_global_fallback_when_admin_missing(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_assorti_bundle_type_ids = str(seeded["bundle_type"].id)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-ASSORTI-GLOBAL-FALLBACK",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-ASSORTI-GLOBAL-FALLBACK",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-ASSORTI-GLOBAL-FALLBACK",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE: 1,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
+        }
+    ]
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_assorti_classification = compact_body["explanation"]["meta"]["layer_1_stock_health"][
+        "assorti_classification"
+    ]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_assorti_classification["summary"] == assorti_classification["summary"]
+    assert compact_assorti_classification["source_breakdown"] == assorti_classification["source_breakdown"]
+    assert "bundle_types" not in compact_assorti_classification
+
+
 def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_economics(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
