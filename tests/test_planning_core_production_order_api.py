@@ -7614,7 +7614,8 @@ def test_production_order_proposal_from_wb_exposes_resource_allocation_consumpti
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
-    assert compact_meta["resource_allocation"]["contract"]["status"] == "ok"
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["resource_allocation"] == meta["resource_allocation"]
     assert any("Resource allocation:" in step for step in compact_body["explanation"]["steps"])
 
 
