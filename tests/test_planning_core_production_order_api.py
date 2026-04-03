@@ -3088,8 +3088,8 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
-    full_layer4 = full_body["explanation"]["meta"]["layer_4_scenarios"]
-    compact_layer4 = compact_body["explanation"]["meta"]["layer_4_scenarios"]
+    full_layer4 = full_meta["layer_4_scenarios"]
+    compact_layer4 = compact_meta["layer_4_scenarios"]
     assert compact_layer4["aggregate_deltas"] == full_layer4["aggregate_deltas"]
     assert len(compact_layer4["scenarios"]) == len(full_layer4["scenarios"])
     for compact_scenario, full_scenario in zip(compact_layer4["scenarios"], full_layer4["scenarios"]):
@@ -3167,6 +3167,11 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     full_body = full_response.json()
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
+
+    full_meta = full_body["explanation"]["meta"]
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["physical_scope"] == full_meta["physical_scope"]
+    assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
@@ -10188,6 +10193,11 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
 
+    full_meta = full_body["explanation"]["meta"]
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["physical_scope"] == full_meta["physical_scope"]
+    assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
+
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
         "",
@@ -10228,8 +10238,8 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
-    full_layer4 = full_body["explanation"]["meta"]["layer_4_scenarios"]
-    compact_layer4 = compact_body["explanation"]["meta"]["layer_4_scenarios"]
+    full_layer4 = full_meta["layer_4_scenarios"]
+    compact_layer4 = compact_meta["layer_4_scenarios"]
     assert compact_layer4["aggregate_deltas"] == full_layer4["aggregate_deltas"]
     assert len(compact_layer4["scenarios"]) == len(full_layer4["scenarios"])
     for compact_scenario, full_scenario in zip(compact_layer4["scenarios"], full_layer4["scenarios"]):
@@ -10250,7 +10260,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
             == full_scenario["objective_score_delta_vs_balanced"]
         )
 
-    from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    from_wb_meta = compact_meta["from_wb"]
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta
     assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
