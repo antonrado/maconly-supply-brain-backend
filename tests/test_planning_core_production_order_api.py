@@ -9904,6 +9904,171 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
     }
 
 
+def test_production_order_proposal_from_wb_rejects_without_bundle_recipe_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-NO-RECIPE",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.flush()
+    (
+        db_session.query(BundleRecipe)
+        .filter(
+            BundleRecipe.article_id == seeded["article"].id,
+            BundleRecipe.bundle_type_id == seeded["bundle_type"].id,
+        )
+        .delete(synchronize_session=False)
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": seeded["article"].id,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [seeded["bundle_type"].id],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_bundle_recipe",
+        "message": "No bundle recipe defined for the requested bundle types",
+        "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "missing_bundle_type_ids": [seeded["bundle_type"].id],
+        "next_steps": ["create_bundle_recipe_for_requested_bundle_type_ids"],
+    }
+
+
+def test_production_order_proposal_from_wb_rejects_with_partial_missing_bundle_recipe_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    second_bundle_type = BundleType(code="PO-WB-BT-STRUCT-2", name="PO-WB-BT-STRUCT-2")
+    db_session.add(second_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-PARTIAL-RECIPE-1",
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-PARTIAL-RECIPE-2",
+                bundle_type_id=second_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": seeded["article"].id,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "missing_bundle_recipe_bundle_types",
+        "message": "Bundle recipe is missing for some requested bundle types",
+        "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
+        "missing_bundle_type_ids": [second_bundle_type.id],
+        "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
+    }
+
+
+def test_production_order_proposal_from_wb_rejects_without_sku_scope_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-NO-SKU-SCOPE",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.flush()
+
+    sku_ids = [
+        row.id
+        for row in db_session.query(SkuUnit).filter(SkuUnit.article_id == seeded["article"].id).all()
+    ]
+    (
+        db_session.query(StockBalance)
+        .filter(StockBalance.sku_unit_id.in_(sku_ids))
+        .delete(synchronize_session=False)
+    )
+    (
+        db_session.query(SkuUnit)
+        .filter(SkuUnit.article_id == seeded["article"].id)
+        .delete(synchronize_session=False)
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": seeded["article"].id,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [seeded["bundle_type"].id],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_sku_units_for_recipe_colors",
+        "message": "No SKU units found for article and recipe colors",
+        "article_id": seeded["article"].id,
+        "field": "bundle_daily_sales.bundle_type_id",
+        "field_metadata": {
+            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "recipe_color_ids": [seeded["color_1"].id, seeded["color_2"].id],
+        "next_steps": ["create_sku_units_for_recipe_colors"],
+    }
+
+
 def test_production_order_proposal_rejects_without_bundle_recipe_with_structured_detail(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     payload = _build_payload(
