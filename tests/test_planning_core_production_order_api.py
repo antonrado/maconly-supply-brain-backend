@@ -7077,6 +7077,80 @@ def test_production_order_proposal_from_wb_exposes_resource_allocation_consumpti
     assert any("Resource allocation:" in step for step in compact_body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_applies_elastic_minimum(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    elastic_type = ElasticType(code="PO-WB-EL-1", name="PO-WB-EL-1")
+    db_session.add(elastic_type)
+    db_session.flush()
+
+    db_session.add(
+        ElasticPlanningSettings(
+            article_id=seeded["article"].id,
+            elastic_type_id=elastic_type.id,
+            elastic_min_batch_qty=15000,
+        )
+    )
+
+    as_of_date = date(2026, 1, 30)
+    observation_window_days = 30
+    wb_sku = "WB-PO-ELASTIC-MIN"
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku,
+                date=as_of_date,
+                sales_qty=150,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=0,
+                updated_at=datetime(2026, 1, 30, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": observation_window_days,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    elastic_constraints = body["constraints_applied"]["elastic_min_batches"]
+    assert elastic_constraints
+    assert elastic_constraints[0]["applied_min"] == 15000
+    assert elastic_constraints[0]["required"] < elastic_constraints[0]["applied_min"]
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+
+
 def test_production_order_proposal_from_wb_elastic_binding_scope_selects_bound_type(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
