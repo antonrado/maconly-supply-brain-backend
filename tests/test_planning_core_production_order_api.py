@@ -4995,6 +4995,22 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     assert meta["capital_constraint"]["available_capital"] == 0.0
     assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["capital_governance"] == meta["capital_governance"]
+    assert compact_meta["warnings"][-1] == meta["warnings"][-1]
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
+    assert compact_meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
+    assert compact_meta["alpha_proxy_economics"]["capital_governance"] == compact_meta["capital_governance"]
+    assert compact_meta["capital_constraint"]["status"] == "budget_limited_applied"
+    assert compact_meta["capital_constraint"]["available_capital"] == 0.0
+    assert compact_meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
+
 
 def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
