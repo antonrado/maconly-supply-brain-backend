@@ -3041,6 +3041,11 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     compact_body = compact_response.json()
     assert _business_projection(full_body) == _business_projection(compact_body)
 
+    full_meta = full_body["explanation"]["meta"]
+    compact_meta = compact_body["explanation"]["meta"]
+    assert compact_meta["physical_scope"] == full_meta["physical_scope"]
+    assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
+
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
         "",
