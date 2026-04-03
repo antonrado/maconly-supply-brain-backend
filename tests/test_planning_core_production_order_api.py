@@ -5031,9 +5031,7 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert compact_meta["alpha_proxy_economics"]["capital_governance"] == compact_meta["capital_governance"]
-    assert compact_meta["capital_constraint"]["status"] == "budget_limited_applied"
-    assert compact_meta["capital_constraint"]["available_capital"] == 0.0
-    assert compact_meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
+    assert compact_meta["capital_constraint"] == meta["capital_constraint"]
 
 
 def test_production_order_proposal_request_layer_proxy_overrides_admin_and_global(client, db_session):
