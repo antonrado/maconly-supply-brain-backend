@@ -6463,7 +6463,11 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
 
     layer2_contract_checks = body["explanation"]["meta"]["layer_2_allocation"]["contract"]["checks"]
     assert layer2_contract_checks["decision_reason_matches_allocation"] is True
+    assert layer2_contract_checks["decision_reason_expected_gross_profit_matches_allocation"] is True
+    assert layer2_contract_checks["decision_reason_objective_score_matches_allocation"] is True
+    assert layer2_contract_checks["allocation_matches_composite_objective_gate"] is True
     assert layer2_contract_checks["allocation_matches_profit_gate"] is True
+    assert layer2_contract_checks["allocation_matches_expected_gross_profit_gate"] is True
     assert layer2_contract_checks["tie_break_applied_matches_objective_tie"] is True
     assert layer2_contract_checks["tie_break_applied_matches_profit_tie"] is True
     assert layer2_contract_checks["near_tie_matches_objective_gap_threshold"] is True
@@ -6471,6 +6475,30 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert layer2_contract_checks["profit_gap_consistent_with_profits"] is True
     assert layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert layer2_contract_checks["capital_locked_metric_valid"] is True
+    assert layer2_contract_checks["objective_required_fields_present"] is True
+    assert layer2_contract_checks["objective_score_fields_numeric"] is True
+    assert layer2_contract_checks["objective_components_present"] is True
+    assert layer2_contract_checks["objective_components_numeric"] is True
+    assert layer2_contract_checks["objective_components_consistent_with_scores"] is True
+    assert layer2_contract_checks["objective_components_match_formula"] is True
+    assert layer2_contract_checks["objective_score_gap_consistent_with_objective_scores"] is True
+
+    layer4_contract_checks = body["explanation"]["meta"]["layer_4_scenarios"]["contract"]["checks"]
+    assert layer4_contract_checks["capital_non_decreasing"] is True
+    assert layer4_contract_checks["stockout_risk_non_increasing"] is True
+    assert layer4_contract_checks["turnover_non_increasing"] is True
+    assert layer4_contract_checks["purchase_units_non_decreasing"] is True
+    assert layer4_contract_checks["scenario_delta_fields_present"] is True
+    assert layer4_contract_checks["scenario_deltas_match_balanced"] is True
+
+    layer5_contract_checks = body["explanation"]["meta"]["layer_5_intervention"]["contract"]["checks"]
+    assert layer5_contract_checks["thresholds_in_unit_interval"] is True
+    assert layer5_contract_checks["threshold_sources_match_effective"] is True
+    assert layer5_contract_checks["threshold_order_valid"] is True
+    assert layer5_contract_checks["signals_known_only"] is True
+    assert layer5_contract_checks["signals_unique"] is True
+    assert layer5_contract_checks["signals_order_is_canonical"] is True
+    assert layer5_contract_checks["reason_consistent_with_signals"] is True
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     assert from_wb_meta["observation_window_days"] == 30
