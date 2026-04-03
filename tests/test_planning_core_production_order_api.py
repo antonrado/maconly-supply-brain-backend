@@ -10240,6 +10240,22 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
             == full_scenario["objective_score_delta_vs_balanced"]
         )
 
+    from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert "daily_sales_by_bundle" not in from_wb_meta
+    assert "wb_stock_by_bundle" not in from_wb_meta
+    assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
+    assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
+    assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
+    assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
+    assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
+    assert from_wb_meta["snapshot"] == {
+        "daily_sales_bundle_count": 1,
+        "daily_sales_total": 2.0,
+        "wb_stock_bundle_count": 1,
+        "wb_stock_total": 20,
+        "wb_stock_updated_bundle_count": 1,
+    }
+
 
 def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
     client,
