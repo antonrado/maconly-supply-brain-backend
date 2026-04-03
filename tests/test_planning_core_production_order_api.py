@@ -1971,6 +1971,8 @@ def test_production_order_proposal_exposes_resource_allocation_consumption(clien
     compact_meta = compact_body["explanation"]["meta"]
     assert compact_meta["resource_allocation"]["contract"]["status"] == "ok"
     assert any("Resource allocation:" in step for step in compact_body["explanation"]["steps"])
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["resource_allocation"] == meta["resource_allocation"]
 
 
 def test_production_order_proposal_shared_color_pool_reduces_local_fabric_min_uplift(client, db_session):
