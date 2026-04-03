@@ -6454,6 +6454,60 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert "ready stock наборов (WB+локальный)=20" in stock_step
     assert body["physical_scope"]["wb_stock_scope"] == "request_explicit_bundle_stock"
     assert body["physical_scope"]["ready_bundle_source"] == "request"
+
+    layer1 = body["explanation"]["meta"]["layer_1_stock_health"]
+    assert layer1["summary"]["sku_count"] == 4
+    assert layer1["summary"]["high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
+    assert len(layer1["metrics"]) == 4
+    for metric in layer1["metrics"]:
+        assert {
+            "color_id",
+            "size_id",
+            "velocity_main",
+            "velocity_assorti",
+            "coverage_days",
+            "current_stock",
+            "in_flight",
+            "eta_days",
+            "gross_margin",
+            "capital_locked",
+            "stockout_risk",
+            "overstock_risk",
+        }.issubset(metric.keys())
+        assert metric["velocity_assorti"] == 0.0
+    assert layer1["proxies"] == {
+        "main_margin": 0.8,
+        "assorti_margin": 0.65,
+        "unit_capital": 1.0,
+    }
+    assert layer1["contract"] == {
+        "version": "v1_alpha",
+        "status": "ok",
+        "sku_count": 4,
+        "checks": {
+            "unique_color_size_pairs": True,
+            "risk_bounds_valid": True,
+            "non_negative_quantities": True,
+            "non_negative_velocity": True,
+            "non_negative_coverage": True,
+        },
+    }
+    assert layer1["assorti_classification"]["source"] == ASSORTI_CLASSIFICATION_SOURCE
+    assert layer1["assorti_classification"]["source_breakdown"] == {
+        ASSORTI_CLASSIFICATION_SOURCE: 1,
+    }
+    assert layer1["assorti_classification"]["summary"] == {
+        "assorti_bundle_types": 0,
+        "main_bundle_types": 1,
+    }
+    assert layer1["assorti_classification"]["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": False,
+            "source": ASSORTI_CLASSIFICATION_SOURCE,
+        }
+    ]
+
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
     assert "reason_counts={" in layer2_step
