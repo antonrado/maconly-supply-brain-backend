@@ -6533,6 +6533,190 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert any("Arrival projection:" in step for step in body["explanation"]["steps"])
 
 
+def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_decision_end_to_end(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    assorti_bundle_type = BundleType(
+        code="PO-BT-WB-MIX-FLIP",
+        name="PO-BT-WB-MIX-FLIP",
+        is_assorti=True,
+    )
+    db_session.add(assorti_bundle_type)
+    db_session.flush()
+
+    as_of_date = datetime(2026, 1, 10, tzinfo=timezone.utc).date()
+    wb_sku_main = "WB-PO-MIX-FLIP-MAIN"
+    wb_sku_assorti = "WB-PO-MIX-FLIP-ASSORTI"
+
+    db_session.add_all(
+        [
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_1"].id,
+                position=1,
+            ),
+            BundleRecipe(
+                article_id=seeded["article"].id,
+                bundle_type_id=assorti_bundle_type.id,
+                color_id=seeded["color_2"].id,
+                position=2,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku_main,
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku=wb_sku_assorti,
+                bundle_type_id=assorti_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku_main,
+                date=as_of_date,
+                sales_qty=300,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbSalesDaily(
+                wb_sku=wb_sku_assorti,
+                date=as_of_date,
+                sales_qty=300,
+                revenue=None,
+                created_at=datetime.now(timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku_main,
+                warehouse_id=1,
+                warehouse_name="WB-1",
+                stock_qty=5,
+                updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+            ),
+            WbStock(
+                wb_sku=wb_sku_assorti,
+                warehouse_id=2,
+                warehouse_name="WB-2",
+                stock_qty=5,
+                updated_at=datetime(2026, 1, 11, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    base_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": as_of_date.isoformat(),
+        "bundle_type_ids": [seeded["bundle_type"].id, assorti_bundle_type.id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+            "production_cost_per_unit": 1.0,
+            "logistics_cost_per_unit": 0.2,
+            "wb_commission_percent_main": 0.05,
+            "wb_commission_percent_assorti": 0.05,
+        },
+    }
+
+    main_wins_payload = deepcopy(base_payload)
+    main_wins_payload["overrides"].update(
+        {
+            "average_realized_price_main": 2.4,
+            "average_realized_price_assorti": 1.5,
+        }
+    )
+    assorti_wins_payload = deepcopy(base_payload)
+    assorti_wins_payload["overrides"].update(
+        {
+            "average_realized_price_main": 1.5,
+            "average_realized_price_assorti": 2.4,
+        }
+    )
+
+    main_wins_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=main_wins_payload,
+    )
+    assorti_wins_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=assorti_wins_payload,
+    )
+
+    assert main_wins_response.status_code == 200, main_wins_response.text
+    assert assorti_wins_response.status_code == 200, assorti_wins_response.text
+
+    main_wins_body = main_wins_response.json()
+    assorti_wins_body = assorti_wins_response.json()
+
+    main_margin_proxy = main_wins_body["explanation"]["meta"]["alpha_proxy_economics"]["margin_proxy"]
+    assorti_margin_proxy = assorti_wins_body["explanation"]["meta"]["alpha_proxy_economics"]["margin_proxy"]
+    assert main_margin_proxy == {"main": 1.08, "assorti": 0.225}
+    assert assorti_margin_proxy == {"main": 0.225, "assorti": 1.08}
+
+    main_summary = main_wins_body["explanation"]["meta"]["layer_2_allocation"]["summary"]
+    assorti_summary = assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["summary"]
+    assert main_summary["assorti"] > 0
+    assert main_summary["main"] == 0
+    assert assorti_summary["main"] > 0
+    assert assorti_summary["assorti"] == 0
+
+    main_from_wb = main_wins_body["explanation"]["meta"]["from_wb"]
+    assorti_from_wb = assorti_wins_body["explanation"]["meta"]["from_wb"]
+    assert main_from_wb["daily_sales_by_bundle"][str(seeded["bundle_type"].id)] == 10.0
+    assert main_from_wb["daily_sales_by_bundle"][str(assorti_bundle_type.id)] == 10.0
+    assert assorti_from_wb["daily_sales_by_bundle"][str(seeded["bundle_type"].id)] == 10.0
+    assert assorti_from_wb["daily_sales_by_bundle"][str(assorti_bundle_type.id)] == 10.0
+
+    main_decisions = sorted(
+        main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"],
+        key=lambda item: (item["color_id"], item["size_id"]),
+    )
+    assorti_decisions = sorted(
+        assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"],
+        key=lambda item: (item["color_id"], item["size_id"]),
+    )
+    assert len(main_decisions) == len(assorti_decisions) > 0
+    for main_decision, assorti_decision in zip(main_decisions, assorti_decisions):
+        assert main_decision["color_id"] == assorti_decision["color_id"]
+        assert main_decision["size_id"] == assorti_decision["size_id"]
+        assert main_decision["eta_days"] == assorti_decision["eta_days"]
+        assert main_decision["capital_locked"] == assorti_decision["capital_locked"]
+        assert main_decision["allocation_decision"] == "assorti"
+        assert (
+            main_decision["objective_score_if_assorti_until_eta"]
+            > main_decision["objective_score_if_main_until_eta"]
+        )
+        assert assorti_decision["allocation_decision"] == "main"
+        assert (
+            assorti_decision["objective_score_if_main_until_eta"]
+            > assorti_decision["objective_score_if_assorti_until_eta"]
+        )
+
+    main_compact_payload = deepcopy(main_wins_payload)
+    main_compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    main_compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=main_compact_payload,
+    )
+    assert main_compact_response.status_code == 200, main_compact_response.text
+
+    main_compact_body = main_compact_response.json()
+    main_compact_meta = main_compact_body["explanation"]["meta"]
+    assert _business_projection(main_wins_body) == _business_projection(main_compact_body)
+    assert main_compact_meta["alpha_proxy_economics"]["margin_proxy"] == main_margin_proxy
+    assert main_compact_meta["layer_2_allocation"]["summary"] == main_summary
+
+
 def test_production_order_proposal_from_wb_skipped_when_article_excluded(client, db_session):
     seeded = _seed_article_bundle_base(db_session, include_in_planning=False)
 
