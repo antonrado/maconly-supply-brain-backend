@@ -2870,6 +2870,17 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert compact_layer2["objective_parameters"] == objective_parameters
     assert compact_layer2["objective_source"] == layer2["objective_source"]
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+    compact_from_wb = compact_meta["from_wb"]
+    assert "daily_sales_by_bundle" not in compact_from_wb
+    assert "wb_stock_by_bundle" not in compact_from_wb
+    assert "wb_stock_updated_at_by_bundle" not in compact_from_wb
+    assert compact_from_wb["snapshot"] == {
+        "daily_sales_bundle_count": len(bundle_daily_sales),
+        "daily_sales_total": sum(bundle_daily_sales.values()),
+        "wb_stock_bundle_count": len(payload["bundle_type_ids"]),
+        "wb_stock_total": per_sku_stock_qty * len(payload["bundle_type_ids"]),
+        "wb_stock_updated_bundle_count": len(payload["bundle_type_ids"]),
+    }
     compact_layer5 = compact_meta["layer_5_intervention"]
     assert compact_layer5["contract"]["status"] == "ok"
     assert compact_layer5["signal_policy"] == "critical_risk_thresholds"
