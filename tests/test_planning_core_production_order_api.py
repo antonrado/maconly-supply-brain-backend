@@ -4827,7 +4827,7 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     assert economics_trust["code_default_dominance_ratio"] > 0
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
-    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert meta["warnings"][0] == economics_trust["warnings"][0]
 
 
 def test_production_order_proposal_reports_partial_economics_trust_when_one_key_field_uses_code_default(
@@ -4890,7 +4890,7 @@ def test_production_order_proposal_reports_partial_economics_trust_when_one_key_
     assert economics_trust["code_default_key_fields_count"] == 1
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
     assert economics_trust["warnings"][0]["severity"] == "MEDIUM"
-    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+    assert meta["warnings"][0] == economics_trust["warnings"][0]
 
 
 def test_production_order_proposal_requires_available_capital_in_strict_mode(client, db_session):
@@ -8715,7 +8715,7 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     assert economics_trust["code_default_dominance_ratio"] > 0
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
-    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert meta["warnings"][0] == economics_trust["warnings"][0]
 
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
@@ -8731,7 +8731,7 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["economics_trust"] == economics_trust
-    assert compact_meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert compact_meta["warnings"][0] == economics_trust["warnings"][0]
 
 
 def test_production_order_proposal_from_wb_reports_partial_economics_trust_when_one_key_field_uses_code_default(
@@ -8822,7 +8822,7 @@ def test_production_order_proposal_from_wb_reports_partial_economics_trust_when_
     assert economics_trust["code_default_key_fields_count"] == 1
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
     assert economics_trust["warnings"][0]["severity"] == "MEDIUM"
-    assert meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+    assert meta["warnings"][0] == economics_trust["warnings"][0]
 
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
@@ -8838,7 +8838,7 @@ def test_production_order_proposal_from_wb_reports_partial_economics_trust_when_
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["economics_trust"] == economics_trust
-    assert compact_meta["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_PARTIAL
+    assert compact_meta["warnings"][0] == economics_trust["warnings"][0]
 
 
 def test_production_order_proposal_from_wb_uses_global_economic_defaults_when_admin_and_request_missing(
