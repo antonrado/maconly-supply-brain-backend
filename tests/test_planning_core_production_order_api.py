@@ -6537,6 +6537,28 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert layer2_contract_checks["objective_components_match_formula"] is True
     assert layer2_contract_checks["objective_score_gap_consistent_with_objective_scores"] is True
 
+    layer3 = body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    assert layer3["method"] == "allocation_decision_factors"
+    assert layer3["factors"] == {"main": 1.0, "assorti": 0.75, "hold": 0.35}
+    assert layer3["qty_before"] >= layer3["qty_after_base"] >= 0
+    assert layer3["qty_after"] >= 0
+    assert layer3["qty_delta_vs_base"] == layer3["qty_after"] - layer3["qty_after_base"]
+    assert layer3["calibration"]["method"] == "risk_weighted_factor_clamp"
+    assert layer3["contract"]["status"] == "ok"
+    layer3_contract_checks = layer3["contract"]["checks"]
+    assert layer3_contract_checks["non_negative_quantities"] is True
+    assert layer3_contract_checks["qty_delta_matches_after_minus_base"] is True
+    assert layer3_contract_checks["non_negative_line_counts"] is True
+    assert layer3_contract_checks["adjusted_lines_within_decision_lines"] is True
+    assert layer3_contract_checks["non_negative_risk_line_counts"] is True
+    assert layer3_contract_checks["risk_partition_matches_decision_lines"] is True
+    assert layer3_contract_checks["non_negative_calibration_direction_counts"] is True
+    assert layer3_contract_checks["calibration_direction_counts_within_decision_lines"] is True
+    assert layer3_contract_checks["calibration_method_matches"] is True
+    assert layer3_contract_checks["factor_bounds_match_expected"] is True
+    assert layer3_contract_checks["factor_summary_consistent"] is True
+    assert layer3_contract_checks["factor_summary_within_bounds"] is True
+
     layer4_contract_checks = body["explanation"]["meta"]["layer_4_scenarios"]["contract"]["checks"]
     assert layer4_contract_checks["capital_non_decreasing"] is True
     assert layer4_contract_checks["stockout_risk_non_increasing"] is True
