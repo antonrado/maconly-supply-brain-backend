@@ -3,6 +3,9 @@
 ## 1) Scope and boundaries
 - [x] Layered deterministic pipeline is active for production-order proposal (`Layer 1 -> 2 -> 3 -> 4 -> 5`).
 - [x] Out-of-scope constraints are respected: no ML, no solver optimization, no multi-warehouse logic, no dynamic pricing model rollout.
+- [x] Current-stage focus remains narrow and MVP-safe: supply planning engine, inventory truth, explainability/trust basics, from-WB parity, inbound/in-transit truth, receiving reconciliation, and operational visibility basics.
+- [x] Architecture direction is kept explicit without scope expansion: planning core is not treated as a universal god-service, finance/cash logic is not embedded into recommendation orchestration, and shipment/receipt/discrepancy truth is not intentionally buried inside explainability-only payloads.
+- [x] Current design still leaves room for future modular domains (`master_data`, `inventory_truth`, `supply_planning`, `inbound_tracking`, `receiving_reconciliation`, `wb_replenishment`, `leakage_control`, `sales_intelligence`, `finance`, `cash_planning`, `trust_and_exceptions`) even though those modules are not being implemented now.
 
 ## 2) API contract stability
 - [x] `POST /api/v1/planning/core/production-order/proposal` returns stable structured response.

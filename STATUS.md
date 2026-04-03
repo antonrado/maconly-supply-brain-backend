@@ -4,6 +4,26 @@
 
 Planning Core v1 contract is active, monitoring APIs are active, scheduler single-instance guard is implemented, and engineering quality gates are now scaffolded.
 
+## Accepted product direction and scope guardrails
+
+- Product direction is a modular vertical ERP / Supply Operating System for Wildberries, not a dashboard-only surface and not a planning-endpoint-only product.
+- Current expected MVP-safe focus remains:
+  - supply planning engine
+  - inventory truth
+  - explainability and trust basics
+  - from-WB parity
+  - inbound and in-transit truth
+  - receiving reconciliation
+  - operational visibility basics
+- Safe near-term execution remains in the narrow-quality-pass / truth-hardening lane, not in broad dashboard, finance, cash, or execution-ERP expansion.
+- Architectural guardrails currently accepted for all near-term work:
+  - planning core must not become a universal god-service for future domains
+  - shipment / receipt / discrepancy truth must not be buried inside explainability-only payloads
+  - finance facts and cash logic must not be injected directly into recommendation orchestration
+  - merged warehouse scope is treated as a current simplification, not a permanent truth model
+  - helper/module boundaries should continue mapping toward future domains like inventory truth, inbound tracking, receiving reconciliation, WB replenishment, leakage control, sales intelligence, finance, cash planning, and trust/exception handling
+- Long-horizon roadmap order is now explicit as a direction guardrail: planning core and truth basics -> operational visibility -> inbound truth and receiving -> WB replenishment -> reconciliation and leakage -> sales intelligence -> finance -> cash planning -> trust operating system.
+
 ## Implemented now (code-backed)
 
 - FastAPI app mounts `api_router` under `/api/v1` and starts `MonitoringScheduler` on startup.

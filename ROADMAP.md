@@ -5,6 +5,57 @@
 - Optimize inventory turnover, capital efficiency, stockout risk, bundle composition efficiency, and assorti sustainability.
 - Keep v1 deterministic and explainable; no black-box optimization.
 
+## Product direction guardrails (accepted)
+- Product direction is a modular vertical ERP / Supply Operating System for Wildberries, not a dashboard-only surface and not a planning-endpoint-only product.
+- Current MVP-safe focus remains intentionally narrow:
+  - supply planning engine
+  - inventory truth
+  - explainability and trust basics
+  - from-WB parity
+  - inbound and in-transit truth
+  - receiving reconciliation
+  - operational visibility basics
+- Safe near-term work should stay in the `narrow_quality_pass_or_truth_hardening` lane:
+  - runtime truth hardening
+  - operator trust surfacing
+  - small core cleanup
+  - narrow availability-first hardening
+- Not-now work remains out of immediate scope even if architecture should leave room for it:
+  - broad dashboard build
+  - deep simulation
+  - full finance module
+  - full cash engine
+  - broad execution ERP
+- Domain boundaries must stay explicit:
+  - supplier procurement planning != WB internal replenishment
+  - inventory truth != movement truth != recommendation output
+  - finance facts != planning explainability
+  - discrepancy events != stock balance adjustments
+  - UI views != domain model
+- Future modular domains must remain possible from current boundaries:
+  - master_data
+  - inventory_truth
+  - supply_planning
+  - inbound_tracking
+  - receiving_reconciliation
+  - wb_replenishment
+  - leakage_control
+  - sales_intelligence
+  - finance
+  - cash_planning
+  - trust_and_exceptions
+
+## Long-horizon modular roadmap order (directional, not immediate scope)
+1. planning_core_and_truth_basics
+2. operational_visibility
+3. inbound_truth_and_receiving
+4. wb_replenishment
+5. reconciliation_and_leakage
+6. sales_intelligence
+7. finance
+8. cash_planning
+9. trust_operating_system
+
 ## Phase 0 - Monitoring reliability (completed)
 - MonitoringScheduler integrated into app lifecycle.
 - PostgreSQL advisory lock guard for single scheduler leader in multi-instance setup.
@@ -145,6 +196,12 @@
 - No global optimization solver.
 - No elasticity modeling expansion.
 - No multi-warehouse logic.
+- Do not turn planning core into a universal god-service for future domains.
+- Do not bury shipment / receipt / discrepancy truth inside explainability-only payloads.
+- Do not add finance or cash logic directly into recommendation orchestration.
+- Do not assume merged warehouse scope is a permanent acceptable truth model.
+- Prefer narrow helper/module boundaries that map to future real domains.
+- Prefer event/state modeling for movement-related facts.
 
 ## Process constraints
 - Feature branches only.
