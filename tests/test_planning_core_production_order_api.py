@@ -8129,6 +8129,23 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
     assert from_wb_observed["sample_counts"]["assorti"]["accepted_samples"] == 1
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_main"] == (
+        FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    )
+    assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_assorti"] == (
+        FROM_WB_OBSERVED_ECONOMIC_SOURCE
+    )
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_main"] == 3.0
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_assorti"] == 2.2
+    assert compact_meta["from_wb"]["economic_observed_prices"] == from_wb_observed
+
 
 def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
@@ -8350,7 +8367,37 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert commission_meta["reason"] is None
     assert commission_meta["subjects_with_commission"] == 2
     assert commission_meta["commission_percent"] == {"main": 0.2, "assorti": 0.2}
+    assert commission_meta["commission_percent_stats"] == {"avg": 0.2, "min": 0.15, "max": 0.25}
     assert commission_meta["kgvp_supplier_percent_stats"] == {"avg": 20.0, "min": 15.0, "max": 25.0}
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_commission_meta = compact_meta["from_wb"]["economic_observed_commission"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert (
+        compact_meta["alpha_proxy_economics"]["economic_source"]["wb_commission_percent_main"]
+        == FROM_WB_TARIFFS_COMMISSION_SOURCE
+    )
+    assert (
+        compact_meta["alpha_proxy_economics"]["economic_source"]["wb_commission_percent_assorti"]
+        == FROM_WB_TARIFFS_COMMISSION_SOURCE
+    )
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_main"] == 0.2
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
+    assert compact_commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
+    assert compact_commission_meta["status"] == "ok"
+    assert compact_commission_meta["reason"] is None
+    assert compact_commission_meta["commission_percent"] == {"main": 0.2, "assorti": 0.2}
+    assert compact_commission_meta["commission_percent_stats"] == {"avg": 0.2, "min": 0.15, "max": 0.25}
+    assert compact_commission_meta["kgvp_supplier_percent_stats"] == {
+        "avg": 20.0,
+        "min": 15.0,
+        "max": 25.0,
+    }
 
 
 def test_production_order_proposal_from_wb_compact_explainability_mode(client, db_session):
