@@ -6576,6 +6576,55 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert layer5_contract_checks["signals_order_is_canonical"] is True
     assert layer5_contract_checks["reason_consistent_with_signals"] is True
 
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["margin_proxy"] == {"main": 0.8, "assorti": 0.65}
+    assert alpha_proxy["unit_capital_proxy"] == 1.0
+    assert alpha_proxy["layer_3_purchase_factors"] == {
+        "main": 1.0,
+        "assorti": 0.75,
+        "hold": 0.35,
+    }
+    assert alpha_proxy["layer_3_calibration"] == {
+        "method": "risk_weighted_factor_clamp",
+        "stockout_boost_max": 0.3,
+        "overstock_dampen_max": 0.4,
+        "stockout_weight_by_decision": {
+            "main": 1.0,
+            "assorti": 0.7,
+            "hold": 0.15,
+        },
+        "overstock_weight_by_decision": {
+            "main": 0.35,
+            "assorti": 0.6,
+            "hold": 1.0,
+        },
+        "factor_bounds": {
+            "main": {
+                "min": 0.65,
+                "max": 1.25,
+            },
+            "assorti": {
+                "min": 0.3,
+                "max": 0.95,
+            },
+            "hold": {
+                "min": 0.1,
+                "max": 0.6,
+            },
+        },
+    }
+    assert alpha_proxy["layer_4_scenario_factors"] == body["explanation"]["meta"]["layer_4_scenarios"]["factors"]
+    assert alpha_proxy["layer_4_contract_version"] == "v1_alpha"
+    assert (
+        alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+        == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    )
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    }
+
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     assert from_wb_meta["observation_window_days"] == 30
     assert from_wb_meta["freshness_mode"] == "warn"
