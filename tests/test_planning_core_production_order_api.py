@@ -9312,6 +9312,160 @@ def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_
     assert compact_layer2["objective_source"] == layer2["objective_source"]
 
 
+def test_production_order_proposal_from_wb_request_layer_proxy_overrides_admin_and_global(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_layer3_stockout_boost_max = 0.17
+    article_settings.production_order_layer3_overstock_dampen_max = 0.12
+    article_settings.production_order_layer5_unavoidable_stockout_risk_threshold = 0.26
+    article_settings.production_order_layer5_accelerate_production_risk_threshold = 0.34
+    article_settings.production_order_layer2_capital_cost_rate = 0.14
+    article_settings.production_order_layer2_stockout_penalty_weight = 0.44
+    article_settings.production_order_layer2_overstock_penalty_weight = 0.21
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_layer3_stockout_boost_max = 0.09
+    global_settings.default_production_order_layer3_overstock_dampen_max = 0.08
+    global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold = 0.21
+    global_settings.default_production_order_layer5_accelerate_production_risk_threshold = 0.31
+    global_settings.default_production_order_layer2_capital_cost_rate = 0.11
+    global_settings.default_production_order_layer2_stockout_penalty_weight = 0.33
+    global_settings.default_production_order_layer2_overstock_penalty_weight = 0.19
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-LAYER-PROXY-REQUEST",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-LAYER-PROXY-REQUEST",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-LAYER-PROXY-REQUEST",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "layer3_stockout_boost_max": 0.23,
+            "layer3_overstock_dampen_max": 0.18,
+            "layer5_unavoidable_stockout_risk_threshold": 0.27,
+            "layer5_accelerate_production_risk_threshold": 0.41,
+            "layer2_capital_cost_rate": 0.07,
+            "layer2_stockout_penalty_weight": 0.52,
+            "layer2_overstock_penalty_weight": 0.16,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.23
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.18
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.27
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.41,
+        "increase_price_to_slow_velocity": 0.27,
+        "reduce_order_size": 0.10,
+    }
+    assert alpha_proxy["layer_2_objective_parameters"] == {
+        "capital_cost_rate": 0.07,
+        "stockout_penalty_weight": 0.52,
+        "overstock_penalty_weight": 0.16,
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": "request",
+        "layer3_overstock_dampen_max": "request",
+        "layer5_unavoidable_stockout_risk_threshold": "request",
+        "layer5_accelerate_production_risk_threshold": "request",
+        "layer2_capital_cost_rate": "request",
+        "layer2_stockout_penalty_weight": "request",
+        "layer2_overstock_penalty_weight": "request",
+        "layer5_accelerate_action_cost_rate": "code_default_constants",
+        "layer5_price_slowdown_lost_volume_rate": "code_default_constants",
+        "layer5_reduce_order_marginal_profit_rate": "code_default_constants",
+    }
+
+    layer2 = body["explanation"]["meta"]["layer_2_allocation"]
+    assert layer2["objective_parameters"] == {
+        "capital_cost_rate": 0.07,
+        "stockout_penalty_weight": 0.52,
+        "overstock_penalty_weight": 0.16,
+    }
+    assert layer2["objective_source"] == {
+        "capital_cost_rate": "request",
+        "stockout_penalty_weight": "request",
+        "overstock_penalty_weight": "request",
+    }
+
+    layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
+    assert layer3_calibration["stockout_boost_max"] == 0.23
+    assert layer3_calibration["overstock_dampen_max"] == 0.18
+    assert body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"] == 0.27
+    assert body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"] == {
+        "accelerate_production": 0.41,
+        "increase_price_to_slow_velocity": 0.27,
+        "reduce_order_size": 0.10,
+    }
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    compact_layer3 = compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
+    assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
+    assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
+    assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
+    assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer3["calibration"] == layer3_calibration
+    assert compact_layer5["signal_thresholds"] == body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"]
+
+
 def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_when_admin_invalid(
     client,
     db_session,
