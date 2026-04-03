@@ -8029,6 +8029,104 @@ def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capita
     assert compact_meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
 
 
+def test_production_order_proposal_from_wb_reports_budget_limited_capital_constraint_summary(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-CAP-BUDGET-LIMITED",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-CAP-BUDGET-LIMITED",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-CAP-BUDGET-LIMITED",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+            "available_capital": 20.0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    recommendation = body["recommendation"]
+    assert recommendation is not None
+    assert recommendation["lines"]
+
+    meta = body["explanation"]["meta"]
+    capital_constraint = meta["capital_constraint"]
+    assert capital_constraint["status"] == "budget_limited_applied"
+    assert capital_constraint["constrained"] is True
+    assert capital_constraint["available_capital"] == 20.0
+    assert capital_constraint["required_capital_before_constraint"] > capital_constraint["available_capital"]
+    assert capital_constraint["allocated_capital_after_constraint"] <= capital_constraint["available_capital"]
+    assert capital_constraint["line_count_after"] == len(recommendation["lines"])
+    assert capital_constraint["line_count_before"] >= capital_constraint["line_count_after"]
+    assert capital_constraint["remaining_capital"] >= 0.0
+
+    ranking = capital_constraint["ranking"]
+    assert isinstance(ranking, list)
+    assert len(ranking) >= len(recommendation["lines"])
+    assert recommendation["lines"][0]["color_id"] == ranking[0]["color_id"]
+    assert recommendation["lines"][0]["size_id"] == ranking[0]["size_id"]
+
+    contract = capital_constraint["contract"]
+    assert contract["version"] == CAPITAL_CONSTRAINT_CONTRACT_VERSION
+    assert contract["status"] == "ok"
+    assert contract["checks"]["budget_accounting_consistent"] is True
+    assert contract["checks"]["ranking_sorted_by_objective_per_capital"] is True
+    assert contract["checks"]["ranking_risk_priority_consistent"] is True
+
+    for line in recommendation["lines"]:
+        assert line["source_reason"].endswith("|capital_constraint")
+
+    cutoff_line = capital_constraint["cutoff_line"]
+    assert cutoff_line is not None
+    assert cutoff_line["requested_qty"] >= cutoff_line["allocated_qty"] >= 0
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["capital_constraint"] == capital_constraint
+
+
 def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_economics(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
