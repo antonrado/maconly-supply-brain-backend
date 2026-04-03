@@ -10770,3 +10770,20 @@ def test_production_order_proposal_validation_error(client, db_session):  # noqa
     detail_locs = {tuple(item["loc"]) for item in detail}
     assert ("body", "planning_horizon_days") in detail_locs
     assert ("body", "bundle_daily_sales") in detail_locs
+
+
+def test_production_order_proposal_from_wb_validation_error(client, db_session):  # noqa: ARG001
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": 1,
+            "planning_horizon_days": 0,
+            "observation_window_days": 0,
+            "bundle_type_ids": [],
+        },
+    )
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    detail_locs = {tuple(item["loc"]) for item in detail}
+    assert ("body", "planning_horizon_days") in detail_locs
+    assert ("body", "observation_window_days") in detail_locs
