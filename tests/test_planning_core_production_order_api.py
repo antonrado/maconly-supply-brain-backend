@@ -10246,6 +10246,11 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
     assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
     assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
+    assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
+    assert from_wb_meta["freshness"]["threshold_source"] == {
+        "sales": "global_default",
+        "stock": "global_default",
+    }
     assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
     assert from_wb_meta["snapshot"] == {
