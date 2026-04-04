@@ -10515,6 +10515,9 @@ def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when
         "overstock_penalty_weight": "global_default",
     }
 
+    layer5 = body["explanation"]["meta"]["layer_5_intervention"]
+    assert layer5["risk_threshold"] == 0.29
+
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post(
@@ -10526,12 +10529,19 @@ def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when
     compact_body = compact_response.json()
     compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
+    assert (
+        compact_alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+        == alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+    )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer5["risk_threshold"] == layer5["risk_threshold"]
 
 
 def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_request_missing(
