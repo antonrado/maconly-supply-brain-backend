@@ -11508,6 +11508,8 @@ def test_production_order_proposal_from_wb_request_layer2_coefficients_preserve_
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
     assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
+    assert compact_meta["capital_gap"] == full_meta["capital_gap"]
+    assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
 
     assert full_layer2["objective_parameters"] == expected_objective_parameters
     assert full_layer2["objective_source"] == expected_objective_source
