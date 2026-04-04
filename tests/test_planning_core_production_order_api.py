@@ -11621,6 +11621,8 @@ def test_production_order_proposal_from_wb_layer5_signals_do_not_override_recomm
     high_compact_body = high_compact_response.json()
     assert _business_projection(low_body) == _business_projection(low_compact_body)
     assert _business_projection(high_body) == _business_projection(high_compact_body)
+    assert low_compact_body["explanation"]["meta"]["layer_5_intervention"] == low_layer5
+    assert high_compact_body["explanation"]["meta"]["layer_5_intervention"] == high_layer5
     assert low_compact_body["explanation"]["meta"]["layer_5_intervention"]["signals"] == low_layer5["signals"]
     assert low_compact_body["explanation"]["meta"]["layer_5_intervention"]["reason"] == low_layer5["reason"]
     assert high_compact_body["explanation"]["meta"]["layer_5_intervention"]["signals"] == high_layer5["signals"]
