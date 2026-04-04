@@ -10315,6 +10315,8 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
+    assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
+    assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
 
 
 def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_output(client, db_session):
