@@ -7108,6 +7108,14 @@ def test_production_order_proposal_from_wb_economic_buffer_policy(client, db_ses
     compact_body_with = compact_response_with.json()
     assert _business_projection(body_without) == _business_projection(compact_body_without)
     assert _business_projection(body_with) == _business_projection(compact_body_with)
+    assert (
+        compact_body_without["explanation"]["meta"]["economic_buffer"]
+        == body_without["explanation"]["meta"]["economic_buffer"]
+    )
+    assert (
+        compact_body_with["explanation"]["meta"]["economic_buffer"]
+        == body_with["explanation"]["meta"]["economic_buffer"]
+    )
 
 
 def test_production_order_proposal_from_wb_applies_safety_stock_days_to_reorder_policy(client, db_session):
