@@ -8060,9 +8060,14 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_selects_bound_t
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
+    expected_compact_elastic_uplift = {
+        "delta": meta["elastic_uplift"]["delta"],
+        "scope": meta["elastic_uplift"]["scope"],
+        "affected_lines": meta["elastic_uplift"]["affected_lines"],
+    }
     assert compact_meta["elastic_scope"] == meta["elastic_scope"]
     assert compact_meta["elastic_scope"]["mode"] == "binding_scope"
-    assert compact_meta["elastic_uplift"]["scope"] == "binding_scope"
+    assert compact_meta["elastic_uplift"] == expected_compact_elastic_uplift
 
 
 def test_production_order_proposal_from_wb_applies_fabric_minimum(client, db_session):
@@ -8236,10 +8241,14 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_skips_when_no_m
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
+    expected_compact_elastic_uplift = {
+        "delta": meta["elastic_uplift"]["delta"],
+        "scope": meta["elastic_uplift"]["scope"],
+        "affected_lines": meta["elastic_uplift"]["affected_lines"],
+    }
     assert compact_meta["elastic_scope"] == meta["elastic_scope"]
     assert compact_meta["elastic_scope"]["applicable_types"] == []
-    assert compact_meta["elastic_uplift"]["scope"] == "none"
-    assert compact_meta["elastic_uplift"]["affected_lines"] == 0
+    assert compact_meta["elastic_uplift"] == expected_compact_elastic_uplift
 
 
 def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_scoped_sku(client, db_session):
@@ -8373,9 +8382,14 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_sco
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
+    expected_compact_elastic_uplift = {
+        "delta": meta["elastic_uplift"]["delta"],
+        "scope": meta["elastic_uplift"]["scope"],
+        "affected_lines": meta["elastic_uplift"]["affected_lines"],
+    }
     assert compact_meta["elastic_scope"] == meta["elastic_scope"]
     assert compact_meta["elastic_scope"]["scoped_lines"] == 1
-    assert compact_meta["elastic_uplift"]["affected_lines"] == 1
+    assert compact_meta["elastic_uplift"] == expected_compact_elastic_uplift
 
 
 def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_scoped_lines(client, db_session):
@@ -8505,9 +8519,14 @@ def test_production_order_proposal_from_wb_elastic_binding_scope_uplift_only_sco
     assert compact_response.status_code == 200, compact_response.text
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
+    expected_compact_elastic_uplift = {
+        "delta": meta["elastic_uplift"]["delta"],
+        "scope": meta["elastic_uplift"]["scope"],
+        "affected_lines": meta["elastic_uplift"]["affected_lines"],
+    }
     assert compact_meta["elastic_scope"] == meta["elastic_scope"]
     assert compact_meta["elastic_scope"]["scoped_lines"] == 2
-    assert compact_meta["elastic_uplift"]["affected_lines"] == 2
+    assert compact_meta["elastic_uplift"] == expected_compact_elastic_uplift
 
 
 def test_production_order_proposal_from_wb_in_flight_eta_stage_sensitivity(client, db_session):
