@@ -10697,8 +10697,7 @@ def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
-    assert compact_layer5["risk_threshold"] == layer5["risk_threshold"]
-    assert compact_layer5["signal_thresholds"] == layer5["signal_thresholds"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when_admin_missing(
@@ -10829,7 +10828,7 @@ def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
-    assert compact_layer5["risk_threshold"] == layer5["risk_threshold"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_request_missing(
@@ -10973,7 +10972,7 @@ def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
-    assert compact_layer5["risk_threshold"] == layer5["risk_threshold"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_from_wb_request_layer_proxy_overrides_admin_and_global(
