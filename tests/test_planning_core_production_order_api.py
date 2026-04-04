@@ -5286,8 +5286,9 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
     assert layer3_calibration["stockout_boost_max"] == 0.23
     assert layer3_calibration["overstock_dampen_max"] == 0.18
-    assert body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"] == 0.27
-    assert body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"] == {
+    layer5 = body["explanation"]["meta"]["layer_5_intervention"]
+    assert layer5["risk_threshold"] == 0.27
+    assert layer5["signal_thresholds"] == {
         "accelerate_production": 0.41,
         "increase_price_to_slow_velocity": 0.27,
         "reduce_order_size": 0.10,
@@ -5319,8 +5320,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     assert compact_layer2["objective_parameters"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"]
     assert compact_layer2["objective_source"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_source"]
     assert compact_layer3["calibration"] == layer3_calibration
-    assert compact_layer5["risk_threshold"] == body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"]
-    assert compact_layer5["signal_thresholds"] == body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_layer3_calibration_changes_qty_but_not_layer2_decisions(
@@ -11058,8 +11058,9 @@ def test_production_order_proposal_from_wb_request_layer_proxy_overrides_admin_a
     layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
     assert layer3_calibration["stockout_boost_max"] == 0.23
     assert layer3_calibration["overstock_dampen_max"] == 0.18
-    assert body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"] == 0.27
-    assert body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"] == {
+    layer5 = body["explanation"]["meta"]["layer_5_intervention"]
+    assert layer5["risk_threshold"] == 0.27
+    assert layer5["signal_thresholds"] == {
         "accelerate_production": 0.41,
         "increase_price_to_slow_velocity": 0.27,
         "reduce_order_size": 0.10,
@@ -11091,8 +11092,7 @@ def test_production_order_proposal_from_wb_request_layer_proxy_overrides_admin_a
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
     assert compact_layer3["calibration"] == layer3_calibration
-    assert compact_layer5["risk_threshold"] == body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"]
-    assert compact_layer5["signal_thresholds"] == body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_when_admin_invalid(
