@@ -5307,6 +5307,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     compact_layer3 = compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
@@ -11078,6 +11079,7 @@ def test_production_order_proposal_from_wb_request_layer_proxy_overrides_admin_a
     compact_layer3 = compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
