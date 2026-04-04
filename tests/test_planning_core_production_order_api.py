@@ -10400,11 +10400,17 @@ def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
     compact_layer2 = compact_meta["layer_2_allocation"]
     compact_layer5 = compact_meta["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
+    assert (
+        compact_alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+        == alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+    )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer5["risk_threshold"] == layer5["risk_threshold"]
     assert compact_layer5["signal_thresholds"] == layer5["signal_thresholds"]
 
 
