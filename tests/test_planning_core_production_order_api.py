@@ -2600,6 +2600,7 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
     compact_meta = compact_body["explanation"]["meta"]
     compact_layer2 = compact_meta["layer_2_allocation"]
     assert "decisions" not in compact_layer2
+    assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
     assert compact_layer2["objective_parameters"] == objective_parameters
     assert compact_layer2["objective_source"] == layer2["objective_source"]
     assert compact_layer2["decision_quality"] == layer2["decision_quality"]
@@ -2883,6 +2884,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     compact_meta = compact_body["explanation"]["meta"]
     compact_layer2 = compact_meta["layer_2_allocation"]
     assert "decisions" not in compact_layer2
+    assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
     assert compact_layer2["objective_parameters"] == objective_parameters
     assert compact_layer2["objective_source"] == layer2["objective_source"]
     assert compact_layer2["decision_quality"] == layer2["decision_quality"]
@@ -7149,6 +7151,7 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
     main_compact_body = main_compact_response.json()
     main_compact_meta = main_compact_body["explanation"]["meta"]
     assert _business_projection(main_wins_body) == _business_projection(main_compact_body)
+    assert main_compact_meta["alpha_proxy_economics"] == main_wins_body["explanation"]["meta"]["alpha_proxy_economics"]
     assert main_compact_meta["alpha_proxy_economics"]["margin_proxy"] == main_margin_proxy
     assert main_compact_meta["layer_2_allocation"]["summary"] == main_summary
 
@@ -9999,6 +10002,7 @@ def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_main"] == (
         FROM_WB_OBSERVED_ECONOMIC_SOURCE
     )
@@ -10659,6 +10663,7 @@ def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
     compact_layer2 = compact_meta["layer_2_allocation"]
     compact_layer5 = compact_meta["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
@@ -10790,6 +10795,7 @@ def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
@@ -10933,6 +10939,7 @@ def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
     assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
     assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
@@ -11189,6 +11196,7 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
     compact_body = compact_response.json()
     compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer5_threshold_order_adjusted"] is True
     assert compact_alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "admin_defaults"
     assert (
