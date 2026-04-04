@@ -9916,6 +9916,7 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["average_realized_price_main"] == (
         FROM_WB_OBSERVED_ECONOMIC_SOURCE
     )
