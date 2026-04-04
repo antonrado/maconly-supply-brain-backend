@@ -10413,6 +10413,13 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
 
     full_body = full_response.json()
     full_meta = full_body["explanation"]["meta"]
+    expected_compact_freshness = {
+        "status": full_meta["from_wb"]["freshness"]["status"],
+        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
+        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
+        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
+    }
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
         "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
@@ -10427,6 +10434,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
 
 
@@ -10582,6 +10590,13 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     }
     assert compact_layer4 == expected_compact_layer4
 
+    expected_compact_freshness = {
+        "status": full_meta["from_wb"]["freshness"]["status"],
+        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
+        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
+        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
+    }
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
         "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
@@ -10594,7 +10609,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta
     assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
-    assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
+    assert from_wb_meta["freshness"] == expected_compact_freshness
     assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
     assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
     assert from_wb_meta["freshness"]["threshold_source"] == {
