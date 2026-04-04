@@ -9107,6 +9107,7 @@ def test_production_order_proposal_from_wb_uses_global_economic_defaults_when_ad
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["capital_gap"] == capital_gap
 
 
 def test_production_order_proposal_from_wb_uses_admin_economic_defaults_when_request_missing(
