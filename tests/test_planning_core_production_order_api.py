@@ -2221,6 +2221,19 @@ def test_production_order_proposal_reports_budget_limited_capital_constraint_sum
     assert cutoff_line is not None
     assert cutoff_line["requested_qty"] >= cutoff_line["allocated_qty"] >= 0
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["capital_constraint"] == capital_constraint
+
 
 def test_production_order_proposal_price_flip_changes_layer2_allocation_decision_end_to_end(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
