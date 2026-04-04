@@ -11947,6 +11947,72 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert compact_layer2_contract_checks["capital_locked_metric_valid"] is True
 
+    full_layer4 = full_meta["layer_4_scenarios"]
+    compact_layer4 = compact_meta["layer_4_scenarios"]
+    expected_compact_layer4 = {
+        "method": full_layer4["method"],
+        "factors": full_layer4["factors"],
+        "contract": full_layer4["contract"],
+        "aggregate_deltas": full_layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in full_layer4["scenarios"]
+        ],
+    }
+    assert compact_layer4 == expected_compact_layer4
+
+    expected_compact_freshness = {
+        "status": full_meta["from_wb"]["freshness"]["status"],
+        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
+        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
+        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
+    }
+    expected_compact_commission_meta = {
+        "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
+        "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
+        "reason": full_meta["from_wb"]["economic_observed_commission"]["reason"],
+        "commission_percent": full_meta["from_wb"]["economic_observed_commission"]["commission_percent"],
+        "commission_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["commission_percent_stats"],
+        "kgvp_supplier_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+    }
+    expected_compact_snapshot = {
+        "daily_sales_bundle_count": len(full_meta["from_wb"]["daily_sales_by_bundle"]),
+        "daily_sales_total": sum(full_meta["from_wb"]["daily_sales_by_bundle"].values()),
+        "wb_stock_bundle_count": len(full_meta["from_wb"]["wb_stock_by_bundle"]),
+        "wb_stock_total": int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values())),
+        "wb_stock_updated_bundle_count": len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"]),
+    }
+    compact_from_wb = compact_meta["from_wb"]
+    assert "daily_sales_by_bundle" not in compact_from_wb
+    assert "wb_stock_by_bundle" not in compact_from_wb
+    assert "wb_stock_updated_at_by_bundle" not in compact_from_wb
+    assert compact_from_wb["freshness"] == expected_compact_freshness
+    assert "stock_age_days_by_bundle" not in compact_from_wb["freshness"]
+    assert compact_from_wb["economic_observed_commission"] == expected_compact_commission_meta
+    assert compact_from_wb["snapshot"] == expected_compact_snapshot
+
     if profile_name == "overstock":
         assert compact_body["risk_level"] == "overstock"
 
