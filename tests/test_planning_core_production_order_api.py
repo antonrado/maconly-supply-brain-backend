@@ -10363,8 +10363,6 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
     assert from_wb_meta["freshness"]["status"] in {"fresh", "stale"}
     assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
-    assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
-    assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
     assert from_wb_meta["snapshot"] == {
         "daily_sales_bundle_count": 1,
         "daily_sales_total": 2.0,
@@ -10383,12 +10381,21 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
 
     full_body = full_response.json()
     full_meta = full_body["explanation"]["meta"]
+    expected_compact_commission_meta = {
+        "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
+        "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
+        "reason": full_meta["from_wb"]["economic_observed_commission"]["reason"],
+        "commission_percent": full_meta["from_wb"]["economic_observed_commission"]["commission_percent"],
+        "commission_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["commission_percent_stats"],
+        "kgvp_supplier_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+    }
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
 
 
 def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_output(client, db_session):
@@ -10530,6 +10537,14 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
             == full_scenario["objective_score_delta_vs_balanced"]
         )
 
+    expected_compact_commission_meta = {
+        "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
+        "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
+        "reason": full_meta["from_wb"]["economic_observed_commission"]["reason"],
+        "commission_percent": full_meta["from_wb"]["economic_observed_commission"]["commission_percent"],
+        "commission_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["commission_percent_stats"],
+        "kgvp_supplier_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+    }
     from_wb_meta = compact_meta["from_wb"]
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta
@@ -10541,8 +10556,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "sales": "global_default",
         "stock": "global_default",
     }
-    assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
-    assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
+    assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
     assert from_wb_meta["snapshot"] == {
         "daily_sales_bundle_count": 1,
         "daily_sales_total": 2.0,
