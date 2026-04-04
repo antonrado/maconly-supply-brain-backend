@@ -5283,6 +5283,34 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
         "reduce_order_size": 0.10,
     }
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
+    compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
+    compact_layer3 = compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy["layer_3_calibration"] == alpha_proxy["layer_3_calibration"]
+    assert compact_alpha_proxy["layer_proxy_source"] == alpha_proxy["layer_proxy_source"]
+    assert compact_alpha_proxy["layer_2_objective_parameters"] == alpha_proxy["layer_2_objective_parameters"]
+    assert (
+        compact_alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+        == alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
+    )
+    assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
+    assert compact_layer2["objective_parameters"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"]
+    assert compact_layer2["objective_source"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_source"]
+    assert compact_layer3["calibration"] == layer3_calibration
+    assert compact_layer5["risk_threshold"] == body["explanation"]["meta"]["layer_5_intervention"]["risk_threshold"]
+    assert compact_layer5["signal_thresholds"] == body["explanation"]["meta"]["layer_5_intervention"]["signal_thresholds"]
+
 
 def test_production_order_proposal_layer3_calibration_changes_qty_but_not_layer2_decisions(
     client,
