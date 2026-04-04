@@ -10191,6 +10191,14 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert commission_meta["commission_percent"] == {"main": 0.2, "assorti": 0.2}
     assert commission_meta["commission_percent_stats"] == {"avg": 0.2, "min": 0.15, "max": 0.25}
     assert commission_meta["kgvp_supplier_percent_stats"] == {"avg": 20.0, "min": 15.0, "max": 25.0}
+    expected_compact_commission_meta = {
+        "source": commission_meta["source"],
+        "status": commission_meta["status"],
+        "reason": commission_meta["reason"],
+        "commission_percent": commission_meta["commission_percent"],
+        "commission_percent_stats": commission_meta["commission_percent_stats"],
+        "kgvp_supplier_percent_stats": commission_meta["kgvp_supplier_percent_stats"],
+    }
 
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
@@ -10211,16 +10219,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     )
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_main"] == 0.2
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
-    assert compact_commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
-    assert compact_commission_meta["status"] == "ok"
-    assert compact_commission_meta["reason"] is None
-    assert compact_commission_meta["commission_percent"] == {"main": 0.2, "assorti": 0.2}
-    assert compact_commission_meta["commission_percent_stats"] == {"avg": 0.2, "min": 0.15, "max": 0.25}
-    assert compact_commission_meta["kgvp_supplier_percent_stats"] == {
-        "avg": 20.0,
-        "min": 15.0,
-        "max": 25.0,
-    }
+    assert compact_commission_meta == expected_compact_commission_meta
 
 
 def test_production_order_proposal_from_wb_compact_explainability_mode(client, db_session):
