@@ -3129,25 +3129,38 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
 
     full_layer4 = full_meta["layer_4_scenarios"]
     compact_layer4 = compact_meta["layer_4_scenarios"]
-    assert compact_layer4["aggregate_deltas"] == full_layer4["aggregate_deltas"]
-    assert len(compact_layer4["scenarios"]) == len(full_layer4["scenarios"])
-    for compact_scenario, full_scenario in zip(compact_layer4["scenarios"], full_layer4["scenarios"]):
-        assert (
-            compact_scenario["capital_delta_vs_balanced"]
-            == full_scenario["capital_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["expected_revenue_delta_vs_balanced"]
-            == full_scenario["expected_revenue_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["expected_gross_profit_delta_vs_balanced"]
-            == full_scenario["expected_gross_profit_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["objective_score_delta_vs_balanced"]
-            == full_scenario["objective_score_delta_vs_balanced"]
-        )
+    expected_compact_layer4 = {
+        "method": full_layer4["method"],
+        "factors": full_layer4["factors"],
+        "contract": full_layer4["contract"],
+        "aggregate_deltas": full_layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in full_layer4["scenarios"]
+        ],
+    }
+    assert compact_layer4 == expected_compact_layer4
 
 
 @pytest.mark.parametrize(
@@ -10517,25 +10530,38 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
 
     full_layer4 = full_meta["layer_4_scenarios"]
     compact_layer4 = compact_meta["layer_4_scenarios"]
-    assert compact_layer4["aggregate_deltas"] == full_layer4["aggregate_deltas"]
-    assert len(compact_layer4["scenarios"]) == len(full_layer4["scenarios"])
-    for compact_scenario, full_scenario in zip(compact_layer4["scenarios"], full_layer4["scenarios"]):
-        assert (
-            compact_scenario["capital_delta_vs_balanced"]
-            == full_scenario["capital_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["expected_revenue_delta_vs_balanced"]
-            == full_scenario["expected_revenue_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["expected_gross_profit_delta_vs_balanced"]
-            == full_scenario["expected_gross_profit_delta_vs_balanced"]
-        )
-        assert (
-            compact_scenario["objective_score_delta_vs_balanced"]
-            == full_scenario["objective_score_delta_vs_balanced"]
-        )
+    expected_compact_layer4 = {
+        "method": full_layer4["method"],
+        "factors": full_layer4["factors"],
+        "contract": full_layer4["contract"],
+        "aggregate_deltas": full_layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in full_layer4["scenarios"]
+        ],
+    }
+    assert compact_layer4 == expected_compact_layer4
 
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
