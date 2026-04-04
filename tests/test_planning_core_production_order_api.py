@@ -4806,6 +4806,21 @@ def test_production_order_proposal_uses_admin_economic_defaults_when_request_mis
     assert capital_gap["status"] == "ok"
     assert capital_gap["available_capital"] == 300.0
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
+    assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["capital_gap"] == capital_gap
+
 
 def test_production_order_proposal_uses_global_economic_defaults_when_admin_and_request_missing(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
