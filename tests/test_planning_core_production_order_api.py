@@ -10215,6 +10215,20 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "wb_stock_updated_bundle_count": 1,
     }
 
+    full_payload = deepcopy(payload)
+    full_payload.pop("explainability_mode", None)
+    full_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=full_payload,
+    )
+    assert full_response.status_code == 200, full_response.text
+
+    full_body = full_response.json()
+    full_meta = full_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(full_body)
+    assert meta["capital_gap"] == full_meta["capital_gap"]
+    assert meta["capital_constraint"] == full_meta["capital_constraint"]
+
 
 def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_output(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
