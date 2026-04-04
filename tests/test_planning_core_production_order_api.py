@@ -3044,6 +3044,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
+    assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
 
