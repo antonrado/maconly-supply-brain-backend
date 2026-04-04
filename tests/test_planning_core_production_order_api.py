@@ -3343,6 +3343,18 @@ def test_production_order_proposal_applies_elastic_minimum(client, db_session):
     assert elastic_constraints[0]["applied_min"] == 15000
     assert elastic_constraints[0]["required"] < elastic_constraints[0]["applied_min"]
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_body["constraints_applied"]["elastic_min_batches"] == elastic_constraints
+
 
 def test_production_order_proposal_elastic_binding_scope_selects_bound_type(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
