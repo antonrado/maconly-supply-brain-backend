@@ -10396,6 +10396,8 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
     assert compact_meta["capital_gap"] == full_meta["capital_gap"]
     assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
+    assert compact_meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
+    assert compact_meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
