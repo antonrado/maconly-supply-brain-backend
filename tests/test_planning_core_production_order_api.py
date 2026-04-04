@@ -12106,6 +12106,13 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
@@ -12125,6 +12132,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert compact_from_wb_meta["as_of_date"] is None
     assert compact_from_wb_meta["as_of_source"] == "none"
     assert compact_from_wb_meta["sales_window"] is None
+    assert compact_from_wb_meta["freshness"] == expected_compact_freshness
     assert compact_from_wb_meta["freshness"]["sales_age_days"] is None
 
 
@@ -12176,6 +12184,13 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["as_of_date"] is None
     assert from_wb_meta["as_of_source"] == "none"
@@ -12195,6 +12210,7 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
     compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
     assert compact_from_wb_meta["as_of_date"] is None
     assert compact_from_wb_meta["as_of_source"] == "none"
+    assert compact_from_wb_meta["freshness"] == expected_compact_freshness
     assert compact_from_wb_meta["freshness"]["status"] == "no_data"
 
 
