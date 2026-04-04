@@ -7915,6 +7915,7 @@ def test_production_order_proposal_from_wb_applies_elastic_minimum(client, db_se
 
     compact_body = compact_response.json()
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_body["constraints_applied"]["elastic_min_batches"] == elastic_constraints
 
 
 def test_production_order_proposal_from_wb_elastic_binding_scope_selects_bound_type(client, db_session):
