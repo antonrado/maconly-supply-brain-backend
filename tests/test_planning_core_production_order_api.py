@@ -3049,6 +3049,8 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     compact_meta = compact_body["explanation"]["meta"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
+    assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
+    assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
