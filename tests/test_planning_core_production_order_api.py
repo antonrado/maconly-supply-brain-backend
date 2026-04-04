@@ -4988,6 +4988,7 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
     assert meta["warnings"][0] == economics_trust["warnings"][0]
+    capital_gap = meta["capital_gap"]
 
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
@@ -5002,6 +5003,7 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["economics_trust"] == economics_trust
     assert compact_meta["warnings"][0] == economics_trust["warnings"][0]
 
@@ -8976,6 +8978,7 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
     assert meta["warnings"][0] == economics_trust["warnings"][0]
+    capital_gap = meta["capital_gap"]
 
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
@@ -8990,6 +8993,7 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["economics_trust"] == economics_trust
     assert compact_meta["warnings"][0] == economics_trust["warnings"][0]
 
