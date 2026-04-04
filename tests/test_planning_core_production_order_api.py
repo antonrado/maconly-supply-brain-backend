@@ -10193,6 +10193,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     compact_meta = compact_body["explanation"]["meta"]
     compact_commission_meta = compact_meta["from_wb"]["economic_observed_commission"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert (
         compact_meta["alpha_proxy_economics"]["economic_source"]["wb_commission_percent_main"]
         == FROM_WB_TARIFFS_COMMISSION_SOURCE
