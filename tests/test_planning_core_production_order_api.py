@@ -2594,6 +2594,7 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
     assert compact_layer5["contract"]["status"] == "ok"
     assert compact_layer5["signal_policy"] == "critical_risk_thresholds"
     assert expected_layer5_signal in compact_layer5["signals"]
+    assert compact_layer5["reason"] == layer5["reason"]
 
 
 @pytest.mark.parametrize(
