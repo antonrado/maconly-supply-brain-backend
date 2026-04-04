@@ -3051,8 +3051,6 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
     assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
-    assert compact_meta["capital_gap"] == full_meta["capital_gap"]
-    assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
@@ -3180,6 +3178,8 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
     assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
+    assert compact_meta["capital_gap"] == full_meta["capital_gap"]
+    assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
@@ -10258,6 +10258,8 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
     assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
+    assert compact_meta["capital_gap"] == full_meta["capital_gap"]
+    assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
