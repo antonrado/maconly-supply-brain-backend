@@ -4997,6 +4997,7 @@ def test_production_order_proposal_uses_code_default_economics_when_request_admi
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
@@ -8990,6 +8991,7 @@ def test_production_order_proposal_from_wb_uses_code_default_economics_when_requ
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
