@@ -2602,6 +2602,8 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
     assert "decisions" not in compact_layer2
     assert compact_layer2["objective_parameters"] == objective_parameters
     assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer2["decision_quality"] == layer2["decision_quality"]
+    assert compact_layer2["contract"] == layer2["contract"]
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
     compact_layer5 = compact_meta["layer_5_intervention"]
     assert compact_layer5["contract"]["status"] == "ok"
