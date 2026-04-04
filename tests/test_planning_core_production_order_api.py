@@ -11500,6 +11500,8 @@ def test_production_order_proposal_from_wb_request_layer2_coefficients_preserve_
     compact_layer2 = compact_meta["layer_2_allocation"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
+    assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
+    assert compact_meta["in_flight_effective"] == full_meta["in_flight_effective"]
 
     assert full_layer2["objective_parameters"] == expected_objective_parameters
     assert full_layer2["objective_source"] == expected_objective_source
