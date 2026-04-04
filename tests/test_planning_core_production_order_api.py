@@ -5199,7 +5199,7 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_governance"] == meta["capital_governance"]
-    assert compact_meta["warnings"][-1] == meta["warnings"][-1]
+    assert compact_meta["warnings"] == meta["warnings"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert compact_meta["alpha_proxy_economics"]["capital_governance"] == compact_meta["capital_governance"]
@@ -8865,7 +8865,7 @@ def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capita
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_governance"] == meta["capital_governance"]
-    assert compact_meta["warnings"][-1] == meta["warnings"][-1]
+    assert compact_meta["warnings"] == meta["warnings"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert compact_meta["alpha_proxy_economics"]["capital_governance"] == compact_meta["capital_governance"]
