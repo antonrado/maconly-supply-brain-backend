@@ -6439,6 +6439,20 @@ def test_production_order_proposal_competition_aware_raw_stock_breakdown(client,
     assert f"{seeded['bundle_type'].id}:14" in raw_stock_step
     assert f"{competing_bundle_type.id}:6" in raw_stock_step
 
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    full_meta = body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["resource_allocation"] == full_meta["resource_allocation"]
+
 
 def test_production_order_proposal_uses_wb_bundle_stock_fallback(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
