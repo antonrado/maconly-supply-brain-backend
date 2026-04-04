@@ -7467,7 +7467,10 @@ def test_production_order_proposal_from_wb_competition_aware_raw_stock_breakdown
     assert compact_response.status_code == 200, compact_response.text
 
     compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    full_meta = body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["resource_allocation"] == full_meta["resource_allocation"]
 
 
 def test_production_order_proposal_from_wb_shared_color_pool_reduces_local_fabric_min_uplift(client, db_session):
