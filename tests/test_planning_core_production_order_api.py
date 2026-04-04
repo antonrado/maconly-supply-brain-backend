@@ -2889,6 +2889,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert compact_layer5["contract"]["status"] == "ok"
     assert compact_layer5["signal_policy"] == "critical_risk_thresholds"
     assert expected_layer5_signal in compact_layer5["signals"]
+    assert compact_layer5["reason"] == layer5["reason"]
 
 
 def test_production_order_proposal_compact_explainability_mode(client, db_session):
