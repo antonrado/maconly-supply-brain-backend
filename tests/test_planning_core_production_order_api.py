@@ -3653,6 +3653,24 @@ def test_production_order_proposal_in_flight_eta_stage_sensitivity(client, db_se
     assert "lines=1" in in_flight_step
     assert "effective_qty=200" not in in_flight_step
 
+    in_flight_meta = body["explanation"]["meta"]["in_flight_effective"]
+    assert in_flight_meta["raw_qty"] == 200
+    assert in_flight_meta["lines"] == 1
+    assert 0 < in_flight_meta["effective_qty"] < 200
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_meta["in_flight_effective"] == in_flight_meta
+
 
 def test_production_order_proposal_arrival_projection_safe_cover_until_arrival_forces_wait(
     client,
