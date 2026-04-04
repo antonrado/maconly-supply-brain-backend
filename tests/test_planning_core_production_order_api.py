@@ -3775,6 +3775,35 @@ def test_production_order_proposal_economic_buffer_policy(client, db_session):
     assert "enabled=True" in buffer_step_with
     assert "economic_buffer_days=0" not in buffer_step_with
 
+    compact_payload_without_buffer = deepcopy(payload_without_buffer)
+    compact_payload_without_buffer["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_payload_with_buffer = deepcopy(payload_with_buffer)
+    compact_payload_with_buffer["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response_without = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload_without_buffer,
+    )
+    compact_response_with = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=compact_payload_with_buffer,
+    )
+
+    assert compact_response_without.status_code == 200, compact_response_without.text
+    assert compact_response_with.status_code == 200, compact_response_with.text
+
+    compact_body_without = compact_response_without.json()
+    compact_body_with = compact_response_with.json()
+    assert _business_projection(body_without) == _business_projection(compact_body_without)
+    assert _business_projection(body_with) == _business_projection(compact_body_with)
+    assert (
+        compact_body_without["explanation"]["meta"]["economic_buffer"]
+        == body_without["explanation"]["meta"]["economic_buffer"]
+    )
+    assert (
+        compact_body_with["explanation"]["meta"]["economic_buffer"]
+        == body_with["explanation"]["meta"]["economic_buffer"]
+    )
+
 
 def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
