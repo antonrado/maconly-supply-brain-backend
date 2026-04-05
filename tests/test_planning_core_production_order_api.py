@@ -10579,6 +10579,12 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
 
     full_body = full_response.json()
     full_meta = full_body["explanation"]["meta"]
+    expected_compact_assorti_classification = {
+        "source": full_meta["layer_1_stock_health"]["assorti_classification"]["source"],
+        "fallback_sources": full_meta["layer_1_stock_health"]["assorti_classification"]["fallback_sources"],
+        "source_breakdown": full_meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
+        "summary": full_meta["layer_1_stock_health"]["assorti_classification"]["summary"],
+    }
     expected_compact_layer4 = {
         "method": full_meta["layer_4_scenarios"]["method"],
         "factors": full_meta["layer_4_scenarios"]["factors"],
@@ -10626,6 +10632,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "kgvp_supplier_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["kgvp_supplier_percent_stats"],
     }
     assert _business_projection(body) == _business_projection(full_body)
+    assert meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
