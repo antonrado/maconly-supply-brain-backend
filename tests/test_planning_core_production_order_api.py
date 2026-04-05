@@ -5441,6 +5441,38 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
     assert layer3_calibration["stockout_boost_max"] == 0.23
     assert layer3_calibration["overstock_dampen_max"] == 0.18
+    layer4 = body["explanation"]["meta"]["layer_4_scenarios"]
+    expected_compact_layer4 = {
+        "method": layer4["method"],
+        "factors": layer4["factors"],
+        "contract": layer4["contract"],
+        "aggregate_deltas": layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in layer4["scenarios"]
+        ],
+    }
     layer5 = body["explanation"]["meta"]["layer_5_intervention"]
     assert layer5["risk_threshold"] == 0.27
     assert layer5["signal_thresholds"] == {
@@ -5461,6 +5493,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
     compact_layer2 = compact_body["explanation"]["meta"]["layer_2_allocation"]
     compact_layer3 = compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    compact_layer4 = compact_body["explanation"]["meta"]["layer_4_scenarios"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_alpha_proxy == alpha_proxy
@@ -5475,6 +5508,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     assert compact_layer2["objective_parameters"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"]
     assert compact_layer2["objective_source"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_source"]
     assert compact_layer3["calibration"] == layer3_calibration
+    assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
 
 
