@@ -3345,6 +3345,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     assert compact_meta["capital_gap"] == full_meta["capital_gap"]
     assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
     assert compact_meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
+    assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert compact_meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert compact_meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
 
