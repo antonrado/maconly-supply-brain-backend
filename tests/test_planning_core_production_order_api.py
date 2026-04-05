@@ -5374,6 +5374,12 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     assert meta["capital_constraint"]["available_capital"] == 0.0
     assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
 
+    expected_compact_assorti_classification = {
+        "source": meta["layer_1_stock_health"]["assorti_classification"]["source"],
+        "fallback_sources": meta["layer_1_stock_health"]["assorti_classification"]["fallback_sources"],
+        "source_breakdown": meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
+        "summary": meta["layer_1_stock_health"]["assorti_classification"]["summary"],
+    }
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
     assert compact_response.status_code == 200, compact_response.text
@@ -5384,6 +5390,7 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     assert compact_meta["capital_governance"] == meta["capital_governance"]
     assert compact_meta["warnings"] == meta["warnings"]
     assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
+    assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert compact_meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert compact_meta["alpha_proxy_economics"]["capital_governance"] == compact_meta["capital_governance"]
