@@ -2810,6 +2810,31 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
 
     from_wb_meta = meta["from_wb"]
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
+    economic_observed_prices = from_wb_meta.get("economic_observed_prices")
+    expected_compact_observed_prices = {}
+    if isinstance(economic_observed_prices, dict):
+        expected_compact_observed_prices = {
+            "source": economic_observed_prices.get("source"),
+            "window": economic_observed_prices.get("window"),
+            "anomaly_max_deviation": economic_observed_prices.get("anomaly_max_deviation"),
+            "prices": economic_observed_prices.get("prices"),
+            "sample_counts": economic_observed_prices.get("sample_counts"),
+        }
+    expected_compact_commission_meta = {
+        "source": from_wb_meta["economic_observed_commission"]["source"],
+        "status": from_wb_meta["economic_observed_commission"]["status"],
+        "reason": from_wb_meta["economic_observed_commission"]["reason"],
+        "commission_percent": from_wb_meta["economic_observed_commission"]["commission_percent"],
+        "commission_percent_stats": from_wb_meta["economic_observed_commission"]["commission_percent_stats"],
+        "kgvp_supplier_percent_stats": from_wb_meta["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+    }
     assert from_wb_meta["daily_sales_by_bundle"][str(seeded["bundle_type"].id)] == bundle_daily_sales["main"]
     assert from_wb_meta["daily_sales_by_bundle"][str(assorti_bundle_type.id)] == bundle_daily_sales["assorti"]
     assert from_wb_meta["wb_stock_by_bundle"][str(seeded["bundle_type"].id)] == per_sku_stock_qty
@@ -2894,6 +2919,9 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert "daily_sales_by_bundle" not in compact_from_wb
     assert "wb_stock_by_bundle" not in compact_from_wb
     assert "wb_stock_updated_at_by_bundle" not in compact_from_wb
+    assert compact_from_wb["freshness"] == expected_compact_freshness
+    assert compact_from_wb["economic_observed_prices"] == expected_compact_observed_prices
+    assert compact_from_wb["economic_observed_commission"] == expected_compact_commission_meta
     assert compact_from_wb["snapshot"] == {
         "daily_sales_bundle_count": len(bundle_daily_sales),
         "daily_sales_total": sum(bundle_daily_sales.values()),
