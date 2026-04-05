@@ -13440,6 +13440,13 @@ def test_production_order_proposal_from_wb_uses_mixed_freshness_threshold_source
     assert "freshness_threshold_source=sales:request|stock:admin_defaults" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
     assert from_wb_meta["freshness_mode"] == "strict"
     assert from_wb_meta["freshness"]["status"] == "fresh"
     assert from_wb_meta["freshness"]["threshold_days"] == {
@@ -13457,10 +13464,7 @@ def test_production_order_proposal_from_wb_uses_mixed_freshness_threshold_source
 
     compact_body = compact_response.json()
     assert _business_projection(body) == _business_projection(compact_body)
-    assert compact_body["explanation"]["meta"]["from_wb"]["freshness"]["threshold_source"] == {
-        "sales": "request",
-        "stock": "admin_defaults",
-    }
+    assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == expected_compact_freshness
 
 
 def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(client, db_session):
