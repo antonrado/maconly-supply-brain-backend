@@ -10781,6 +10781,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "sales": "global_default",
         "stock": "global_default",
     }
+    assert compact_meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
     assert from_wb_meta["snapshot"] == {
         "daily_sales_bundle_count": 1,
