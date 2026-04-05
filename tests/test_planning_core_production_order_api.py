@@ -2936,6 +2936,12 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     if expected_layer5_signal == "reduce_order_size":
         assert layer5["reason"] == "overstock_penalty_exceeds_marginal_profit"
 
+    expected_compact_assorti_classification = {
+        "source": meta["layer_1_stock_health"]["assorti_classification"]["source"],
+        "fallback_sources": meta["layer_1_stock_health"]["assorti_classification"]["fallback_sources"],
+        "source_breakdown": meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
+        "summary": meta["layer_1_stock_health"]["assorti_classification"]["summary"],
+    }
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post(
@@ -2951,6 +2957,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     compact_layer2 = compact_meta["layer_2_allocation"]
     assert "decisions" not in compact_layer2
     assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
+    assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert compact_layer2["objective_parameters"] == objective_parameters
     assert compact_layer2["objective_source"] == layer2["objective_source"]
     assert compact_layer2["decision_quality"] == layer2["decision_quality"]
