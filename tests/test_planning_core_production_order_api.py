@@ -3103,12 +3103,45 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
 
     full_body = full_response.json()
     full_meta = full_body["explanation"]["meta"]
+    expected_compact_layer4 = {
+        "method": full_meta["layer_4_scenarios"]["method"],
+        "factors": full_meta["layer_4_scenarios"]["factors"],
+        "contract": full_meta["layer_4_scenarios"]["contract"],
+        "aggregate_deltas": full_meta["layer_4_scenarios"]["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in full_meta["layer_4_scenarios"]["scenarios"]
+        ],
+    }
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert meta["layer_4_scenarios"] == expected_compact_layer4
+    assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
 
 
 def test_production_order_proposal_compact_mode_preserves_deterministic_output(client, db_session):
