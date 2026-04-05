@@ -11616,6 +11616,8 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
 
     compact_body = compact_response.json()
     compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
+    compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
+    layer5 = body["explanation"]["meta"]["layer_5_intervention"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_alpha_proxy == alpha_proxy
     assert compact_alpha_proxy["layer5_threshold_order_adjusted"] is True
@@ -11625,6 +11627,7 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
         == "admin_defaults|clamped_to_unavoidable"
     )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
+    assert compact_layer5 == layer5
 
 
 def test_production_order_proposal_from_wb_layer3_calibration_changes_qty_but_not_layer2_decisions(
