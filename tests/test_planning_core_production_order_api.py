@@ -3256,6 +3256,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
         ],
     }
     assert compact_layer4 == expected_compact_layer4
+    assert compact_meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
 
 
 @pytest.mark.parametrize(
