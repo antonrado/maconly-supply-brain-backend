@@ -5480,9 +5480,24 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
         "overstock_penalty_weight": "request",
     }
 
-    layer3_calibration = body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
+    layer3 = body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    layer3_calibration = layer3["calibration"]
     assert layer3_calibration["stockout_boost_max"] == 0.23
     assert layer3_calibration["overstock_dampen_max"] == 0.18
+    expected_compact_layer3 = {
+        "method": layer3["method"],
+        "factors": layer3["factors"],
+        "contract": layer3["contract"],
+        "qty_before": layer3["qty_before"],
+        "qty_after_base": layer3["qty_after_base"],
+        "qty_after": layer3["qty_after"],
+        "qty_delta_vs_base": layer3["qty_delta_vs_base"],
+        "adjusted_lines": layer3["adjusted_lines"],
+        "main_lines": layer3["main_lines"],
+        "assorti_lines": layer3["assorti_lines"],
+        "hold_lines": layer3["hold_lines"],
+        "calibration": layer3["calibration"],
+    }
     layer4 = body["explanation"]["meta"]["layer_4_scenarios"]
     expected_compact_layer4 = {
         "method": layer4["method"],
@@ -5549,7 +5564,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"]
     assert compact_layer2["objective_source"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_source"]
-    assert compact_layer3["calibration"] == layer3_calibration
+    assert compact_layer3 == expected_compact_layer3
     assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
 
