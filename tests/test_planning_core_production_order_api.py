@@ -11712,6 +11712,34 @@ def test_production_order_proposal_from_wb_layer3_calibration_changes_qty_but_no
 
     low_layer3 = low_body["explanation"]["meta"]["layer_3_purchase_shaping"]
     high_layer3 = high_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    expected_low_compact_layer3 = {
+        "method": low_layer3["method"],
+        "factors": low_layer3["factors"],
+        "contract": low_layer3["contract"],
+        "qty_before": low_layer3["qty_before"],
+        "qty_after_base": low_layer3["qty_after_base"],
+        "qty_after": low_layer3["qty_after"],
+        "qty_delta_vs_base": low_layer3["qty_delta_vs_base"],
+        "adjusted_lines": low_layer3["adjusted_lines"],
+        "main_lines": low_layer3["main_lines"],
+        "assorti_lines": low_layer3["assorti_lines"],
+        "hold_lines": low_layer3["hold_lines"],
+        "calibration": low_layer3["calibration"],
+    }
+    expected_high_compact_layer3 = {
+        "method": high_layer3["method"],
+        "factors": high_layer3["factors"],
+        "contract": high_layer3["contract"],
+        "qty_before": high_layer3["qty_before"],
+        "qty_after_base": high_layer3["qty_after_base"],
+        "qty_after": high_layer3["qty_after"],
+        "qty_delta_vs_base": high_layer3["qty_delta_vs_base"],
+        "adjusted_lines": high_layer3["adjusted_lines"],
+        "main_lines": high_layer3["main_lines"],
+        "assorti_lines": high_layer3["assorti_lines"],
+        "hold_lines": high_layer3["hold_lines"],
+        "calibration": high_layer3["calibration"],
+    }
     assert low_layer3["calibration"]["stockout_boost_max"] == 0.0
     assert high_layer3["calibration"]["stockout_boost_max"] == 1.0
     assert low_layer3["calibration"]["overstock_dampen_max"] == 0.0
@@ -11737,18 +11765,12 @@ def test_production_order_proposal_from_wb_layer3_calibration_changes_qty_but_no
 
     low_compact_body = low_compact_response.json()
     high_compact_body = high_compact_response.json()
+    low_compact_layer3 = low_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
+    high_compact_layer3 = high_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]
     assert _business_projection(low_body) == _business_projection(low_compact_body)
     assert _business_projection(high_body) == _business_projection(high_compact_body)
-    assert (
-        low_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
-        == low_layer3["calibration"]
-    )
-    assert low_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["qty_after"] == low_layer3["qty_after"]
-    assert (
-        high_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["calibration"]
-        == high_layer3["calibration"]
-    )
-    assert high_compact_body["explanation"]["meta"]["layer_3_purchase_shaping"]["qty_after"] == high_layer3["qty_after"]
+    assert low_compact_layer3 == expected_low_compact_layer3
+    assert high_compact_layer3 == expected_high_compact_layer3
 
 
 def test_production_order_proposal_from_wb_layer3_shaping_reduces_qty_for_explicit_assorti_flag(
