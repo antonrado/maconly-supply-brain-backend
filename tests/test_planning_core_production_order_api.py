@@ -11898,6 +11898,18 @@ def test_production_order_proposal_from_wb_layer3_shaping_reduces_qty_for_explic
 
     assorti_classification_main = body_main["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
     assorti_classification_assorti = body_assorti["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    expected_compact_assorti_classification_main = {
+        "source": assorti_classification_main["source"],
+        "fallback_sources": assorti_classification_main["fallback_sources"],
+        "source_breakdown": assorti_classification_main["source_breakdown"],
+        "summary": assorti_classification_main["summary"],
+    }
+    expected_compact_assorti_classification_assorti = {
+        "source": assorti_classification_assorti["source"],
+        "fallback_sources": assorti_classification_assorti["fallback_sources"],
+        "source_breakdown": assorti_classification_assorti["source_breakdown"],
+        "summary": assorti_classification_assorti["summary"],
+    }
     assert assorti_classification_main["summary"] == {
         "assorti_bundle_types": 0,
         "main_bundle_types": 1,
@@ -11976,16 +11988,12 @@ def test_production_order_proposal_from_wb_layer3_shaping_reduces_qty_for_explic
     compact_body_assorti = compact_response_assorti.json()
     compact_layer3_main = compact_body_main["explanation"]["meta"]["layer_3_purchase_shaping"]
     compact_layer3_assorti = compact_body_assorti["explanation"]["meta"]["layer_3_purchase_shaping"]
+    compact_assorti_classification_main = compact_body_main["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    compact_assorti_classification_assorti = compact_body_assorti["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
     assert _business_projection(body_main) == _business_projection(compact_body_main)
     assert _business_projection(body_assorti) == _business_projection(compact_body_assorti)
-    assert (
-        compact_body_main["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]["summary"]
-        == assorti_classification_main["summary"]
-    )
-    assert (
-        compact_body_assorti["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]["summary"]
-        == assorti_classification_assorti["summary"]
-    )
+    assert compact_assorti_classification_main == expected_compact_assorti_classification_main
+    assert compact_assorti_classification_assorti == expected_compact_assorti_classification_assorti
     assert compact_layer3_main == expected_compact_layer3_main
     assert compact_layer3_assorti == expected_compact_layer3_assorti
 
