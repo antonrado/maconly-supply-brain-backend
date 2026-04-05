@@ -12370,6 +12370,12 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
 
     full_meta = full_body["explanation"]["meta"]
     compact_meta = compact_body["explanation"]["meta"]
+    expected_compact_assorti_classification = {
+        "source": full_meta["layer_1_stock_health"]["assorti_classification"]["source"],
+        "fallback_sources": full_meta["layer_1_stock_health"]["assorti_classification"]["fallback_sources"],
+        "source_breakdown": full_meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
+        "summary": full_meta["layer_1_stock_health"]["assorti_classification"]["summary"],
+    }
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
@@ -12377,6 +12383,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_meta["capital_gap"] == full_meta["capital_gap"]
     assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
     assert compact_meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
+    assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert compact_meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert compact_meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
 
