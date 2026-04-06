@@ -2862,6 +2862,23 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
     }
     assert meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+    expected_compact_layer2 = {
+        "method": layer2.get("method"),
+        "method_canonical": layer2.get("method_canonical"),
+        "legacy_method": layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": layer2.get("summary", {}),
+        "contract": layer2.get("contract", {}),
+        "decision_quality": layer2.get("decision_quality", {}),
+        "decision_gate": layer2.get("decision_gate"),
+        "decision_gate_canonical": layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": layer2.get("legacy_decision_gate"),
+        "tie_break": layer2.get("tie_break"),
+        "gmroi_usage": layer2.get("gmroi_usage"),
+        "objective_formula": layer2.get("objective_formula"),
+        "objective_parameters": layer2.get("objective_parameters", {}),
+        "objective_source": layer2.get("objective_source", {}),
+    }
 
     from_wb_meta = meta["from_wb"]
     expected_compact_freshness = {
@@ -2990,10 +3007,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert "decisions" not in compact_layer2
     assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
-    assert compact_layer2["objective_parameters"] == objective_parameters
-    assert compact_layer2["objective_source"] == layer2["objective_source"]
-    assert compact_layer2["decision_quality"] == layer2["decision_quality"]
-    assert compact_layer2["contract"] == layer2["contract"]
+    assert compact_layer2 == expected_compact_layer2
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
     compact_from_wb = compact_meta["from_wb"]
     assert compact_from_wb == expected_compact_from_wb
