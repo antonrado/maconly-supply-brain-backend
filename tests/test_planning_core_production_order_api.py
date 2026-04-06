@@ -5505,6 +5505,23 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
     layer3_calibration = layer3["calibration"]
     assert layer3_calibration["stockout_boost_max"] == 0.23
     assert layer3_calibration["overstock_dampen_max"] == 0.18
+    expected_compact_layer2 = {
+        "method": layer2.get("method"),
+        "method_canonical": layer2.get("method_canonical"),
+        "legacy_method": layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": layer2.get("summary", {}),
+        "contract": layer2.get("contract", {}),
+        "decision_quality": layer2.get("decision_quality", {}),
+        "decision_gate": layer2.get("decision_gate"),
+        "decision_gate_canonical": layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": layer2.get("legacy_decision_gate"),
+        "tie_break": layer2.get("tie_break"),
+        "gmroi_usage": layer2.get("gmroi_usage"),
+        "objective_formula": layer2.get("objective_formula"),
+        "objective_parameters": layer2.get("objective_parameters", {}),
+        "objective_source": layer2.get("objective_source", {}),
+    }
     expected_compact_layer3 = {
         "method": layer3["method"],
         "factors": layer3["factors"],
@@ -5583,10 +5600,7 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
         == alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
     )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
-    assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
-    assert compact_layer2["objective_source"] == layer2["objective_source"]
-    assert compact_layer2["decision_quality"] == layer2["decision_quality"]
-    assert compact_layer2["contract"] == layer2["contract"]
+    assert compact_layer2 == expected_compact_layer2
     assert compact_layer3 == expected_compact_layer3
     assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
