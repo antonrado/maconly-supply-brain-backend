@@ -10586,6 +10586,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert response.status_code == 200, response.text
 
     body = response.json()
+    full_from_wb = body["explanation"]["meta"]["from_wb"]
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
     assert (
         alpha_proxy["economic_source"]["wb_commission_percent_main"]
@@ -10598,7 +10599,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_main"] == 0.2
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
 
-    commission_meta = body["explanation"]["meta"]["from_wb"]["economic_observed_commission"]
+    commission_meta = full_from_wb["economic_observed_commission"]
     assert commission_meta["status"] == "ok"
     assert commission_meta["reason"] is None
     assert commission_meta["subjects_with_commission"] == 2
@@ -10613,6 +10614,37 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
         "commission_percent_stats": commission_meta["commission_percent_stats"],
         "kgvp_supplier_percent_stats": commission_meta["kgvp_supplier_percent_stats"],
     }
+    expected_compact_from_wb = {
+        "observation_window_days": full_from_wb["observation_window_days"],
+        "freshness_mode": full_from_wb["freshness_mode"],
+        "requested_as_of_date": full_from_wb["requested_as_of_date"],
+        "as_of_date": full_from_wb["as_of_date"],
+        "as_of_source": full_from_wb["as_of_source"],
+        "bundle_type_ids": full_from_wb["bundle_type_ids"],
+        "sales_window": full_from_wb["sales_window"],
+        "freshness": {
+            "status": full_from_wb["freshness"]["status"],
+            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
+            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
+            "threshold_days": full_from_wb["freshness"]["threshold_days"],
+            "threshold_source": full_from_wb["freshness"]["threshold_source"],
+        },
+        "economic_observed_prices": {
+            "source": full_from_wb["economic_observed_prices"]["source"],
+            "window": full_from_wb["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": full_from_wb["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": full_from_wb["economic_observed_prices"]["prices"],
+            "sample_counts": full_from_wb["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": expected_compact_commission_meta,
+        "snapshot": {
+            "daily_sales_bundle_count": len(full_from_wb["daily_sales_by_bundle"]),
+            "daily_sales_total": sum(full_from_wb["daily_sales_by_bundle"].values()),
+            "wb_stock_bundle_count": len(full_from_wb["wb_stock_by_bundle"]),
+            "wb_stock_total": int(sum(full_from_wb["wb_stock_by_bundle"].values())),
+            "wb_stock_updated_bundle_count": len(full_from_wb["wb_stock_updated_at_by_bundle"]),
+        },
+    }
 
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
@@ -10620,7 +10652,6 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
 
     compact_body = compact_response.json()
     compact_meta = compact_body["explanation"]["meta"]
-    compact_commission_meta = compact_meta["from_wb"]["economic_observed_commission"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert (
@@ -10633,7 +10664,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     )
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_main"] == 0.2
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
-    assert compact_commission_meta == expected_compact_commission_meta
+    assert compact_meta["from_wb"] == expected_compact_from_wb
 
 
 def test_production_order_proposal_from_wb_compact_explainability_mode(client, db_session):
