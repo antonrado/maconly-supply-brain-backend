@@ -11046,6 +11046,24 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "source_breakdown": full_meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
         "summary": full_meta["layer_1_stock_health"]["assorti_classification"]["summary"],
     }
+    full_layer2 = full_meta["layer_2_allocation"]
+    expected_compact_layer2 = {
+        "method": full_layer2.get("method"),
+        "method_canonical": full_layer2.get("method_canonical"),
+        "legacy_method": full_layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": full_layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": full_layer2.get("summary", {}),
+        "contract": full_layer2.get("contract", {}),
+        "decision_quality": full_layer2.get("decision_quality", {}),
+        "decision_gate": full_layer2.get("decision_gate"),
+        "decision_gate_canonical": full_layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": full_layer2.get("legacy_decision_gate"),
+        "tie_break": full_layer2.get("tie_break"),
+        "gmroi_usage": full_layer2.get("gmroi_usage"),
+        "objective_formula": full_layer2.get("objective_formula"),
+        "objective_parameters": full_layer2.get("objective_parameters", {}),
+        "objective_source": full_layer2.get("objective_source", {}),
+    }
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
@@ -11054,8 +11072,8 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
     assert compact_meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
-    assert compact_meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
-    assert compact_meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert compact_meta["layer_2_allocation"]["decision_quality"] == full_layer2["decision_quality"]
+    assert compact_meta["layer_2_allocation"]["contract"] == full_layer2["contract"]
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
@@ -11072,16 +11090,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     assert compact_layer2["decision_quality"]["profit_gate_primary"] is False
     assert compact_layer2["decision_quality"]["composite_objective_gate_primary"] is True
     assert compact_layer2["decision_quality"]["decision_count"] == 4
-    assert compact_layer2["objective_parameters"] == {
-        "capital_cost_rate": 0.08,
-        "stockout_penalty_weight": 1.0,
-        "overstock_penalty_weight": 1.0,
-    }
-    assert compact_layer2["objective_source"] == {
-        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
-        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
-        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
-    }
+    assert compact_layer2 == expected_compact_layer2
     assert (
         compact_body["explanation"]["meta"]["alpha_proxy_economics"]["layer_2_objective_parameters"]
         == compact_layer2["objective_parameters"]
