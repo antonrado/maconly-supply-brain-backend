@@ -3389,6 +3389,24 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
         "source_breakdown": full_meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
         "summary": full_meta["layer_1_stock_health"]["assorti_classification"]["summary"],
     }
+    full_layer2 = full_meta["layer_2_allocation"]
+    expected_compact_layer2 = {
+        "method": full_layer2.get("method"),
+        "method_canonical": full_layer2.get("method_canonical"),
+        "legacy_method": full_layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": full_layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": full_layer2.get("summary", {}),
+        "contract": full_layer2.get("contract", {}),
+        "decision_quality": full_layer2.get("decision_quality", {}),
+        "decision_gate": full_layer2.get("decision_gate"),
+        "decision_gate_canonical": full_layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": full_layer2.get("legacy_decision_gate"),
+        "tie_break": full_layer2.get("tie_break"),
+        "gmroi_usage": full_layer2.get("gmroi_usage"),
+        "objective_formula": full_layer2.get("objective_formula"),
+        "objective_parameters": full_layer2.get("objective_parameters", {}),
+        "objective_source": full_layer2.get("objective_source", {}),
+    }
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
@@ -3397,8 +3415,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     assert compact_meta["capital_constraint"] == full_meta["capital_constraint"]
     assert compact_meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
-    assert compact_meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
-    assert compact_meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert compact_meta["layer_2_allocation"] == expected_compact_layer2
 
     compact_layer2_step = next(
         (step for step in compact_body["explanation"]["steps"] if "Layer 2 allocation" in step),
