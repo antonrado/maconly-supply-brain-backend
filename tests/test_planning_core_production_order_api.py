@@ -5469,12 +5469,13 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
         "layer5_price_slowdown_lost_volume_rate": "code_default_constants",
         "layer5_reduce_order_marginal_profit_rate": "code_default_constants",
     }
-    assert body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"] == {
+    layer2 = body["explanation"]["meta"]["layer_2_allocation"]
+    assert layer2["objective_parameters"] == {
         "capital_cost_rate": 0.07,
         "stockout_penalty_weight": 0.52,
         "overstock_penalty_weight": 0.16,
     }
-    assert body["explanation"]["meta"]["layer_2_allocation"]["objective_source"] == {
+    assert layer2["objective_source"] == {
         "capital_cost_rate": "request",
         "stockout_penalty_weight": "request",
         "overstock_penalty_weight": "request",
@@ -5562,8 +5563,10 @@ def test_production_order_proposal_request_layer_proxy_overrides_admin_and_globa
         == alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"]
     )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
-    assert compact_layer2["objective_parameters"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_parameters"]
-    assert compact_layer2["objective_source"] == body["explanation"]["meta"]["layer_2_allocation"]["objective_source"]
+    assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
+    assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer2["decision_quality"] == layer2["decision_quality"]
+    assert compact_layer2["contract"] == layer2["contract"]
     assert compact_layer3 == expected_compact_layer3
     assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
