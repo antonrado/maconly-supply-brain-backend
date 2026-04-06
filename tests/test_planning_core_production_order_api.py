@@ -5337,7 +5337,7 @@ def test_production_order_proposal_reports_partial_economics_trust_when_one_key_
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["economics_trust"] == economics_trust
-    assert compact_meta["warnings"][0] == economics_trust["warnings"][0]
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_production_order_proposal_requires_available_capital_in_strict_mode(client, db_session):
