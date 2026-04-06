@@ -11065,26 +11065,34 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "commission_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["commission_percent_stats"],
         "kgvp_supplier_percent_stats": full_meta["from_wb"]["economic_observed_commission"]["kgvp_supplier_percent_stats"],
     }
+    expected_compact_from_wb = {
+        "observation_window_days": full_meta["from_wb"]["observation_window_days"],
+        "freshness_mode": full_meta["from_wb"]["freshness_mode"],
+        "requested_as_of_date": full_meta["from_wb"]["requested_as_of_date"],
+        "as_of_date": full_meta["from_wb"]["as_of_date"],
+        "as_of_source": full_meta["from_wb"]["as_of_source"],
+        "bundle_type_ids": full_meta["from_wb"]["bundle_type_ids"],
+        "sales_window": full_meta["from_wb"]["sales_window"],
+        "freshness": expected_compact_freshness,
+        "economic_observed_prices": {
+            "source": full_meta["from_wb"]["economic_observed_prices"]["source"],
+            "window": full_meta["from_wb"]["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": full_meta["from_wb"]["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": full_meta["from_wb"]["economic_observed_prices"]["prices"],
+            "sample_counts": full_meta["from_wb"]["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": expected_compact_commission_meta,
+        "snapshot": {
+            "daily_sales_bundle_count": len(full_meta["from_wb"]["daily_sales_by_bundle"]),
+            "daily_sales_total": sum(full_meta["from_wb"]["daily_sales_by_bundle"].values()),
+            "wb_stock_bundle_count": len(full_meta["from_wb"]["wb_stock_by_bundle"]),
+            "wb_stock_total": int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values())),
+            "wb_stock_updated_bundle_count": len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"]),
+        },
+    }
     from_wb_meta = compact_meta["from_wb"]
-    assert "daily_sales_by_bundle" not in from_wb_meta
-    assert "wb_stock_by_bundle" not in from_wb_meta
-    assert "wb_stock_updated_at_by_bundle" not in from_wb_meta
-    assert from_wb_meta["freshness"] == expected_compact_freshness
-    assert "stock_age_days_by_bundle" not in from_wb_meta["freshness"]
-    assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
-    assert from_wb_meta["freshness"]["threshold_source"] == {
-        "sales": "global_default",
-        "stock": "global_default",
-    }
+    assert from_wb_meta == expected_compact_from_wb
     assert compact_meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
-    assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
-    assert from_wb_meta["snapshot"] == {
-        "daily_sales_bundle_count": 1,
-        "daily_sales_total": 2.0,
-        "wb_stock_bundle_count": 1,
-        "wb_stock_total": 20,
-        "wb_stock_updated_bundle_count": 1,
-    }
 
 
 def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
