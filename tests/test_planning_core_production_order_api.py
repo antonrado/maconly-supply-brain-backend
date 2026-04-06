@@ -13345,6 +13345,44 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 1.0
     assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 12
     assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is not None
+    expected_compact_from_wb = {
+        "observation_window_days": from_wb_meta["observation_window_days"],
+        "freshness_mode": from_wb_meta["freshness_mode"],
+        "requested_as_of_date": from_wb_meta["requested_as_of_date"],
+        "as_of_date": from_wb_meta["as_of_date"],
+        "as_of_source": from_wb_meta["as_of_source"],
+        "bundle_type_ids": from_wb_meta["bundle_type_ids"],
+        "sales_window": from_wb_meta["sales_window"],
+        "freshness": {
+            "status": from_wb_meta["freshness"]["status"],
+            "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+            "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+            "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+            "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+        },
+        "economic_observed_prices": {
+            "source": from_wb_meta["economic_observed_prices"]["source"],
+            "window": from_wb_meta["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": from_wb_meta["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": from_wb_meta["economic_observed_prices"]["prices"],
+            "sample_counts": from_wb_meta["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": {
+            "source": from_wb_meta["economic_observed_commission"]["source"],
+            "status": from_wb_meta["economic_observed_commission"]["status"],
+            "reason": from_wb_meta["economic_observed_commission"]["reason"],
+            "commission_percent": from_wb_meta["economic_observed_commission"]["commission_percent"],
+            "commission_percent_stats": from_wb_meta["economic_observed_commission"]["commission_percent_stats"],
+            "kgvp_supplier_percent_stats": from_wb_meta["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+        },
+        "snapshot": {
+            "daily_sales_bundle_count": len(from_wb_meta["daily_sales_by_bundle"]),
+            "daily_sales_total": sum(from_wb_meta["daily_sales_by_bundle"].values()),
+            "wb_stock_bundle_count": len(from_wb_meta["wb_stock_by_bundle"]),
+            "wb_stock_total": int(sum(from_wb_meta["wb_stock_by_bundle"].values())),
+            "wb_stock_updated_bundle_count": len(from_wb_meta["wb_stock_updated_at_by_bundle"]),
+        },
+    }
 
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post(
@@ -13356,16 +13394,10 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
     compact_body = compact_response.json()
     assert _business_projection(body) == _business_projection(compact_body)
     compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
-    assert compact_from_wb_meta["requested_as_of_date"] == "2026-01-15"
-    assert compact_from_wb_meta["as_of_date"] == "2026-01-15"
-    assert compact_from_wb_meta["as_of_source"] == "request"
-    assert compact_from_wb_meta["sales_window"] == {
-        "start_date": "2025-12-17",
-        "end_date": "2026-01-15",
-    }
+    assert compact_from_wb_meta == expected_compact_from_wb
 
 
-def test_production_order_proposal_from_wb_strict_rejects_stale_data(client, db_session):
+def test_production_order_proposal_direct_request_overrides_wb_import_state(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
     db_session.add(
