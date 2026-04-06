@@ -12638,6 +12638,23 @@ def test_production_order_proposal_from_wb_request_layer2_coefficients_preserve_
     }
     full_layer2 = full_meta["layer_2_allocation"]
     compact_layer2 = compact_meta["layer_2_allocation"]
+    expected_compact_layer2 = {
+        "method": full_layer2.get("method"),
+        "method_canonical": full_layer2.get("method_canonical"),
+        "legacy_method": full_layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": full_layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": full_layer2.get("summary", {}),
+        "contract": full_layer2.get("contract", {}),
+        "decision_quality": full_layer2.get("decision_quality", {}),
+        "decision_gate": full_layer2.get("decision_gate"),
+        "decision_gate_canonical": full_layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": full_layer2.get("legacy_decision_gate"),
+        "tie_break": full_layer2.get("tie_break"),
+        "gmroi_usage": full_layer2.get("gmroi_usage"),
+        "objective_formula": full_layer2.get("objective_formula"),
+        "objective_parameters": full_layer2.get("objective_parameters", {}),
+        "objective_source": full_layer2.get("objective_source", {}),
+    }
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
@@ -12651,8 +12668,7 @@ def test_production_order_proposal_from_wb_request_layer2_coefficients_preserve_
 
     assert full_layer2["objective_parameters"] == expected_objective_parameters
     assert full_layer2["objective_source"] == expected_objective_source
-    assert compact_layer2["objective_parameters"] == expected_objective_parameters
-    assert compact_layer2["objective_source"] == expected_objective_source
+    assert compact_layer2 == expected_compact_layer2
     assert full_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == expected_objective_parameters
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == expected_objective_parameters
     assert full_meta["alpha_proxy_economics"]["layer_proxy_source"]["layer2_capital_cost_rate"] == "request"
