@@ -2876,6 +2876,25 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         "commission_percent_stats": from_wb_meta["economic_observed_commission"]["commission_percent_stats"],
         "kgvp_supplier_percent_stats": from_wb_meta["economic_observed_commission"]["kgvp_supplier_percent_stats"],
     }
+    expected_compact_from_wb = {
+        "observation_window_days": from_wb_meta["observation_window_days"],
+        "freshness_mode": from_wb_meta["freshness_mode"],
+        "requested_as_of_date": from_wb_meta["requested_as_of_date"],
+        "as_of_date": from_wb_meta["as_of_date"],
+        "as_of_source": from_wb_meta["as_of_source"],
+        "bundle_type_ids": from_wb_meta["bundle_type_ids"],
+        "sales_window": from_wb_meta["sales_window"],
+        "freshness": expected_compact_freshness,
+        "economic_observed_prices": expected_compact_observed_prices,
+        "economic_observed_commission": expected_compact_commission_meta,
+        "snapshot": {
+            "daily_sales_bundle_count": len(bundle_daily_sales),
+            "daily_sales_total": sum(bundle_daily_sales.values()),
+            "wb_stock_bundle_count": len(payload["bundle_type_ids"]),
+            "wb_stock_total": per_sku_stock_qty * len(payload["bundle_type_ids"]),
+            "wb_stock_updated_bundle_count": len(payload["bundle_type_ids"]),
+        },
+    }
     assert from_wb_meta["daily_sales_by_bundle"][str(seeded["bundle_type"].id)] == bundle_daily_sales["main"]
     assert from_wb_meta["daily_sales_by_bundle"][str(assorti_bundle_type.id)] == bundle_daily_sales["assorti"]
     assert from_wb_meta["wb_stock_by_bundle"][str(seeded["bundle_type"].id)] == per_sku_stock_qty
@@ -2964,19 +2983,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert compact_layer2["contract"] == layer2["contract"]
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
     compact_from_wb = compact_meta["from_wb"]
-    assert "daily_sales_by_bundle" not in compact_from_wb
-    assert "wb_stock_by_bundle" not in compact_from_wb
-    assert "wb_stock_updated_at_by_bundle" not in compact_from_wb
-    assert compact_from_wb["freshness"] == expected_compact_freshness
-    assert compact_from_wb["economic_observed_prices"] == expected_compact_observed_prices
-    assert compact_from_wb["economic_observed_commission"] == expected_compact_commission_meta
-    assert compact_from_wb["snapshot"] == {
-        "daily_sales_bundle_count": len(bundle_daily_sales),
-        "daily_sales_total": sum(bundle_daily_sales.values()),
-        "wb_stock_bundle_count": len(payload["bundle_type_ids"]),
-        "wb_stock_total": per_sku_stock_qty * len(payload["bundle_type_ids"]),
-        "wb_stock_updated_bundle_count": len(payload["bundle_type_ids"]),
-    }
+    assert compact_from_wb == expected_compact_from_wb
     compact_layer5 = compact_meta["layer_5_intervention"]
     assert compact_layer5 == layer5
 
