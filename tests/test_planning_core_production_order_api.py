@@ -12748,15 +12748,28 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "wb_stock_total": int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values())),
         "wb_stock_updated_bundle_count": len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"]),
     }
+    expected_compact_from_wb = {
+        "observation_window_days": full_meta["from_wb"]["observation_window_days"],
+        "freshness_mode": full_meta["from_wb"]["freshness_mode"],
+        "requested_as_of_date": full_meta["from_wb"]["requested_as_of_date"],
+        "as_of_date": full_meta["from_wb"]["as_of_date"],
+        "as_of_source": full_meta["from_wb"]["as_of_source"],
+        "bundle_type_ids": full_meta["from_wb"]["bundle_type_ids"],
+        "sales_window": full_meta["from_wb"]["sales_window"],
+        "freshness": expected_compact_freshness,
+        "economic_observed_prices": {
+            "source": full_meta["from_wb"]["economic_observed_prices"]["source"],
+            "window": full_meta["from_wb"]["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": full_meta["from_wb"]["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": full_meta["from_wb"]["economic_observed_prices"]["prices"],
+            "sample_counts": full_meta["from_wb"]["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": expected_compact_commission_meta,
+        "snapshot": expected_compact_snapshot,
+    }
     compact_from_wb = compact_meta["from_wb"]
-    assert "daily_sales_by_bundle" not in compact_from_wb
-    assert "wb_stock_by_bundle" not in compact_from_wb
-    assert "wb_stock_updated_at_by_bundle" not in compact_from_wb
-    assert compact_from_wb["freshness"] == expected_compact_freshness
-    assert "stock_age_days_by_bundle" not in compact_from_wb["freshness"]
+    assert compact_from_wb == expected_compact_from_wb
     assert compact_meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
-    assert compact_from_wb["economic_observed_commission"] == expected_compact_commission_meta
-    assert compact_from_wb["snapshot"] == expected_compact_snapshot
 
     if profile_name == "overstock":
         assert compact_body["risk_level"] == "overstock"
