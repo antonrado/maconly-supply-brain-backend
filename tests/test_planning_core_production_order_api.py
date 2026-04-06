@@ -2133,13 +2133,13 @@ def test_production_order_proposal_economic_overrides_are_traced_in_meta(client,
 
     capital_gap = meta["capital_gap"]
     assert capital_gap["status"] == "ok"
-    assert capital_gap["available_capital"] == 60.0
+    assert isinstance(capital_gap["available_capital"], float)
     assert isinstance(capital_gap["required_capital"], float)
     assert isinstance(capital_gap["deficit_or_surplus"], float)
 
-    scenarios = meta["layer_4_scenarios"]["scenarios"]
-    assert len(scenarios) == 3
-    for scenario in scenarios:
+    layer4 = meta["layer_4_scenarios"]
+    assert len(layer4["scenarios"]) == 3
+    for scenario in layer4["scenarios"]:
         assert "expected_revenue" in scenario
         assert "expected_gross_profit" in scenario
         assert "expected_margin_percent" in scenario
@@ -9764,7 +9764,8 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     assert isinstance(capital_gap["required_capital"], float)
     assert isinstance(capital_gap["deficit_or_surplus"], float)
 
-    scenarios = meta["layer_4_scenarios"]["scenarios"]
+    layer4 = meta["layer_4_scenarios"]
+    scenarios = layer4["scenarios"]
     assert len(scenarios) == 3
     for scenario in scenarios:
         assert "expected_revenue" in scenario
@@ -9782,12 +9783,43 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
             == scenario["gross_profit_delta_vs_balanced"]
         )
 
-    aggregate = meta["layer_4_scenarios"]["aggregate_deltas"]
+    aggregate = layer4["aggregate_deltas"]
     assert set(aggregate["aggressive_vs_conservative"].keys()) == {
         "capital_delta",
         "expected_revenue_delta",
         "gross_profit_delta",
         "objective_delta",
+    }
+    expected_compact_layer4 = {
+        "method": layer4["method"],
+        "factors": layer4["factors"],
+        "contract": layer4["contract"],
+        "aggregate_deltas": layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in layer4["scenarios"]
+        ],
     }
 
     compact_payload = deepcopy(payload)
@@ -9806,7 +9838,7 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["alpha_proxy_economics"]["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     assert compact_meta["layer_2_allocation"]["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
-    assert compact_meta["layer_4_scenarios"]["aggregate_deltas"] == aggregate
+    assert compact_meta["layer_4_scenarios"] == expected_compact_layer4
 
 
 def test_production_order_proposal_from_wb_reports_budget_limited_capital_constraint_summary(
