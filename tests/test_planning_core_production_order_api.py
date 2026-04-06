@@ -10204,17 +10204,56 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     assert response.status_code == 200, response.text
 
     body = response.json()
+    full_from_wb = body["explanation"]["meta"]["from_wb"]
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
     assert alpha_proxy["economic_source"]["average_realized_price_main"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 3.0
     assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 2.2
 
-    from_wb_observed = body["explanation"]["meta"]["from_wb"]["economic_observed_prices"]
+    from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert from_wb_observed["prices"] == {"main": 3.0, "assorti": 2.2}
     assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
     assert from_wb_observed["sample_counts"]["assorti"]["accepted_samples"] == 1
+    expected_compact_from_wb = {
+        "observation_window_days": full_from_wb["observation_window_days"],
+        "freshness_mode": full_from_wb["freshness_mode"],
+        "requested_as_of_date": full_from_wb["requested_as_of_date"],
+        "as_of_date": full_from_wb["as_of_date"],
+        "as_of_source": full_from_wb["as_of_source"],
+        "bundle_type_ids": full_from_wb["bundle_type_ids"],
+        "sales_window": full_from_wb["sales_window"],
+        "freshness": {
+            "status": full_from_wb["freshness"]["status"],
+            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
+            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
+            "threshold_days": full_from_wb["freshness"]["threshold_days"],
+            "threshold_source": full_from_wb["freshness"]["threshold_source"],
+        },
+        "economic_observed_prices": {
+            "source": full_from_wb["economic_observed_prices"]["source"],
+            "window": full_from_wb["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": full_from_wb["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": full_from_wb["economic_observed_prices"]["prices"],
+            "sample_counts": full_from_wb["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": {
+            "source": full_from_wb["economic_observed_commission"]["source"],
+            "status": full_from_wb["economic_observed_commission"]["status"],
+            "reason": full_from_wb["economic_observed_commission"]["reason"],
+            "commission_percent": full_from_wb["economic_observed_commission"]["commission_percent"],
+            "commission_percent_stats": full_from_wb["economic_observed_commission"]["commission_percent_stats"],
+            "kgvp_supplier_percent_stats": full_from_wb["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+        },
+        "snapshot": {
+            "daily_sales_bundle_count": len(full_from_wb["daily_sales_by_bundle"]),
+            "daily_sales_total": sum(full_from_wb["daily_sales_by_bundle"].values()),
+            "wb_stock_bundle_count": len(full_from_wb["wb_stock_by_bundle"]),
+            "wb_stock_total": int(sum(full_from_wb["wb_stock_by_bundle"].values())),
+            "wb_stock_updated_bundle_count": len(full_from_wb["wb_stock_updated_at_by_bundle"]),
+        },
+    }
 
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
@@ -10232,7 +10271,7 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     )
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_main"] == 3.0
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"]["average_realized_price_assorti"] == 2.2
-    assert compact_meta["from_wb"]["economic_observed_prices"] == from_wb_observed
+    assert compact_meta["from_wb"] == expected_compact_from_wb
 
 
 def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(client, db_session):
