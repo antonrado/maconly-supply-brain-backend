@@ -11072,6 +11072,8 @@ def test_production_order_proposal_from_wb_uses_code_default_layer_proxy_values(
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer2["objective_parameters"] == layer2["objective_parameters"]
     assert compact_layer2["objective_source"] == layer2["objective_source"]
+    assert compact_layer2["decision_quality"] == layer2["decision_quality"]
+    assert compact_layer2["contract"] == layer2["contract"]
     assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
 
