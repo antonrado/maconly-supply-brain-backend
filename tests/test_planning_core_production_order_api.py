@@ -5000,6 +5000,126 @@ def test_production_order_proposal_uses_admin_layer_proxy_defaults_when_request_
     }
 
 
+def test_production_order_proposal_warns_when_invalid_admin_layer_proxy_values_are_ignored(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    article_settings = (
+        db_session.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == seeded["article"].id)
+        .one()
+    )
+    article_settings.production_order_layer3_stockout_boost_max = 1.27
+    article_settings.production_order_layer3_overstock_dampen_max = -0.22
+    article_settings.production_order_layer5_unavoidable_stockout_risk_threshold = 1.24
+    article_settings.production_order_layer5_accelerate_production_risk_threshold = -0.32
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_layer3_stockout_boost_max = 0.11
+    global_settings.default_production_order_layer3_overstock_dampen_max = 0.09
+    global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold = 0.18
+    global_settings.default_production_order_layer5_accelerate_production_risk_threshold = 0.28
+    db_session.commit()
+
+    payload = _build_payload(
+        article_id=seeded["article"].id,
+        bundle_type_id=seeded["bundle_type"].id,
+        size_s_id=seeded["size_s"].id,
+        size_m_id=seeded["size_m"].id,
+    )
+    payload["overrides"]["fabric_min_batch_qty_default"] = 0
+    payload["overrides"]["elastic_min_batch_qty_default"] = 0
+
+    response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.11
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.09
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.18
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.28,
+        "increase_price_to_slow_velocity": 0.18,
+        "reduce_order_size": 0.10,
+    }
+    assert alpha_proxy["layer_proxy_source"]["layer3_stockout_boost_max"] == "global_default"
+    assert alpha_proxy["layer_proxy_source"]["layer3_overstock_dampen_max"] == "global_default"
+    assert alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "global_default"
+    assert alpha_proxy["layer_proxy_source"]["layer5_accelerate_production_risk_threshold"] == "global_default"
+    invalid_layer_proxy_warning = next(
+        warning
+        for warning in meta["warnings"]
+        if warning["code"] == "layer_proxy_invalid_values_ignored_at_runtime"
+    )
+    assert invalid_layer_proxy_warning == {
+        "code": "layer_proxy_invalid_values_ignored_at_runtime",
+        "severity": "MEDIUM",
+        "message": "one or more production-order layer proxy values were invalid and ignored at runtime; lower-precedence or default values were used instead",
+        "article_id": seeded["article"].id,
+        "field": "layer_proxy_settings",
+        "field_metadata": {
+            "description": "Production-order Layer 3/5 proxy settings resolved from request/admin/global sources",
+            "type": "object",
+        },
+        "ignored_value_count": 4,
+        "ignored_fields": [
+            "layer3_overstock_dampen_max",
+            "layer3_stockout_boost_max",
+            "layer5_accelerate_production_risk_threshold",
+            "layer5_unavoidable_stockout_risk_threshold",
+        ],
+        "ignored_sources": ["admin_defaults"],
+        "ignored_values": [
+            {
+                "field": "layer3_stockout_boost_max",
+                "invalid_source": "admin_defaults",
+                "invalid_value": 1.27,
+                "effective_source": "global_default",
+                "effective_value": 0.11,
+            },
+            {
+                "field": "layer3_overstock_dampen_max",
+                "invalid_source": "admin_defaults",
+                "invalid_value": -0.22,
+                "effective_source": "global_default",
+                "effective_value": 0.09,
+            },
+            {
+                "field": "layer5_unavoidable_stockout_risk_threshold",
+                "invalid_source": "admin_defaults",
+                "invalid_value": 1.24,
+                "effective_source": "global_default",
+                "effective_value": 0.18,
+            },
+            {
+                "field": "layer5_accelerate_production_risk_threshold",
+                "invalid_source": "admin_defaults",
+                "invalid_value": -0.32,
+                "effective_source": "global_default",
+                "effective_value": 0.28,
+            },
+        ],
+        "action": "Review stored production-order layer proxy values; each unit-interval setting must stay within [0, 1].",
+        "next_steps": ["repair_layer_proxy_settings_values"],
+    }
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=compact_payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_alpha_proxy = compact_meta["alpha_proxy_economics"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
+    assert compact_meta["warnings"] == meta["warnings"]
+
+
 def test_production_order_proposal_uses_admin_economic_defaults_when_request_missing(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
@@ -11650,6 +11770,152 @@ def test_production_order_proposal_from_wb_uses_global_layer_proxy_defaults_when
     assert compact_layer2 == expected_compact_layer2
     assert compact_layer4 == expected_compact_layer4
     assert compact_layer5 == layer5
+
+
+def test_production_order_proposal_from_wb_warns_when_invalid_global_layer_proxy_values_are_ignored(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
+
+    global_settings = db_session.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).one()
+    global_settings.default_production_order_layer3_stockout_boost_max = 1.19
+    global_settings.default_production_order_layer3_overstock_dampen_max = -0.11
+    global_settings.default_production_order_layer5_unavoidable_stockout_risk_threshold = 1.29
+    global_settings.default_production_order_layer5_accelerate_production_risk_threshold = -0.39
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-LAYER-PROXY-GLOBAL-INVALID",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-LAYER-PROXY-GLOBAL-INVALID",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=60,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-LAYER-PROXY-GLOBAL-INVALID",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=20,
+            updated_at=stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.3
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.4
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
+        "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    }
+    assert alpha_proxy["layer_proxy_source"]["layer3_stockout_boost_max"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["layer_proxy_source"]["layer3_overstock_dampen_max"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["layer_proxy_source"]["layer5_accelerate_production_risk_threshold"] == LAYER_PROXY_VALUE_SOURCE
+    invalid_layer_proxy_warning = next(
+        warning
+        for warning in meta["warnings"]
+        if warning["code"] == "layer_proxy_invalid_values_ignored_at_runtime"
+    )
+    assert invalid_layer_proxy_warning == {
+        "code": "layer_proxy_invalid_values_ignored_at_runtime",
+        "severity": "MEDIUM",
+        "message": "one or more production-order layer proxy values were invalid and ignored at runtime; lower-precedence or default values were used instead",
+        "article_id": seeded["article"].id,
+        "field": "layer_proxy_settings",
+        "field_metadata": {
+            "description": "Production-order Layer 3/5 proxy settings resolved from request/admin/global sources",
+            "type": "object",
+        },
+        "ignored_value_count": 4,
+        "ignored_fields": [
+            "layer3_overstock_dampen_max",
+            "layer3_stockout_boost_max",
+            "layer5_accelerate_production_risk_threshold",
+            "layer5_unavoidable_stockout_risk_threshold",
+        ],
+        "ignored_sources": ["global_default"],
+        "ignored_values": [
+            {
+                "field": "layer3_stockout_boost_max",
+                "invalid_source": "global_default",
+                "invalid_value": 1.19,
+                "effective_source": LAYER_PROXY_VALUE_SOURCE,
+                "effective_value": 0.3,
+            },
+            {
+                "field": "layer3_overstock_dampen_max",
+                "invalid_source": "global_default",
+                "invalid_value": -0.11,
+                "effective_source": LAYER_PROXY_VALUE_SOURCE,
+                "effective_value": 0.4,
+            },
+            {
+                "field": "layer5_unavoidable_stockout_risk_threshold",
+                "invalid_source": "global_default",
+                "invalid_value": 1.29,
+                "effective_source": LAYER_PROXY_VALUE_SOURCE,
+                "effective_value": 0.25,
+            },
+            {
+                "field": "layer5_accelerate_production_risk_threshold",
+                "invalid_source": "global_default",
+                "invalid_value": -0.39,
+                "effective_source": LAYER_PROXY_VALUE_SOURCE,
+                "effective_value": 0.35,
+            },
+        ],
+        "action": "Review stored production-order layer proxy values; each unit-interval setting must stay within [0, 1].",
+        "next_steps": ["repair_layer_proxy_settings_values"],
+    }
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json=compact_payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_alpha_proxy = compact_meta["alpha_proxy_economics"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_production_order_proposal_from_wb_uses_admin_layer_proxy_defaults_when_request_missing(

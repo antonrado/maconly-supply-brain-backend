@@ -97,6 +97,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Availability-first truth surfacing is now hardened for capital-blocked shortages on both direct and from-WB proposal paths: when `arrival_projection.status=shortage_before_arrival` but capital constraint trims all feasible order lines and the facade remains `recommendation.action=wait`, explainability now emits a dedicated `HIGH` severity warning (`shortage_before_arrival_wait_blocked_by_capital_constraint`) in both full and compact modes so that wait is not presented as implicitly safe.
   - Layer 5 threshold-order runtime truth is now operator-visible on both direct and from-WB proposal paths: when `layer5_accelerate_production_risk_threshold` is configured below `layer5_unavoidable_stockout_risk_threshold` and is clamped upward at runtime, explainability now emits a dedicated `MEDIUM` severity warning (`layer5_accelerate_threshold_clamped_to_unavoidable`) in both full and compact modes instead of relying only on `alpha_proxy_economics.layer5_threshold_order_adjusted` and `layer_proxy_source=...|clamped_to_unavoidable`.
   - This Layer 5 threshold-clamp hardening slice is validated at three levels in the current work block: focused clamp regressions (`2 passed`), full `tests/test_planning_core_production_order_api.py` (`168 passed`), and full repo pytest (`402 passed`).
+  - Layer-proxy dirty-data runtime truth is now operator-visible on both direct and from-WB proposal paths: when persisted Layer 3/5 proxy values fall outside the valid `[0,1]` interval and are ignored at runtime, explainability now emits a dedicated `MEDIUM` severity warning (`layer_proxy_invalid_values_ignored_at_runtime`) in both full and compact modes instead of silently falling through to lower-precedence or code-default values.
+  - This invalid layer-proxy value hardening slice is validated at three levels in the current work block: focused dirty-data regressions (`2 passed`), full `tests/test_planning_core_production_order_api.py` (`170 passed`), and full repo pytest (`404 passed`).
   - Narrow R5 modularization has started in facade-preserving mode: the shared economics helper cluster now lives in `app/services/planning_production_order_economics.py`, while `app/services/planning_production_order.py` preserves the existing external service surface and test imports via re-exported names.
   - The second narrow R5 extraction slice is now complete for compact explainability projection: `app/services/planning_production_order_explainability.py` owns compact-step/meta shaping, while `app/services/planning_production_order.py` continues to preserve compatibility imports and runtime behavior.
   - The third narrow R5 extraction slice is now complete for assorti classification support: `app/services/planning_production_order_assorti.py` owns assorti mapping parse/load helpers and source constants, while `app/services/planning_production_order.py` preserves compatibility imports and deterministic Layer 1 explainability semantics.
@@ -249,28 +251,28 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-07 15:34 +07:00`
+- Date: `2026-04-07 16:05 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `5237047`
+- Last commit (`git log -1 --oneline`): `7eeefd6`
 - Gates:
-  - `python -m pytest tests/test_planning_core_production_order_api.py -k "threshold_order_is_clamped_when_admin_invalid"` → `2 passed`
-  - `python -m pytest tests/test_planning_core_production_order_api.py` → `168 passed`
-  - `python -m pytest` → `402 passed`
+  - `python -m pytest tests/test_planning_core_production_order_api.py -k "invalid_admin_layer_proxy_values_are_ignored or invalid_global_layer_proxy_values_are_ignored"` → `2 passed`
+  - `python -m pytest tests/test_planning_core_production_order_api.py` → `170 passed`
+  - `python -m pytest` → `404 passed`
 
 ### Minimal raw outputs
 
 ```text
-$ python -m pytest tests/test_planning_core_production_order_api.py -k "threshold_order_is_clamped_when_admin_invalid"
+$ python -m pytest tests/test_planning_core_production_order_api.py -k "invalid_admin_layer_proxy_values_are_ignored or invalid_global_layer_proxy_values_are_ignored"
 ..
-2 passed, 166 deselected in 1.05s
+2 passed, 168 deselected in 2.02s
 ```
 
 ```text
 $ python -m pytest tests/test_planning_core_production_order_api.py
-168 passed in 3.89s
+170 passed in 3.97s
 ```
 
 ```text
 $ python -m pytest
-402 passed in 6.53s
+404 passed in 6.59s
 ```

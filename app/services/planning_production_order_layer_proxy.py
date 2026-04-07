@@ -32,6 +32,7 @@ class _EffectiveLayerProxySettings:
     layer5_reduce_order_marginal_profit_rate: float
     threshold_order_adjusted: bool
     source: dict[str, str]
+    invalid_values_ignored: list[dict[str, object]]
 
 
 def _normalize_unit_interval(value: float | None) -> float | None:
@@ -51,22 +52,68 @@ def _normalize_unit_interval(value: float | None) -> float | None:
 
 def _resolve_layer_proxy_float(
     *,
+    field_name: str | None,
     request_value: float | None,
     admin_value: float | None,
     global_value: float | None,
     code_default: float,
-) -> tuple[float, str]:
-    request_normalized = _normalize_unit_interval(request_value)
-    admin_normalized = _normalize_unit_interval(admin_value)
-    global_normalized = _normalize_unit_interval(global_value)
+) -> tuple[float, str, list[dict[str, object]]]:
+    ignored_values: list[dict[str, object]] = []
 
+    def _serialize_invalid_value(value: object) -> object:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return round(float(value), 4)
+        return value
+
+    def _record_invalid(source: str, raw_value: object) -> None:
+        if field_name is None:
+            return
+        ignored_values.append(
+            {
+                "field": field_name,
+                "invalid_source": source,
+                "invalid_value": _serialize_invalid_value(raw_value),
+            }
+        )
+
+    def _finalize(effective_value: float, effective_source: str) -> tuple[float, str, list[dict[str, object]]]:
+        if not ignored_values:
+            return effective_value, effective_source, []
+        effective_value_rounded = round(float(effective_value), 4)
+        return (
+            effective_value,
+            effective_source,
+            [
+                {
+                    **item,
+                    "effective_source": effective_source,
+                    "effective_value": effective_value_rounded,
+                }
+                for item in ignored_values
+            ],
+        )
+
+    request_normalized = _normalize_unit_interval(request_value)
     if request_normalized is not None:
-        return request_normalized, "request"
+        return request_normalized, "request", []
+    if request_value is not None:
+        _record_invalid("request", request_value)
+
+    admin_normalized = _normalize_unit_interval(admin_value)
     if admin_normalized is not None:
-        return admin_normalized, "admin_defaults"
+        return _finalize(admin_normalized, "admin_defaults")
+    if admin_value is not None:
+        _record_invalid("admin_defaults", admin_value)
+
+    global_normalized = _normalize_unit_interval(global_value)
     if global_normalized is not None:
-        return global_normalized, "global_default"
-    return float(code_default), LAYER_PROXY_VALUE_SOURCE
+        return _finalize(global_normalized, "global_default")
+    if global_value is not None:
+        _record_invalid("global_default", global_value)
+
+    return _finalize(float(code_default), LAYER_PROXY_VALUE_SOURCE)
 
 
 def _resolve_layer_proxy_settings(
@@ -228,71 +275,89 @@ def _resolve_layer_proxy_settings(
         else None
     )
 
-    layer3_stockout_boost_max, layer3_stockout_source = _resolve_layer_proxy_float(
+    invalid_values_ignored: list[dict[str, object]] = []
+
+    layer3_stockout_boost_max, layer3_stockout_source, layer3_stockout_invalid = _resolve_layer_proxy_float(
         request_value=request_layer3_stockout_boost,
         admin_value=admin_layer3_stockout_boost,
         global_value=global_layer3_stockout_boost,
         code_default=LAYER3_STOCKOUT_BOOST_MAX,
+        field_name="layer3_stockout_boost_max",
     )
-    layer3_overstock_dampen_max, layer3_overstock_source = _resolve_layer_proxy_float(
+    invalid_values_ignored.extend(layer3_stockout_invalid)
+    layer3_overstock_dampen_max, layer3_overstock_source, layer3_overstock_invalid = _resolve_layer_proxy_float(
         request_value=request_layer3_overstock_dampen,
         admin_value=admin_layer3_overstock_dampen,
         global_value=global_layer3_overstock_dampen,
         code_default=LAYER3_OVERSTOCK_DAMPEN_MAX,
+        field_name="layer3_overstock_dampen_max",
     )
-    layer5_unavoidable_threshold, layer5_unavoidable_source = _resolve_layer_proxy_float(
+    invalid_values_ignored.extend(layer3_overstock_invalid)
+    layer5_unavoidable_threshold, layer5_unavoidable_source, layer5_unavoidable_invalid = _resolve_layer_proxy_float(
         request_value=request_layer5_unavoidable_threshold,
         admin_value=admin_layer5_unavoidable_threshold,
         global_value=global_layer5_unavoidable_threshold,
         code_default=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        field_name="layer5_unavoidable_stockout_risk_threshold",
     )
-    layer5_accelerate_threshold, layer5_accelerate_source = _resolve_layer_proxy_float(
+    invalid_values_ignored.extend(layer5_unavoidable_invalid)
+    layer5_accelerate_threshold, layer5_accelerate_source, layer5_accelerate_invalid = _resolve_layer_proxy_float(
         request_value=request_layer5_accelerate_threshold,
         admin_value=admin_layer5_accelerate_threshold,
         global_value=global_layer5_accelerate_threshold,
         code_default=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        field_name="layer5_accelerate_production_risk_threshold",
     )
-    layer2_capital_cost_rate, layer2_capital_cost_rate_source = _resolve_layer_proxy_float(
+    invalid_values_ignored.extend(layer5_accelerate_invalid)
+    layer2_capital_cost_rate, layer2_capital_cost_rate_source, _ = _resolve_layer_proxy_float(
         request_value=request_layer2_capital_cost_rate,
         admin_value=admin_layer2_capital_cost_rate,
         global_value=global_layer2_capital_cost_rate,
         code_default=LAYER2_CAPITAL_COST_RATE,
+        field_name=None,
     )
-    layer2_stockout_penalty_weight, layer2_stockout_penalty_weight_source = _resolve_layer_proxy_float(
+    layer2_stockout_penalty_weight, layer2_stockout_penalty_weight_source, _ = _resolve_layer_proxy_float(
         request_value=request_layer2_stockout_penalty_weight,
         admin_value=admin_layer2_stockout_penalty_weight,
         global_value=global_layer2_stockout_penalty_weight,
         code_default=LAYER2_STOCKOUT_PENALTY_WEIGHT,
+        field_name=None,
     )
-    layer2_overstock_penalty_weight, layer2_overstock_penalty_weight_source = _resolve_layer_proxy_float(
+    layer2_overstock_penalty_weight, layer2_overstock_penalty_weight_source, _ = _resolve_layer_proxy_float(
         request_value=request_layer2_overstock_penalty_weight,
         admin_value=admin_layer2_overstock_penalty_weight,
         global_value=global_layer2_overstock_penalty_weight,
         code_default=LAYER2_OVERSTOCK_PENALTY_WEIGHT,
+        field_name=None,
     )
-    layer5_accelerate_action_cost_rate, layer5_accelerate_action_cost_rate_source = _resolve_layer_proxy_float(
+    layer5_accelerate_action_cost_rate, layer5_accelerate_action_cost_rate_source, _ = _resolve_layer_proxy_float(
         request_value=request_layer5_accelerate_action_cost_rate,
         admin_value=admin_layer5_accelerate_action_cost_rate,
         global_value=global_layer5_accelerate_action_cost_rate,
         code_default=LAYER5_ACCELERATE_ACTION_COST_RATE,
+        field_name=None,
     )
     (
         layer5_price_slowdown_lost_volume_rate,
         layer5_price_slowdown_lost_volume_rate_source,
+        _,
     ) = _resolve_layer_proxy_float(
         request_value=request_layer5_price_slowdown_lost_volume_rate,
         admin_value=admin_layer5_price_slowdown_lost_volume_rate,
         global_value=global_layer5_price_slowdown_lost_volume_rate,
         code_default=LAYER5_PRICE_SLOWDOWN_LOST_VOLUME_RATE,
+        field_name=None,
     )
     (
         layer5_reduce_order_marginal_profit_rate,
         layer5_reduce_order_marginal_profit_rate_source,
+        _,
     ) = _resolve_layer_proxy_float(
         request_value=request_layer5_reduce_order_marginal_profit_rate,
         admin_value=admin_layer5_reduce_order_marginal_profit_rate,
         global_value=global_layer5_reduce_order_marginal_profit_rate,
         code_default=LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+        field_name=None,
     )
 
     threshold_order_adjusted = False
@@ -329,4 +394,5 @@ def _resolve_layer_proxy_settings(
                 layer5_reduce_order_marginal_profit_rate_source
             ),
         },
+        invalid_values_ignored=invalid_values_ignored,
     )

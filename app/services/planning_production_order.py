@@ -3734,6 +3734,47 @@ def _build_layer5_threshold_clamped_warning(
     }
 
 
+def _build_layer_proxy_invalid_values_ignored_warning(
+    *,
+    article_id: int,
+    invalid_values_ignored: list[dict[str, object]],
+) -> dict[str, object]:
+    ignored_fields = sorted(
+        {
+            str(item.get("field", "")).strip()
+            for item in invalid_values_ignored
+            if str(item.get("field", "")).strip()
+        }
+    )
+    ignored_sources = sorted(
+        {
+            str(item.get("invalid_source", "")).strip()
+            for item in invalid_values_ignored
+            if str(item.get("invalid_source", "")).strip()
+        }
+    )
+    return {
+        "code": "layer_proxy_invalid_values_ignored_at_runtime",
+        "severity": "MEDIUM",
+        "message": (
+            "one or more production-order layer proxy values were invalid and ignored at runtime; "
+            "lower-precedence or default values were used instead"
+        ),
+        "article_id": int(article_id),
+        "field": "layer_proxy_settings",
+        "field_metadata": {
+            "description": "Production-order Layer 3/5 proxy settings resolved from request/admin/global sources",
+            "type": "object",
+        },
+        "ignored_value_count": len(invalid_values_ignored),
+        "ignored_fields": ignored_fields,
+        "ignored_sources": ignored_sources,
+        "ignored_values": invalid_values_ignored,
+        "action": "Review stored production-order layer proxy values; each unit-interval setting must stay within [0, 1].",
+        "next_steps": ["repair_layer_proxy_settings_values"],
+    }
+
+
 def _build_shortage_wait_blocked_by_capital_constraint_warning(
     *,
     article_id: int,
@@ -5456,6 +5497,13 @@ def build_production_order_proposal(
     )
 
     explanation_warnings = list(economics_warnings)
+    if layer_proxy_settings.invalid_values_ignored:
+        explanation_warnings.append(
+            _build_layer_proxy_invalid_values_ignored_warning(
+                article_id=request.article_id,
+                invalid_values_ignored=layer_proxy_settings.invalid_values_ignored,
+            )
+        )
     if layer_proxy_settings.threshold_order_adjusted:
         explanation_warnings.append(
             _build_layer5_threshold_clamped_warning(
