@@ -5815,7 +5815,9 @@ def test_production_order_proposal_layer5_threshold_order_is_clamped_when_admin_
     response = client.post("/api/v1/planning/core/production-order/proposal", json=payload)
     assert response.status_code == 200, response.text
 
-    alpha_proxy = response.json()["explanation"]["meta"]["alpha_proxy_economics"]
+    body = response.json()
+    meta = body["explanation"]["meta"]
+    alpha_proxy = meta["alpha_proxy_economics"]
     assert alpha_proxy["layer5_threshold_order_adjusted"] is True
     assert alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "admin_defaults"
     assert (
@@ -5827,6 +5829,45 @@ def test_production_order_proposal_layer5_threshold_order_is_clamped_when_admin_
         "increase_price_to_slow_velocity": 0.44,
         "reduce_order_size": 0.10,
     }
+    assert meta["warnings"][-1] == {
+        "code": "layer5_accelerate_threshold_clamped_to_unavoidable",
+        "severity": "MEDIUM",
+        "message": "layer5_accelerate_production_risk_threshold was below layer5_unavoidable_stockout_risk_threshold and was clamped upward at runtime",
+        "article_id": seeded["article"].id,
+        "field": "layer5_accelerate_production_risk_threshold",
+        "field_metadata": {
+            "description": "Layer 5 accelerate-production risk threshold input",
+            "type": "number",
+        },
+        "threshold_order_adjusted": True,
+        "accelerate_threshold_effective": 0.44,
+        "unavoidable_threshold_effective": 0.44,
+        "effective_source": "admin_defaults|clamped_to_unavoidable",
+        "action": "Review Layer 5 threshold inputs; accelerate threshold cannot be lower than unavoidable stockout threshold.",
+        "next_steps": ["review_layer5_threshold_configuration"],
+    }
+
+    compact_payload = deepcopy(payload)
+    compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal", json=compact_payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
+    compact_alpha_proxy = compact_meta["alpha_proxy_economics"]
+    compact_layer5 = compact_meta["layer_5_intervention"]
+    layer5 = meta["layer_5_intervention"]
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_alpha_proxy == alpha_proxy
+    assert compact_alpha_proxy["layer5_threshold_order_adjusted"] is True
+    assert compact_alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "admin_defaults"
+    assert (
+        compact_alpha_proxy["layer_proxy_source"]["layer5_accelerate_production_risk_threshold"]
+        == "admin_defaults|clamped_to_unavoidable"
+    )
+    assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
+    assert compact_layer5 == layer5
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_layer3_purchase_shaping_calibration_boosts_and_dampens_by_risk():
@@ -12094,6 +12135,7 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
     assert response.status_code == 200, response.text
 
     body = response.json()
+    meta = body["explanation"]["meta"]
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
     assert alpha_proxy["layer5_threshold_order_adjusted"] is True
     assert alpha_proxy["layer_proxy_source"]["layer5_unavoidable_stockout_risk_threshold"] == "admin_defaults"
@@ -12106,12 +12148,30 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
         "increase_price_to_slow_velocity": 0.44,
         "reduce_order_size": 0.10,
     }
+    assert meta["warnings"][-1] == {
+        "code": "layer5_accelerate_threshold_clamped_to_unavoidable",
+        "severity": "MEDIUM",
+        "message": "layer5_accelerate_production_risk_threshold was below layer5_unavoidable_stockout_risk_threshold and was clamped upward at runtime",
+        "article_id": seeded["article"].id,
+        "field": "layer5_accelerate_production_risk_threshold",
+        "field_metadata": {
+            "description": "Layer 5 accelerate-production risk threshold input",
+            "type": "number",
+        },
+        "threshold_order_adjusted": True,
+        "accelerate_threshold_effective": 0.44,
+        "unavoidable_threshold_effective": 0.44,
+        "effective_source": "admin_defaults|clamped_to_unavoidable",
+        "action": "Review Layer 5 threshold inputs; accelerate threshold cannot be lower than unavoidable stockout threshold.",
+        "next_steps": ["review_layer5_threshold_configuration"],
+    }
 
     payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
     assert compact_response.status_code == 200, compact_response.text
 
     compact_body = compact_response.json()
+    compact_meta = compact_body["explanation"]["meta"]
     compact_alpha_proxy = compact_body["explanation"]["meta"]["alpha_proxy_economics"]
     compact_layer5 = compact_body["explanation"]["meta"]["layer_5_intervention"]
     layer5 = body["explanation"]["meta"]["layer_5_intervention"]
@@ -12125,6 +12185,7 @@ def test_production_order_proposal_from_wb_layer5_threshold_order_is_clamped_whe
     )
     assert compact_alpha_proxy["layer_5_signal_thresholds"] == alpha_proxy["layer_5_signal_thresholds"]
     assert compact_layer5 == layer5
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_production_order_proposal_from_wb_layer3_calibration_changes_qty_but_not_layer2_decisions(

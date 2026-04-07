@@ -95,7 +95,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Economic Alpha now emits trusted-economics diagnostics in both full/compact explainability (`explanation.meta.economics_trust`, `explanation.meta.warnings`) and in `alpha_proxy_economics` (`economics_trust_level`, trust payload): per-key-field source map, code-default key-field count, and code-default dominance ratio drive deterministic trust levels (`trusted|partial|untrusted`) with explicit warning codes/severity.
   - Production-order capital governance is now explicit at API runtime: default `capital_governance_mode=strict` preserves deterministic `422` behavior when `available_capital` cannot be resolved from `request|admin_defaults|global_default`, while opt-in `capital_governance_mode=safe_default` applies a zero-capital fallback with `HIGH` severity warning, explainability/meta tracing (`capital_governance`), and no unconstrained recommendation flow for both direct and from-WB paths.
   - Availability-first truth surfacing is now hardened for capital-blocked shortages on both direct and from-WB proposal paths: when `arrival_projection.status=shortage_before_arrival` but capital constraint trims all feasible order lines and the facade remains `recommendation.action=wait`, explainability now emits a dedicated `HIGH` severity warning (`shortage_before_arrival_wait_blocked_by_capital_constraint`) in both full and compact modes so that wait is not presented as implicitly safe.
-  - This blocked-shortage hardening slice is validated at three levels in the current work block: focused safe-default regressions (`2 passed`), full `tests/test_planning_core_production_order_api.py` (`168 passed`), and full repo pytest (`402 passed`).
+  - Layer 5 threshold-order runtime truth is now operator-visible on both direct and from-WB proposal paths: when `layer5_accelerate_production_risk_threshold` is configured below `layer5_unavoidable_stockout_risk_threshold` and is clamped upward at runtime, explainability now emits a dedicated `MEDIUM` severity warning (`layer5_accelerate_threshold_clamped_to_unavoidable`) in both full and compact modes instead of relying only on `alpha_proxy_economics.layer5_threshold_order_adjusted` and `layer_proxy_source=...|clamped_to_unavoidable`.
+  - This Layer 5 threshold-clamp hardening slice is validated at three levels in the current work block: focused clamp regressions (`2 passed`), full `tests/test_planning_core_production_order_api.py` (`168 passed`), and full repo pytest (`402 passed`).
   - Narrow R5 modularization has started in facade-preserving mode: the shared economics helper cluster now lives in `app/services/planning_production_order_economics.py`, while `app/services/planning_production_order.py` preserves the existing external service surface and test imports via re-exported names.
   - The second narrow R5 extraction slice is now complete for compact explainability projection: `app/services/planning_production_order_explainability.py` owns compact-step/meta shaping, while `app/services/planning_production_order.py` continues to preserve compatibility imports and runtime behavior.
   - The third narrow R5 extraction slice is now complete for assorti classification support: `app/services/planning_production_order_assorti.py` owns assorti mapping parse/load helpers and source constants, while `app/services/planning_production_order.py` preserves compatibility imports and deterministic Layer 1 explainability semantics.
@@ -248,28 +249,28 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-07 14:46 +07:00`
+- Date: `2026-04-07 15:34 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `f575d67`
+- Last commit (`git log -1 --oneline`): `5237047`
 - Gates:
-  - `python -m pytest tests/test_planning_core_production_order_api.py -k "safe_default_mode_applies_zero_capital_fallback"` → `2 passed`
+  - `python -m pytest tests/test_planning_core_production_order_api.py -k "threshold_order_is_clamped_when_admin_invalid"` → `2 passed`
   - `python -m pytest tests/test_planning_core_production_order_api.py` → `168 passed`
   - `python -m pytest` → `402 passed`
 
 ### Minimal raw outputs
 
 ```text
-$ python -m pytest tests/test_planning_core_production_order_api.py -k "safe_default_mode_applies_zero_capital_fallback"
+$ python -m pytest tests/test_planning_core_production_order_api.py -k "threshold_order_is_clamped_when_admin_invalid"
 ..
-2 passed, 166 deselected in 1.95s
+2 passed, 166 deselected in 1.05s
 ```
 
 ```text
 $ python -m pytest tests/test_planning_core_production_order_api.py
-168 passed in 4.18s
+168 passed in 3.89s
 ```
 
 ```text
 $ python -m pytest
-402 passed in 7.25s
+402 passed in 6.53s
 ```

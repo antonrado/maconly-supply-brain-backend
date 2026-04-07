@@ -3702,6 +3702,38 @@ def _build_available_capital_safe_default_warning(
     }
 
 
+def _build_layer5_threshold_clamped_warning(
+    *,
+    article_id: int,
+    accelerate_threshold_effective: float,
+    unavoidable_threshold_effective: float,
+    effective_source: object,
+) -> dict[str, object]:
+    return {
+        "code": "layer5_accelerate_threshold_clamped_to_unavoidable",
+        "severity": "MEDIUM",
+        "message": (
+            "layer5_accelerate_production_risk_threshold was below "
+            "layer5_unavoidable_stockout_risk_threshold and was clamped upward at runtime"
+        ),
+        "article_id": int(article_id),
+        "field": "layer5_accelerate_production_risk_threshold",
+        "field_metadata": {
+            "description": "Layer 5 accelerate-production risk threshold input",
+            "type": "number",
+        },
+        "threshold_order_adjusted": True,
+        "accelerate_threshold_effective": round(float(accelerate_threshold_effective), 4),
+        "unavoidable_threshold_effective": round(float(unavoidable_threshold_effective), 4),
+        "effective_source": effective_source,
+        "action": (
+            "Review Layer 5 threshold inputs; accelerate threshold cannot be lower than unavoidable "
+            "stockout threshold."
+        ),
+        "next_steps": ["review_layer5_threshold_configuration"],
+    }
+
+
 def _build_shortage_wait_blocked_by_capital_constraint_warning(
     *,
     article_id: int,
@@ -5424,6 +5456,21 @@ def build_production_order_proposal(
     )
 
     explanation_warnings = list(economics_warnings)
+    if layer_proxy_settings.threshold_order_adjusted:
+        explanation_warnings.append(
+            _build_layer5_threshold_clamped_warning(
+                article_id=request.article_id,
+                accelerate_threshold_effective=(
+                    layer_proxy_settings.layer5_accelerate_production_risk_threshold
+                ),
+                unavoidable_threshold_effective=(
+                    layer_proxy_settings.layer5_unavoidable_stockout_risk_threshold
+                ),
+                effective_source=layer_proxy_settings.source.get(
+                    "layer5_accelerate_production_risk_threshold"
+                ),
+            )
+        )
     shortage_wait_blocked = (
         arrival_projection.status == "shortage_before_arrival"
         and action == "wait"
