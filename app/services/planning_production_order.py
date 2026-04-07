@@ -3702,6 +3702,42 @@ def _build_available_capital_safe_default_warning(
     }
 
 
+def _build_shortage_wait_blocked_by_capital_constraint_warning(
+    *,
+    article_id: int,
+    projected_shortage_before_arrival: int,
+    capital_constraint_summary: dict[str, object],
+    available_capital_effective: float | None,
+) -> dict[str, object]:
+    return {
+        "code": "shortage_before_arrival_wait_blocked_by_capital_constraint",
+        "severity": "HIGH",
+        "message": (
+            "shortage_before_arrival detected, but recommendation remained wait because capital "
+            "constraint trimmed feasible order quantity to zero"
+        ),
+        "article_id": int(article_id),
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input applied to production-order capital constraint",
+            "type": "number",
+        },
+        "arrival_projection_status": "shortage_before_arrival",
+        "projected_shortage_before_arrival": int(projected_shortage_before_arrival),
+        "recommendation_action": "wait",
+        "capital_constraint_status": capital_constraint_summary.get("status"),
+        "available_capital_effective": available_capital_effective,
+        "required_capital_before_constraint": capital_constraint_summary.get(
+            "required_capital_before_constraint"
+        ),
+        "allocated_capital_after_constraint": capital_constraint_summary.get(
+            "allocated_capital_after_constraint"
+        ),
+        "action": "Provide or increase available_capital before treating wait as safe under shortage.",
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
+
+
 def _resolve_from_wb_freshness_thresholds(
     db: Session,
     article_id: int,
@@ -5387,6 +5423,25 @@ def build_production_order_proposal(
         candidate_lines=candidate_lines,
     )
 
+    explanation_warnings = list(economics_warnings)
+    shortage_wait_blocked = (
+        arrival_projection.status == "shortage_before_arrival"
+        and action == "wait"
+        and str(capital_constraint_summary.get("status")) == "budget_limited_applied"
+        and bool(capital_constraint_summary.get("constrained"))
+        and int(capital_constraint_summary.get("line_count_before", 0) or 0) > 0
+        and int(capital_constraint_summary.get("line_count_after", 0) or 0) == 0
+    )
+    if shortage_wait_blocked:
+        explanation_warnings.append(
+            _build_shortage_wait_blocked_by_capital_constraint_warning(
+                article_id=request.article_id,
+                projected_shortage_before_arrival=arrival_projection.projected_shortage_before_arrival,
+                capital_constraint_summary=capital_constraint_summary,
+                available_capital_effective=economic_settings.available_capital,
+            )
+        )
+
     elastic_uplift_line_keys_items = [
         {
             "color_id": color_id,
@@ -5486,7 +5541,7 @@ def build_production_order_proposal(
                 f"{economics_trust['code_default_key_fields_count']}, "
                 "code_default_dominance_ratio="
                 f"{economics_trust['code_default_dominance_ratio']}, "
-                f"warnings={economics_warnings}."
+                f"warnings={explanation_warnings}."
             ),
             (
                 "Assorti classification: "
@@ -5618,7 +5673,7 @@ def build_production_order_proposal(
             ),
         ],
         meta={
-            "warnings": economics_warnings,
+            "warnings": explanation_warnings,
             "economics_trust": economics_trust,
             "capital_governance": capital_governance,
             "sources": {

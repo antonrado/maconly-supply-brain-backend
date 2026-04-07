@@ -94,6 +94,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Layer 2 now emits explicit legacy-alias deprecation-plan diagnostics (`deprecated_after`, policy, legacy gate aliases, canonical replacement map) in `decision_quality`, `explanation.meta.layer_2_allocation`, and `explanation.meta.alpha_proxy_economics.layer_2_legacy_alias_deprecation_plan` while keeping aliases non-breaking during the transition window.
   - Economic Alpha now emits trusted-economics diagnostics in both full/compact explainability (`explanation.meta.economics_trust`, `explanation.meta.warnings`) and in `alpha_proxy_economics` (`economics_trust_level`, trust payload): per-key-field source map, code-default key-field count, and code-default dominance ratio drive deterministic trust levels (`trusted|partial|untrusted`) with explicit warning codes/severity.
   - Production-order capital governance is now explicit at API runtime: default `capital_governance_mode=strict` preserves deterministic `422` behavior when `available_capital` cannot be resolved from `request|admin_defaults|global_default`, while opt-in `capital_governance_mode=safe_default` applies a zero-capital fallback with `HIGH` severity warning, explainability/meta tracing (`capital_governance`), and no unconstrained recommendation flow for both direct and from-WB paths.
+  - Availability-first truth surfacing is now hardened for capital-blocked shortages on both direct and from-WB proposal paths: when `arrival_projection.status=shortage_before_arrival` but capital constraint trims all feasible order lines and the facade remains `recommendation.action=wait`, explainability now emits a dedicated `HIGH` severity warning (`shortage_before_arrival_wait_blocked_by_capital_constraint`) in both full and compact modes so that wait is not presented as implicitly safe.
+  - This blocked-shortage hardening slice is validated at three levels in the current work block: focused safe-default regressions (`2 passed`), full `tests/test_planning_core_production_order_api.py` (`168 passed`), and full repo pytest (`402 passed`).
   - Narrow R5 modularization has started in facade-preserving mode: the shared economics helper cluster now lives in `app/services/planning_production_order_economics.py`, while `app/services/planning_production_order.py` preserves the existing external service surface and test imports via re-exported names.
   - The second narrow R5 extraction slice is now complete for compact explainability projection: `app/services/planning_production_order_explainability.py` owns compact-step/meta shaping, while `app/services/planning_production_order.py` continues to preserve compatibility imports and runtime behavior.
   - The third narrow R5 extraction slice is now complete for assorti classification support: `app/services/planning_production_order_assorti.py` owns assorti mapping parse/load helpers and source constants, while `app/services/planning_production_order.py` preserves compatibility imports and deterministic Layer 1 explainability semantics.
@@ -244,101 +246,30 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Added `scripts/dev.ps1 verify-live` to run full local gate in one command (`verify` + production-order live API smoke with `200/404/422` contract assertions).
 - `scripts/dev.ps1` Docker-backed verify/smoke path is hardened against transient Docker Hub auth/buildkit failures (`failed to fetch anonymous token` / `auth.docker.io/token`): backend build now auto-retries with `DOCKER_BUILDKIT=0` and then restores previous env state.
 
-## Active strategic correction (CTO-aligned)
-
-- Priority is explicitly shifted to `Production Order v1 Economic Alpha`: migrate from proxy-only economics to formula-based, source-traceable money calculations.
-- Explainability/contracts remain important but are now constrained to behavior-critical checks while economics calibration is in progress.
-- Scope guard is unchanged and strict: no ML, no solver optimization, no multi-warehouse rollout.
-- Decision traceability discipline is active: each accepted architectural/product decision is documented automatically in the same work block.
-- Mandatory update set after each accepted decision: `ROADMAP.md` (plan), `STATUS.md` (state), and the relevant acceptance artifact (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md` / casebook / ADR).
-- Governance baseline added:
-  - CI pipeline: `.github/workflows/ci.yml`
-  - Context synchronization guard in CI: `scripts/context_guard.py`
-  - PR template: `.github/pull_request_template.md`
-  - Contribution rules and DoD: `CONTRIBUTING.md`
-  - Release policy: `RELEASE_POLICY.md`
-  - ADR process: `docs/adr/`
-  - CODEOWNERS scaffold: `.github/CODEOWNERS`
-
-## Known operational friction
-
-- Running commands from a non-repo directory causes `not a git repository`.
-- Docker Desktop engine may be unavailable (`dockerDesktopLinuxEngine` pipe error).
-- Docker Hub auth endpoint may intermittently return EOF during buildkit image pull; verify/smoke scripts now auto-retry backend build with `DOCKER_BUILDKIT=0`.
-- Host Python may miss `pytest`; prefer Docker-based test runs or install dev deps.
-- PowerShell JSON quoting can break curl payloads; file-based `--data-binary "@..."` is the safe default.
-- `.github/CODEOWNERS` currently contains a placeholder owner and must be replaced with a real GitHub handle/team before enabling required reviews.
-
-## Verification commands (PowerShell, reproducible)
-
-```powershell
-git status -sb
-git log -1 --oneline
-docker compose -f .\docker-compose.yml up -d --build
-docker compose -f .\docker-compose.yml ps
-docker compose -f .\docker-compose.yml logs --tail=200 backend
-curl.exe -i http://localhost:8000/api/v1/planning/core/health
-# Legacy low-fidelity stub:
-'{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
-curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
-# Primary production-order path:
-curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/production-order/proposal -H "Content-Type: application/json" --data-binary "@po_request.json"
-.\scripts\dev.ps1 context
-docker compose -f .\docker-compose.yml exec -T db psql -U maconly -d maconly_db -c "SELECT count(*) FROM monitoring_snapshots;"
-```
-
 ## Last verification
 
-- Date: `2026-03-28 23:26 +07:00`
+- Date: `2026-04-07 14:46 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `2af7a73`
+- Last commit (`git log -1 --oneline`): `f575d67`
 - Gates:
-  - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `111 passed`
-  - `python -m pytest -q tests/test_end_to_end_planning.py` → `3 passed`
-  - `.\scripts\dev.ps1 verify` → `OK`
-  - `.\scripts\dev.ps1 verify-live` → `not rerun in this block` (deferred live/unsafe gate)
+  - `python -m pytest tests/test_planning_core_production_order_api.py -k "safe_default_mode_applies_zero_capital_fallback"` → `2 passed`
+  - `python -m pytest tests/test_planning_core_production_order_api.py` → `168 passed`
+  - `python -m pytest` → `402 passed`
 
 ### Minimal raw outputs
 
 ```text
-$ python -m pytest -q tests/test_planning_core_production_order_api.py
-........................................................................
-.......................................                                    [100%]
-111 passed in 159.19s (0:02:39)
+$ python -m pytest tests/test_planning_core_production_order_api.py -k "safe_default_mode_applies_zero_capital_fallback"
+..
+2 passed, 166 deselected in 1.95s
 ```
 
 ```text
-$ python -m pytest -q tests/test_end_to_end_planning.py
-...                                                                       [100%]
-3 passed in 7.86s
+$ python -m pytest tests/test_planning_core_production_order_api.py
+168 passed in 4.18s
 ```
 
 ```text
-$ .\scripts\dev.ps1 verify
-[verify] context guard...
-[verify] compile check...
-[verify] smoke tests...
-[verify] OK
+$ python -m pytest
+402 passed in 7.25s
 ```
-
-```text
-$ .\scripts\dev.ps1 verify-live
-[verify-live] context guard...
-[verify-live] compile check...
-[verify-live] smoke tests...
-[verify-live] production-order live API smoke...
-[po-api-smoke] OK  planning-core-health -> HTTP 200
-[po-api-smoke] OK  production-order-direct-happy-path -> HTTP 200
-[po-api-smoke] OK  production-order-from-wb-happy-path -> HTTP 200
-[po-api-smoke] OK  production-order-direct-unknown-article -> HTTP 404
-[po-api-smoke] OK  production-order-from-wb-unknown-article -> HTTP 404
-[po-api-smoke] OK  production-order-direct-validation -> HTTP 422
-[po-api-smoke] OK  production-order-from-wb-validation -> HTTP 422
-[verify-live] OK
-```
-
-### Interpretation
-
-- Production-order economic-objective verification gates are green locally (`verify` + `verify-live`).
-- Live API smoke confirms deterministic contract behavior for success and error paths (`200/404/422`).
-- Docker build retry fallback reduced nondeterministic local failures caused by transient Docker Hub auth/buildkit issues.

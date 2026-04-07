@@ -5418,7 +5418,12 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
         "available_capital_effective": 0.0,
         "effective_source": "safe_default_zero_capital",
     }
-    assert meta["warnings"][-1] == {
+    safe_default_warning = next(
+        warning
+        for warning in meta["warnings"]
+        if warning["code"] == "available_capital_safe_default_applied"
+    )
+    assert safe_default_warning == {
         "code": "available_capital_safe_default_applied",
         "severity": "HIGH",
         "message": "available_capital missing; safe_default mode applied zero-capital fallback to avoid unconstrained recommendations",
@@ -5438,9 +5443,33 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     assert meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert meta["alpha_proxy_economics"]["capital_governance"] == meta["capital_governance"]
+    assert meta["arrival_projection"]["status"] == "shortage_before_arrival"
+    assert meta["arrival_projection"]["projected_shortage_before_arrival"] > 0
     assert meta["capital_constraint"]["status"] == "budget_limited_applied"
     assert meta["capital_constraint"]["available_capital"] == 0.0
     assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
+    assert meta["capital_constraint"]["line_count_before"] > 0
+    assert meta["capital_constraint"]["line_count_after"] == 0
+    assert meta["warnings"][-1] == {
+        "code": "shortage_before_arrival_wait_blocked_by_capital_constraint",
+        "severity": "HIGH",
+        "message": "shortage_before_arrival detected, but recommendation remained wait because capital constraint trimmed feasible order quantity to zero",
+        "article_id": seeded["article"].id,
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input applied to production-order capital constraint",
+            "type": "number",
+        },
+        "arrival_projection_status": "shortage_before_arrival",
+        "projected_shortage_before_arrival": meta["arrival_projection"]["projected_shortage_before_arrival"],
+        "recommendation_action": "wait",
+        "capital_constraint_status": "budget_limited_applied",
+        "available_capital_effective": 0.0,
+        "required_capital_before_constraint": meta["capital_constraint"]["required_capital_before_constraint"],
+        "allocated_capital_after_constraint": 0.0,
+        "action": "Provide or increase available_capital before treating wait as safe under shortage.",
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
 
     expected_compact_assorti_classification = {
         "source": meta["layer_1_stock_health"]["assorti_classification"]["source"],
@@ -9183,7 +9212,12 @@ def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capita
         "available_capital_effective": 0.0,
         "effective_source": "safe_default_zero_capital",
     }
-    assert meta["warnings"][-1] == {
+    safe_default_warning = next(
+        warning
+        for warning in meta["warnings"]
+        if warning["code"] == "available_capital_safe_default_applied"
+    )
+    assert safe_default_warning == {
         "code": "available_capital_safe_default_applied",
         "severity": "HIGH",
         "message": "available_capital missing; safe_default mode applied zero-capital fallback to avoid unconstrained recommendations",
@@ -9203,9 +9237,33 @@ def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capita
     assert meta["alpha_proxy_economics"]["economic_inputs"]["available_capital"] == 0.0
     assert meta["alpha_proxy_economics"]["economic_source"]["available_capital"] == "safe_default_zero_capital"
     assert meta["alpha_proxy_economics"]["capital_governance"] == meta["capital_governance"]
+    assert meta["arrival_projection"]["status"] == "shortage_before_arrival"
+    assert meta["arrival_projection"]["projected_shortage_before_arrival"] > 0
     assert meta["capital_constraint"]["status"] == "budget_limited_applied"
     assert meta["capital_constraint"]["available_capital"] == 0.0
     assert meta["capital_constraint"]["allocated_capital_after_constraint"] == 0.0
+    assert meta["capital_constraint"]["line_count_before"] > 0
+    assert meta["capital_constraint"]["line_count_after"] == 0
+    assert meta["warnings"][-1] == {
+        "code": "shortage_before_arrival_wait_blocked_by_capital_constraint",
+        "severity": "HIGH",
+        "message": "shortage_before_arrival detected, but recommendation remained wait because capital constraint trimmed feasible order quantity to zero",
+        "article_id": seeded["article"].id,
+        "field": "available_capital",
+        "field_metadata": {
+            "description": "Available capital input applied to production-order capital constraint",
+            "type": "number",
+        },
+        "arrival_projection_status": "shortage_before_arrival",
+        "projected_shortage_before_arrival": meta["arrival_projection"]["projected_shortage_before_arrival"],
+        "recommendation_action": "wait",
+        "capital_constraint_status": "budget_limited_applied",
+        "available_capital_effective": 0.0,
+        "required_capital_before_constraint": meta["capital_constraint"]["required_capital_before_constraint"],
+        "allocated_capital_after_constraint": 0.0,
+        "action": "Provide or increase available_capital before treating wait as safe under shortage.",
+        "next_steps": ["provide_available_capital_override_or_default"],
+    }
 
     expected_compact_assorti_classification = {
         "source": meta["layer_1_stock_health"]["assorti_classification"]["source"],
