@@ -31,6 +31,10 @@ from app.services.planning_production_order_assorti_application import (
     _AssortiApplicationResult as _extracted_AssortiApplicationResult,
     _apply_production_order_assorti_classification as _extracted_apply_production_order_assorti_classification,
 )
+from app.services.planning_production_order_assorti_unpack_application import (
+    _AssortiUnpackApplicationResult as _extracted_AssortiUnpackApplicationResult,
+    _apply_production_order_assorti_unpack as _extracted_apply_production_order_assorti_unpack,
+)
 from app.services.planning_production_order_assorti import (
     ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
     ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE as EXTRACTED_ASSORTI_CLASSIFICATION_GLOBAL_FALLBACK_SOURCE,
@@ -527,6 +531,8 @@ _AssortiApplicationResult = _extracted_AssortiApplicationResult
 _apply_production_order_assorti_classification = (
     _extracted_apply_production_order_assorti_classification
 )
+_AssortiUnpackApplicationResult = _extracted_AssortiUnpackApplicationResult
+_apply_production_order_assorti_unpack = _extracted_apply_production_order_assorti_unpack
 _EffectiveSettings = _extracted_EffectiveSettings
 _build_effective_settings = _extracted_build_effective_settings
 _EconomicGovernanceApplicationResult = _extracted_EconomicGovernanceApplicationResult
@@ -779,16 +785,19 @@ def build_production_order_proposal(
         parse_assorti_bundle_type_ids=_parse_assorti_bundle_type_ids,
         load_assorti_bundle_type_flags=_load_assorti_bundle_type_flags,
     )
-    admin_assorti_bundle_type_ids = assorti_application.admin_assorti_bundle_type_ids
-    global_assorti_bundle_type_ids = assorti_application.global_assorti_bundle_type_ids
-    assorti_by_bundle_type = assorti_application.assorti_by_bundle_type
-    assorti_classification_by_bundle_type = (
-        assorti_application.assorti_classification_by_bundle_type
+    assorti_unpack = _apply_production_order_assorti_unpack(
+        assorti_application=assorti_application,
     )
-    assorti_bundle_type_count = assorti_application.assorti_bundle_type_count
-    main_bundle_type_count = assorti_application.main_bundle_type_count
+    admin_assorti_bundle_type_ids = assorti_unpack.admin_assorti_bundle_type_ids
+    global_assorti_bundle_type_ids = assorti_unpack.global_assorti_bundle_type_ids
+    assorti_by_bundle_type = assorti_unpack.assorti_by_bundle_type
+    assorti_classification_by_bundle_type = (
+        assorti_unpack.assorti_classification_by_bundle_type
+    )
+    assorti_bundle_type_count = assorti_unpack.assorti_bundle_type_count
+    main_bundle_type_count = assorti_unpack.main_bundle_type_count
     assorti_classification_source_breakdown = (
-        assorti_application.assorti_classification_source_breakdown
+        assorti_unpack.assorti_classification_source_breakdown
     )
 
     layer1_stock_health_metrics = _build_layer1_stock_health_metrics(
