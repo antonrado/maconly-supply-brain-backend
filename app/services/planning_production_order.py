@@ -130,6 +130,10 @@ from app.services.planning_production_order_line_requirements_application import
     _LineRequirementsApplicationResult as _extracted_LineRequirementsApplicationResult,
     _apply_production_order_line_requirements as _extracted_apply_production_order_line_requirements,
 )
+from app.services.planning_production_order_line_requirements_unpack_application import (
+    _LineRequirementsUnpackApplicationResult as _extracted_LineRequirementsUnpackApplicationResult,
+    _apply_production_order_line_requirements_unpack as _extracted_apply_production_order_line_requirements_unpack,
+)
 from app.services.planning_production_order_line_requirements import (
     _LineRequirementsPlan as _extracted_LineRequirementsPlan,
     _build_line_requirements_plan as _extracted_build_line_requirements_plan,
@@ -589,6 +593,8 @@ _LineRequirementsApplicationResult = _extracted_LineRequirementsApplicationResul
 _apply_production_order_line_requirements = (
     _extracted_apply_production_order_line_requirements
 )
+_LineRequirementsUnpackApplicationResult = _extracted_LineRequirementsUnpackApplicationResult
+_apply_production_order_line_requirements_unpack = _extracted_apply_production_order_line_requirements_unpack
 _LineRequirementsPlan = _extracted_LineRequirementsPlan
 _build_line_requirements_plan = _extracted_build_line_requirements_plan
 _ConstraintApplicationResult = _extracted_ConstraintApplicationResult
@@ -931,9 +937,12 @@ def build_production_order_proposal(
         stock_by_color_size=stock_by_color_size,
         build_line_requirements_plan=_build_line_requirements_plan,
     )
-    color_probability = line_requirements_application.color_probability
-    line_required = line_requirements_application.line_required
-    line_qty = line_requirements_application.line_qty
+    line_requirements_unpack = _apply_production_order_line_requirements_unpack(
+        line_requirements_application=line_requirements_application,
+    )
+    color_probability = line_requirements_unpack.color_probability
+    line_required = line_requirements_unpack.line_required
+    line_qty = line_requirements_unpack.line_qty
 
     layer3_application = _apply_production_order_layer3(
         line_qty=line_qty,
