@@ -154,6 +154,10 @@ from app.services.planning_production_order_candidate_lines_application import (
     _CandidateLinesApplicationResult as _extracted_CandidateLinesApplicationResult,
     _apply_production_order_candidate_lines as _extracted_apply_production_order_candidate_lines,
 )
+from app.services.planning_production_order_candidate_lines_unpack_application import (
+    _CandidateLinesUnpackApplicationResult as _extracted_CandidateLinesUnpackApplicationResult,
+    _apply_production_order_candidate_lines_unpack as _extracted_apply_production_order_candidate_lines_unpack,
+)
 from app.services.planning_production_order_candidate_lines import (
     _build_candidate_lines as _extracted_build_candidate_lines,
 )
@@ -613,6 +617,8 @@ _ConstraintUnpackApplicationResult = _extracted_ConstraintUnpackApplicationResul
 _apply_production_order_constraint_unpack = _extracted_apply_production_order_constraint_unpack
 _CandidateLinesApplicationResult = _extracted_CandidateLinesApplicationResult
 _apply_production_order_candidate_lines = _extracted_apply_production_order_candidate_lines
+_CandidateLinesUnpackApplicationResult = _extracted_CandidateLinesUnpackApplicationResult
+_apply_production_order_candidate_lines_unpack = _extracted_apply_production_order_candidate_lines_unpack
 _build_candidate_lines = _extracted_build_candidate_lines
 _CapitalApplicationResult = _extracted_CapitalApplicationResult
 _apply_production_order_capital_constraints = _extracted_apply_production_order_capital_constraints
@@ -1009,7 +1015,10 @@ def build_production_order_proposal(
         layer3_decision_by_line=layer3_decision_by_line,
         build_candidate_lines=_build_candidate_lines,
     )
-    candidate_lines = candidate_lines_application.candidate_lines
+    candidate_lines_unpack = _apply_production_order_candidate_lines_unpack(
+        candidate_lines_application=candidate_lines_application,
+    )
+    candidate_lines = candidate_lines_unpack.candidate_lines
 
     capital_application = _apply_production_order_capital_constraints(
         candidate_lines=candidate_lines,
