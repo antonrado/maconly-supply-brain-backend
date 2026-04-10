@@ -181,6 +181,10 @@ from app.services.planning_production_order_explanation_application import (
     _ExplanationApplicationResult as _extracted_ExplanationApplicationResult,
     _apply_production_order_explanation as _extracted_apply_production_order_explanation,
 )
+from app.services.planning_production_order_explanation_unpack_application import (
+    _ExplanationUnpackApplicationResult as _extracted_ExplanationUnpackApplicationResult,
+    _apply_production_order_explanation_unpack as _extracted_apply_production_order_explanation_unpack,
+)
 from app.services.planning_production_order_explainability_mode_application import (
     _ExplainabilityModeApplicationResult as _extracted_ExplainabilityModeApplicationResult,
     _apply_production_order_explainability_mode as _extracted_apply_production_order_explainability_mode,
@@ -574,6 +578,8 @@ _AlphaProxyUnpackApplicationResult = _extracted_AlphaProxyUnpackApplicationResul
 _apply_production_order_alpha_proxy_unpack = _extracted_apply_production_order_alpha_proxy_unpack
 _ExplanationApplicationResult = _extracted_ExplanationApplicationResult
 _apply_production_order_explanation = _extracted_apply_production_order_explanation
+_ExplanationUnpackApplicationResult = _extracted_ExplanationUnpackApplicationResult
+_apply_production_order_explanation_unpack = _extracted_apply_production_order_explanation_unpack
 _ExplainabilityModeApplicationResult = _extracted_ExplainabilityModeApplicationResult
 _apply_production_order_explainability_mode = _extracted_apply_production_order_explainability_mode
 _HorizonApplicationResult = _extracted_HorizonApplicationResult
@@ -1199,7 +1205,10 @@ def build_production_order_proposal(
         build_explanation_steps=_build_explanation_steps,
         build_explanation_meta=_build_explanation_meta,
     )
-    explanation = explanation_application.explanation
+    explanation_unpack = _apply_production_order_explanation_unpack(
+        explanation_application=explanation_application,
+    )
+    explanation = explanation_unpack.explanation
 
     explainability_mode_application = _apply_production_order_explainability_mode(
         explanation=explanation,
