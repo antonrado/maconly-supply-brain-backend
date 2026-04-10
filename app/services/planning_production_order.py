@@ -106,6 +106,10 @@ from app.services.planning_production_order_layer2_allocation_application import
     _Layer2AllocationApplicationResult as _extracted_Layer2AllocationApplicationResult,
     _apply_production_order_layer2_allocation as _extracted_apply_production_order_layer2_allocation,
 )
+from app.services.planning_production_order_layer2_allocation_unpack_application import (
+    _Layer2AllocationUnpackApplicationResult as _extracted_Layer2AllocationUnpackApplicationResult,
+    _apply_production_order_layer2_allocation_unpack as _extracted_apply_production_order_layer2_allocation_unpack,
+)
 from app.services.planning_production_order_layer2_summary_application import (
     _Layer2SummaryApplicationResult as _extracted_Layer2SummaryApplicationResult,
     _apply_production_order_layer2_summary as _extracted_apply_production_order_layer2_summary,
@@ -555,6 +559,8 @@ _Layer1SummaryApplicationResult = _extracted_Layer1SummaryApplicationResult
 _apply_production_order_layer1_summary = _extracted_apply_production_order_layer1_summary
 _Layer2AllocationApplicationResult = _extracted_Layer2AllocationApplicationResult
 _apply_production_order_layer2_allocation = _extracted_apply_production_order_layer2_allocation
+_Layer2AllocationUnpackApplicationResult = _extracted_Layer2AllocationUnpackApplicationResult
+_apply_production_order_layer2_allocation_unpack = _extracted_apply_production_order_layer2_allocation_unpack
 _Layer2SummaryApplicationResult = _extracted_Layer2SummaryApplicationResult
 _apply_production_order_layer2_summary = _extracted_apply_production_order_layer2_summary
 _Layer3ApplicationResult = _extracted_Layer3ApplicationResult
@@ -827,8 +833,11 @@ def build_production_order_proposal(
         overstock_penalty_weight=layer_proxy_settings.layer2_overstock_penalty_weight,
         build_layer2_allocation_decisions=_build_layer2_allocation_decisions,
     )
-    layer2_allocation_decisions = layer2_allocation_application.layer2_allocation_decisions
-    layer2_allocation_summary = layer2_allocation_application.layer2_allocation_summary
+    layer2_allocation_unpack = _apply_production_order_layer2_allocation_unpack(
+        layer2_allocation_application=layer2_allocation_application,
+    )
+    layer2_allocation_decisions = layer2_allocation_unpack.layer2_allocation_decisions
+    layer2_allocation_summary = layer2_allocation_unpack.layer2_allocation_summary
     layer2_summary_application = _apply_production_order_layer2_summary(
         layer2_allocation_decisions=layer2_allocation_decisions,
         layer2_allocation_summary=layer2_allocation_summary,
