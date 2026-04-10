@@ -276,6 +276,10 @@ from app.services.planning_production_order_settings_loading_application import 
     _SettingsLoadingApplicationResult as _extracted_SettingsLoadingApplicationResult,
     _apply_production_order_settings_loading as _extracted_apply_production_order_settings_loading,
 )
+from app.services.planning_production_order_settings_loading_unpack_application import (
+    _SettingsLoadingUnpackApplicationResult as _extracted_SettingsLoadingUnpackApplicationResult,
+    _apply_production_order_settings_loading_unpack as _extracted_apply_production_order_settings_loading_unpack,
+)
 from app.services.planning_production_order_settings_resolution_application import (
     _SettingsResolutionApplicationResult as _extracted_SettingsResolutionApplicationResult,
     _apply_production_order_settings_resolution as _extracted_apply_production_order_settings_resolution,
@@ -579,6 +583,8 @@ _SettingsLoadingApplicationResult = _extracted_SettingsLoadingApplicationResult
 _apply_production_order_settings_loading = (
     _extracted_apply_production_order_settings_loading
 )
+_SettingsLoadingUnpackApplicationResult = _extracted_SettingsLoadingUnpackApplicationResult
+_apply_production_order_settings_loading_unpack = _extracted_apply_production_order_settings_loading_unpack
 _SettingsResolutionApplicationResult = _extracted_SettingsResolutionApplicationResult
 _apply_production_order_settings_resolution = (
     _extracted_apply_production_order_settings_resolution
@@ -723,9 +729,12 @@ def build_production_order_proposal(
         db=db,
         article_id=request.article_id,
     )
-    article_settings = settings_loading_application.article_settings
-    planning_settings = settings_loading_application.planning_settings
-    global_settings = settings_loading_application.global_settings
+    settings_loading_unpack = _apply_production_order_settings_loading_unpack(
+        settings_loading_application=settings_loading_application,
+    )
+    article_settings = settings_loading_unpack.article_settings
+    planning_settings = settings_loading_unpack.planning_settings
+    global_settings = settings_loading_unpack.global_settings
 
     settings_resolution_application = _apply_production_order_settings_resolution(
         article_settings=article_settings,
