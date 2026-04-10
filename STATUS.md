@@ -319,12 +319,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order capital-unpack application ownership extraction is regression-locked: `planning_production_order_capital_unpack_application.py` now solely owns `_CapitalUnpackApplicationResult` and `_apply_production_order_capital_unpack`, including post-capital result projection for the direct production-order path (`candidate_lines`, `capital_rankings`, `capital_constraint_summary`, `capital_constraint_contract`, `candidate_total_units`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order layer4-unpack application ownership extraction is regression-locked: `planning_production_order_layer4_unpack_application.py` now solely owns `_Layer4UnpackApplicationResult` and `_apply_production_order_layer4_unpack`, including post-Layer-4 result projection for the direct production-order path (`expected_horizon_sales`, `layer4_scenarios`, `capital_gap_summary`, `layer4_contract`, `layer4_aggregate_deltas`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order layer5-unpack application ownership extraction is regression-locked: `planning_production_order_layer5_unpack_application.py` now solely owns `_Layer5UnpackApplicationResult` and `_apply_production_order_layer5_unpack`, including post-Layer-5 result projection for the direct production-order path (`layer5_intervention`, `layer5_contract`, `layer5_intervention_meta`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order scope-recommendation-unpack application ownership extraction is regression-locked: `planning_production_order_scope_recommendation_unpack_application.py` now solely owns `_ScopeRecommendationUnpackApplicationResult` and `_apply_production_order_scope_recommendation_unpack`, including post-scope-recommendation result projection for the direct production-order path (`physical_scope`, `arrival_projection`, `action`, `recommendation`, `alternatives`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 02:48 +07:00`
+- Date: `2026-04-11 03:26 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `c88b3f5`
+- Last commit (`git log -1 --oneline`): `01e5e59`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`

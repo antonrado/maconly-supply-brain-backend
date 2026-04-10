@@ -157,6 +157,10 @@ from app.services.planning_production_order_scope_recommendation import (
     _ScopeRecommendationResult as _extracted_ScopeRecommendationResult,
     _apply_production_order_scope_and_recommendation as _extracted_apply_production_order_scope_and_recommendation,
 )
+from app.services.planning_production_order_scope_recommendation_unpack_application import (
+    _ScopeRecommendationUnpackApplicationResult as _extracted_ScopeRecommendationUnpackApplicationResult,
+    _apply_production_order_scope_recommendation_unpack as _extracted_apply_production_order_scope_recommendation_unpack,
+)
 from app.services.planning_production_order_explanation_warning_application import (
     _ExplanationWarningApplicationResult as _extracted_ExplanationWarningApplicationResult,
     _apply_production_order_explanation_warnings as _extracted_apply_production_order_explanation_warnings,
@@ -550,6 +554,8 @@ _Layer5UnpackApplicationResult = _extracted_Layer5UnpackApplicationResult
 _apply_production_order_layer5_unpack = _extracted_apply_production_order_layer5_unpack
 _ScopeRecommendationResult = _extracted_ScopeRecommendationResult
 _apply_production_order_scope_and_recommendation = _extracted_apply_production_order_scope_and_recommendation
+_ScopeRecommendationUnpackApplicationResult = _extracted_ScopeRecommendationUnpackApplicationResult
+_apply_production_order_scope_recommendation_unpack = _extracted_apply_production_order_scope_recommendation_unpack
 _ExplanationWarningApplicationResult = _extracted_ExplanationWarningApplicationResult
 _apply_production_order_explanation_warnings = _extracted_apply_production_order_explanation_warnings
 _AlphaProxyApplicationResult = _extracted_AlphaProxyApplicationResult
@@ -982,11 +988,14 @@ def build_production_order_proposal(
         build_physical_scope_and_arrival_projection=build_physical_scope_and_arrival_projection,
         build_recommendation_and_alternatives=_build_recommendation_and_alternatives,
     )
-    physical_scope = scope_recommendation.physical_scope
-    arrival_projection = scope_recommendation.arrival_projection
-    action = scope_recommendation.action
-    recommendation = scope_recommendation.recommendation
-    alternatives = scope_recommendation.alternatives
+    scope_recommendation_unpack = _apply_production_order_scope_recommendation_unpack(
+        scope_recommendation=scope_recommendation,
+    )
+    physical_scope = scope_recommendation_unpack.physical_scope
+    arrival_projection = scope_recommendation_unpack.arrival_projection
+    action = scope_recommendation_unpack.action
+    recommendation = scope_recommendation_unpack.recommendation
+    alternatives = scope_recommendation_unpack.alternatives
 
     explanation_warning_application = _apply_production_order_explanation_warnings(
         economics_warnings=economics_warnings,
