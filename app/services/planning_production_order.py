@@ -146,6 +146,10 @@ from app.services.planning_production_order_constraint_application import (
     _ConstraintApplicationResult as _extracted_ConstraintApplicationResult,
     _apply_production_order_constraints as _extracted_apply_production_order_constraints,
 )
+from app.services.planning_production_order_constraint_unpack_application import (
+    _ConstraintUnpackApplicationResult as _extracted_ConstraintUnpackApplicationResult,
+    _apply_production_order_constraint_unpack as _extracted_apply_production_order_constraint_unpack,
+)
 from app.services.planning_production_order_candidate_lines_application import (
     _CandidateLinesApplicationResult as _extracted_CandidateLinesApplicationResult,
     _apply_production_order_candidate_lines as _extracted_apply_production_order_candidate_lines,
@@ -605,6 +609,8 @@ _LineRequirementsPlan = _extracted_LineRequirementsPlan
 _build_line_requirements_plan = _extracted_build_line_requirements_plan
 _ConstraintApplicationResult = _extracted_ConstraintApplicationResult
 _apply_production_order_constraints = _extracted_apply_production_order_constraints
+_ConstraintUnpackApplicationResult = _extracted_ConstraintUnpackApplicationResult
+_apply_production_order_constraint_unpack = _extracted_apply_production_order_constraint_unpack
 _CandidateLinesApplicationResult = _extracted_CandidateLinesApplicationResult
 _apply_production_order_candidate_lines = _extracted_apply_production_order_candidate_lines
 _build_candidate_lines = _extracted_build_candidate_lines
@@ -983,16 +989,19 @@ def build_production_order_proposal(
         apply_shared_color_pool_fabric_min_batches=_apply_shared_color_pool_fabric_min_batches,
         apply_elastic_min_batch_uplift=_apply_elastic_min_batch_uplift,
     )
-    constraints_applied = constraint_application.constraints_applied
-    shared_color_pool = constraint_application.shared_color_pool
-    applicable_elastic_type_ids = constraint_application.applicable_elastic_type_ids
-    elastic_scope_line_keys = constraint_application.elastic_scope_line_keys
-    elastic_scope_mode = constraint_application.elastic_scope_mode
-    scoped_elastic_rows_count = constraint_application.scoped_elastic_rows_count
-    elastic_uplift_delta = constraint_application.elastic_uplift_delta
-    elastic_uplift_scope = constraint_application.elastic_uplift_scope
-    elastic_uplift_keys = constraint_application.elastic_uplift_keys
-    elastic_uplift_line_alloc = constraint_application.elastic_uplift_line_alloc
+    constraint_unpack = _apply_production_order_constraint_unpack(
+        constraint_application=constraint_application,
+    )
+    constraints_applied = constraint_unpack.constraints_applied
+    shared_color_pool = constraint_unpack.shared_color_pool
+    applicable_elastic_type_ids = constraint_unpack.applicable_elastic_type_ids
+    elastic_scope_line_keys = constraint_unpack.elastic_scope_line_keys
+    elastic_scope_mode = constraint_unpack.elastic_scope_mode
+    scoped_elastic_rows_count = constraint_unpack.scoped_elastic_rows_count
+    elastic_uplift_delta = constraint_unpack.elastic_uplift_delta
+    elastic_uplift_scope = constraint_unpack.elastic_uplift_scope
+    elastic_uplift_keys = constraint_unpack.elastic_uplift_keys
+    elastic_uplift_line_alloc = constraint_unpack.elastic_uplift_line_alloc
 
     candidate_lines_application = _apply_production_order_candidate_lines(
         article_id=request.article_id,
