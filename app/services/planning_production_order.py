@@ -114,6 +114,10 @@ from app.services.planning_production_order_layer2_summary_application import (
     _Layer2SummaryApplicationResult as _extracted_Layer2SummaryApplicationResult,
     _apply_production_order_layer2_summary as _extracted_apply_production_order_layer2_summary,
 )
+from app.services.planning_production_order_layer2_summary_unpack_application import (
+    _Layer2SummaryUnpackApplicationResult as _extracted_Layer2SummaryUnpackApplicationResult,
+    _apply_production_order_layer2_summary_unpack as _extracted_apply_production_order_layer2_summary_unpack,
+)
 from app.services.planning_production_order_layer3_application import (
     _Layer3ApplicationResult as _extracted_Layer3ApplicationResult,
     _apply_production_order_layer3 as _extracted_apply_production_order_layer3,
@@ -563,6 +567,8 @@ _Layer2AllocationUnpackApplicationResult = _extracted_Layer2AllocationUnpackAppl
 _apply_production_order_layer2_allocation_unpack = _extracted_apply_production_order_layer2_allocation_unpack
 _Layer2SummaryApplicationResult = _extracted_Layer2SummaryApplicationResult
 _apply_production_order_layer2_summary = _extracted_apply_production_order_layer2_summary
+_Layer2SummaryUnpackApplicationResult = _extracted_Layer2SummaryUnpackApplicationResult
+_apply_production_order_layer2_summary_unpack = _extracted_apply_production_order_layer2_summary_unpack
 _Layer3ApplicationResult = _extracted_Layer3ApplicationResult
 _apply_production_order_layer3 = _extracted_apply_production_order_layer3
 _LineRequirementsApplicationResult = _extracted_LineRequirementsApplicationResult
@@ -844,8 +850,11 @@ def build_production_order_proposal(
         build_layer2_contract_summary=_build_layer2_contract_summary,
         build_layer2_decision_quality_summary=_build_layer2_decision_quality_summary,
     )
-    layer2_contract = layer2_summary_application.layer2_contract
-    layer2_decision_quality = layer2_summary_application.layer2_decision_quality
+    layer2_summary_unpack = _apply_production_order_layer2_summary_unpack(
+        layer2_summary_application=layer2_summary_application,
+    )
+    layer2_contract = layer2_summary_unpack.layer2_contract
+    layer2_decision_quality = layer2_summary_unpack.layer2_decision_quality
     layer1_summary_application = _apply_production_order_layer1_summary(
         layer1_stock_health_metrics=layer1_stock_health_metrics,
         layer1_high_stockout_risk_threshold=LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
