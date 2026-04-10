@@ -102,6 +102,10 @@ from app.services.planning_production_order_layer1_summary_application import (
     _Layer1SummaryApplicationResult as _extracted_Layer1SummaryApplicationResult,
     _apply_production_order_layer1_summary as _extracted_apply_production_order_layer1_summary,
 )
+from app.services.planning_production_order_layer1_summary_unpack_application import (
+    _Layer1SummaryUnpackApplicationResult as _extracted_Layer1SummaryUnpackApplicationResult,
+    _apply_production_order_layer1_summary_unpack as _extracted_apply_production_order_layer1_summary_unpack,
+)
 from app.services.planning_production_order_layer2_allocation_application import (
     _Layer2AllocationApplicationResult as _extracted_Layer2AllocationApplicationResult,
     _apply_production_order_layer2_allocation as _extracted_apply_production_order_layer2_allocation,
@@ -561,6 +565,8 @@ _PreparedProductionOrderInputs = _extracted_PreparedProductionOrderInputs
 _prepare_production_order_inputs = _extracted_prepare_production_order_inputs
 _Layer1SummaryApplicationResult = _extracted_Layer1SummaryApplicationResult
 _apply_production_order_layer1_summary = _extracted_apply_production_order_layer1_summary
+_Layer1SummaryUnpackApplicationResult = _extracted_Layer1SummaryUnpackApplicationResult
+_apply_production_order_layer1_summary_unpack = _extracted_apply_production_order_layer1_summary_unpack
 _Layer2AllocationApplicationResult = _extracted_Layer2AllocationApplicationResult
 _apply_production_order_layer2_allocation = _extracted_apply_production_order_layer2_allocation
 _Layer2AllocationUnpackApplicationResult = _extracted_Layer2AllocationUnpackApplicationResult
@@ -860,11 +866,14 @@ def build_production_order_proposal(
         layer1_high_stockout_risk_threshold=LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD,
         build_layer1_contract_summary=_build_layer1_contract_summary,
     )
-    layer1_avg_coverage_days = layer1_summary_application.layer1_avg_coverage_days
-    layer1_high_stockout_risk_count = (
-        layer1_summary_application.layer1_high_stockout_risk_count
+    layer1_summary_unpack = _apply_production_order_layer1_summary_unpack(
+        layer1_summary_application=layer1_summary_application,
     )
-    layer1_contract = layer1_summary_application.layer1_contract
+    layer1_avg_coverage_days = layer1_summary_unpack.layer1_avg_coverage_days
+    layer1_high_stockout_risk_count = (
+        layer1_summary_unpack.layer1_high_stockout_risk_count
+    )
+    layer1_contract = layer1_summary_unpack.layer1_contract
 
     risk_application = _apply_production_order_risk_level(
         total_daily_sales=total_daily_sales,

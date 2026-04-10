@@ -329,12 +329,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order assorti-unpack application ownership extraction is regression-locked: `planning_production_order_assorti_unpack_application.py` now solely owns `_AssortiUnpackApplicationResult` and `_apply_production_order_assorti_unpack`, including post-assorti result projection for the direct production-order path (`admin_assorti_bundle_type_ids`, `global_assorti_bundle_type_ids`, `assorti_by_bundle_type`, `assorti_classification_by_bundle_type`, `assorti_bundle_type_count`, `main_bundle_type_count`, `assorti_classification_source_breakdown`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order layer2-allocation-unpack application ownership extraction is regression-locked: `planning_production_order_layer2_allocation_unpack_application.py` now solely owns `_Layer2AllocationUnpackApplicationResult` and `_apply_production_order_layer2_allocation_unpack`, including post-layer2-allocation result projection for the direct production-order path (`layer2_allocation_decisions`, `layer2_allocation_summary`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order layer2-summary-unpack application ownership extraction is regression-locked: `planning_production_order_layer2_summary_unpack_application.py` now solely owns `_Layer2SummaryUnpackApplicationResult` and `_apply_production_order_layer2_summary_unpack`, including post-layer2-summary result projection for the direct production-order path (`layer2_contract`, `layer2_decision_quality`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order layer1-summary-unpack application ownership extraction is regression-locked: `planning_production_order_layer1_summary_unpack_application.py` now solely owns `_Layer1SummaryUnpackApplicationResult` and `_apply_production_order_layer1_summary_unpack`, including post-layer1-summary result projection for the direct production-order path (`layer1_avg_coverage_days`, `layer1_high_stockout_risk_count`, `layer1_contract`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 04:35 +07:00`
+- Date: `2026-04-11 04:41 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `ece586a`
+- Last commit (`git log -1 --oneline`): `29c92ca`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
