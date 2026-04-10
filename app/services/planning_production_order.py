@@ -189,6 +189,10 @@ from app.services.planning_production_order_explainability_mode_application impo
     _ExplainabilityModeApplicationResult as _extracted_ExplainabilityModeApplicationResult,
     _apply_production_order_explainability_mode as _extracted_apply_production_order_explainability_mode,
 )
+from app.services.planning_production_order_explainability_mode_unpack_application import (
+    _ExplainabilityModeUnpackApplicationResult as _extracted_ExplainabilityModeUnpackApplicationResult,
+    _apply_production_order_explainability_mode_unpack as _extracted_apply_production_order_explainability_mode_unpack,
+)
 from app.services.planning_production_order_response_application import (
     _ResponseApplicationResult as _extracted_ResponseApplicationResult,
     _apply_production_order_response as _extracted_apply_production_order_response,
@@ -582,6 +586,8 @@ _ExplanationUnpackApplicationResult = _extracted_ExplanationUnpackApplicationRes
 _apply_production_order_explanation_unpack = _extracted_apply_production_order_explanation_unpack
 _ExplainabilityModeApplicationResult = _extracted_ExplainabilityModeApplicationResult
 _apply_production_order_explainability_mode = _extracted_apply_production_order_explainability_mode
+_ExplainabilityModeUnpackApplicationResult = _extracted_ExplainabilityModeUnpackApplicationResult
+_apply_production_order_explainability_mode_unpack = _extracted_apply_production_order_explainability_mode_unpack
 _HorizonApplicationResult = _extracted_HorizonApplicationResult
 _apply_production_order_horizon = _extracted_apply_production_order_horizon
 _RiskApplicationResult = _extracted_RiskApplicationResult
@@ -1215,7 +1221,10 @@ def build_production_order_proposal(
         mode=request.explainability_mode,
         apply_explainability_mode=_apply_explainability_mode,
     )
-    explanation = explainability_mode_application.explanation
+    explainability_mode_unpack = _apply_production_order_explainability_mode_unpack(
+        explainability_mode_application=explainability_mode_application,
+    )
+    explanation = explainability_mode_unpack.explanation
 
     response_application = _apply_production_order_response(
         status="ok",

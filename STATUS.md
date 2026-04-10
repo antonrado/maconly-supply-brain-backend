@@ -323,12 +323,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order explanation-warning-unpack application ownership extraction is regression-locked: `planning_production_order_explanation_warning_unpack_application.py` now solely owns `_ExplanationWarningUnpackApplicationResult` and `_apply_production_order_explanation_warning_unpack`, including post-explanation-warning result projection for the direct production-order path (`explanation_warnings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order alpha-proxy-unpack application ownership extraction is regression-locked: `planning_production_order_alpha_proxy_unpack_application.py` now solely owns `_AlphaProxyUnpackApplicationResult` and `_apply_production_order_alpha_proxy_unpack`, including post-alpha-proxy result projection for the direct production-order path (`layer4_scenario_factor_items`, `alpha_proxy_economics`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order explanation-unpack application ownership extraction is regression-locked: `planning_production_order_explanation_unpack_application.py` now solely owns `_ExplanationUnpackApplicationResult` and `_apply_production_order_explanation_unpack`, including post-explanation result projection for the direct production-order path (`explanation`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order explainability-mode-unpack application ownership extraction is regression-locked: `planning_production_order_explainability_mode_unpack_application.py` now solely owns `_ExplainabilityModeUnpackApplicationResult` and `_apply_production_order_explainability_mode_unpack`, including post-explainability-mode result projection for the direct production-order path (`explanation`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 03:54 +07:00`
+- Date: `2026-04-11 04:02 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `ed3d1a7`
+- Last commit (`git log -1 --oneline`): `1a9f4e1`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
