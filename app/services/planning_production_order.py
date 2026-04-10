@@ -70,6 +70,10 @@ from app.services.planning_production_order_economic_governance_application impo
     _EconomicGovernanceApplicationResult as _extracted_EconomicGovernanceApplicationResult,
     _apply_production_order_economic_governance as _extracted_apply_production_order_economic_governance,
 )
+from app.services.planning_production_order_economic_governance_unpack_application import (
+    _EconomicGovernanceUnpackApplicationResult as _extracted_EconomicGovernanceUnpackApplicationResult,
+    _apply_production_order_economic_governance_unpack as _extracted_apply_production_order_economic_governance_unpack,
+)
 from app.services.planning_production_order_explainability import (
     EXPLAINABILITY_MODE_COMPACT as EXTRACTED_EXPLAINABILITY_MODE_COMPACT,
     _apply_from_wb_explainability as _extracted_apply_from_wb_explainability,
@@ -583,6 +587,10 @@ _EconomicGovernanceApplicationResult = _extracted_EconomicGovernanceApplicationR
 _apply_production_order_economic_governance = (
     _extracted_apply_production_order_economic_governance
 )
+_EconomicGovernanceUnpackApplicationResult = _extracted_EconomicGovernanceUnpackApplicationResult
+_apply_production_order_economic_governance_unpack = (
+    _extracted_apply_production_order_economic_governance_unpack
+)
 _SettingsLoadingApplicationResult = _extracted_SettingsLoadingApplicationResult
 _apply_production_order_settings_loading = (
     _extracted_apply_production_order_settings_loading
@@ -786,14 +794,15 @@ def build_production_order_proposal(
         capital_governance_source_safe_default=CAPITAL_GOVERNANCE_SOURCE_SAFE_DEFAULT,
         build_available_capital_safe_default_warning=_build_available_capital_safe_default_warning,
         build_missing_available_capital_strict_detail=_build_missing_available_capital_strict_detail,
-        resolve_economic_trust_and_capital_governance=(
-            _resolve_economic_trust_and_capital_governance
-        ),
+        resolve_economic_trust_and_capital_governance=_resolve_economic_trust_and_capital_governance,
     )
-    economic_settings = economic_governance_application.economic_settings
-    economics_trust = economic_governance_application.economics_trust
-    economics_warnings = economic_governance_application.economics_warnings
-    capital_governance = economic_governance_application.capital_governance
+    economic_governance_unpack = _apply_production_order_economic_governance_unpack(
+        economic_governance_application=economic_governance_application,
+    )
+    economic_settings = economic_governance_unpack.economic_settings
+    economics_trust = economic_governance_unpack.economics_trust
+    economics_warnings = economic_governance_unpack.economics_warnings
+    capital_governance = economic_governance_unpack.capital_governance
 
     prepared_inputs = _prepare_production_order_inputs(
         db=db,

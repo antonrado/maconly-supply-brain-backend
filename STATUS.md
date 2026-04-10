@@ -338,12 +338,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order candidate-lines-unpack application ownership extraction is regression-locked: `planning_production_order_candidate_lines_unpack_application.py` now solely owns `_CandidateLinesUnpackApplicationResult` and `_apply_production_order_candidate_lines_unpack`, including post-candidate-lines result projection for the direct production-order path (`candidate_lines`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order settings-loading-unpack application ownership extraction is regression-locked: `planning_production_order_settings_loading_unpack_application.py` now solely owns `_SettingsLoadingUnpackApplicationResult` and `_apply_production_order_settings_loading_unpack`, including post-settings-loading result projection for the direct production-order path (`article_settings`, `planning_settings`, `global_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order settings-resolution-unpack application ownership extraction is regression-locked: `planning_production_order_settings_resolution_unpack_application.py` now solely owns `_SettingsResolutionUnpackApplicationResult` and `_apply_production_order_settings_resolution_unpack`, including post-settings-resolution result projection for the direct production-order path (`settings`, `layer_proxy_settings`, `economic_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order economic-governance-unpack application ownership extraction is regression-locked: `planning_production_order_economic_governance_unpack_application.py` now solely owns `_EconomicGovernanceUnpackApplicationResult` and `_apply_production_order_economic_governance_unpack`, including post-economic-governance result projection for the direct production-order path (`economic_settings`, `economics_trust`, `economics_warnings`, `capital_governance`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 05:38 +07:00`
+- Date: `2026-04-11 05:50 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `e950f77`
+- Last commit (`git log -1 --oneline`): `b696fc3`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
