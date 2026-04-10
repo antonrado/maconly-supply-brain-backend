@@ -197,6 +197,10 @@ from app.services.planning_production_order_response_application import (
     _ResponseApplicationResult as _extracted_ResponseApplicationResult,
     _apply_production_order_response as _extracted_apply_production_order_response,
 )
+from app.services.planning_production_order_response_unpack_application import (
+    _ResponseUnpackApplicationResult as _extracted_ResponseUnpackApplicationResult,
+    _apply_production_order_response_unpack as _extracted_apply_production_order_response_unpack,
+)
 from app.services.planning_production_order_horizon_application import (
     _HorizonApplicationResult as _extracted_HorizonApplicationResult,
     _apply_production_order_horizon as _extracted_apply_production_order_horizon,
@@ -594,6 +598,8 @@ _RiskApplicationResult = _extracted_RiskApplicationResult
 _apply_production_order_risk_level = _extracted_apply_production_order_risk_level
 _ResponseApplicationResult = _extracted_ResponseApplicationResult
 _apply_production_order_response = _extracted_apply_production_order_response
+_ResponseUnpackApplicationResult = _extracted_ResponseUnpackApplicationResult
+_apply_production_order_response_unpack = _extracted_apply_production_order_response_unpack
 _ResourceAllocationApplicationResult = _extracted_ResourceAllocationApplicationResult
 _apply_production_order_resource_allocation = (
     _extracted_apply_production_order_resource_allocation
@@ -1240,4 +1246,7 @@ def build_production_order_proposal(
         alternatives=alternatives,
         explanation=explanation,
     )
-    return response_application.response
+    response_unpack = _apply_production_order_response_unpack(
+        response_application=response_application,
+    )
+    return response_unpack.response
