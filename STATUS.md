@@ -325,12 +325,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order explanation-unpack application ownership extraction is regression-locked: `planning_production_order_explanation_unpack_application.py` now solely owns `_ExplanationUnpackApplicationResult` and `_apply_production_order_explanation_unpack`, including post-explanation result projection for the direct production-order path (`explanation`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order explainability-mode-unpack application ownership extraction is regression-locked: `planning_production_order_explainability_mode_unpack_application.py` now solely owns `_ExplainabilityModeUnpackApplicationResult` and `_apply_production_order_explainability_mode_unpack`, including post-explainability-mode result projection for the direct production-order path (`explanation`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order response-unpack application ownership extraction is regression-locked: `planning_production_order_response_unpack_application.py` now solely owns `_ResponseUnpackApplicationResult` and `_apply_production_order_response_unpack`, including post-response result projection for the direct production-order path (`response`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order resource-allocation-unpack application ownership extraction is regression-locked: `planning_production_order_resource_allocation_unpack_application.py` now solely owns `_ResourceAllocationUnpackApplicationResult` and `_apply_production_order_resource_allocation_unpack`, including post-resource-allocation result projection for the direct production-order path (`resource_allocation`, `competition_raw_by_bundle`, `competition_raw_bundle_stock`, `competition_raw_breakdown`, `available_bundles_for_cover`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 04:08 +07:00`
+- Date: `2026-04-11 04:15 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `6d5b1d0`
+- Last commit (`git log -1 --oneline`): `b8db3fd`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`

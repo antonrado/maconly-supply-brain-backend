@@ -213,6 +213,10 @@ from app.services.planning_production_order_resource_allocation_application impo
     _ResourceAllocationApplicationResult as _extracted_ResourceAllocationApplicationResult,
     _apply_production_order_resource_allocation as _extracted_apply_production_order_resource_allocation,
 )
+from app.services.planning_production_order_resource_allocation_unpack_application import (
+    _ResourceAllocationUnpackApplicationResult as _extracted_ResourceAllocationUnpackApplicationResult,
+    _apply_production_order_resource_allocation_unpack as _extracted_apply_production_order_resource_allocation_unpack,
+)
 from app.services.planning_production_order_skip_application import (
     _SkipApplicationResult as _extracted_SkipApplicationResult,
     _apply_production_order_skip as _extracted_apply_production_order_skip,
@@ -604,6 +608,8 @@ _ResourceAllocationApplicationResult = _extracted_ResourceAllocationApplicationR
 _apply_production_order_resource_allocation = (
     _extracted_apply_production_order_resource_allocation
 )
+_ResourceAllocationUnpackApplicationResult = _extracted_ResourceAllocationUnpackApplicationResult
+_apply_production_order_resource_allocation_unpack = _extracted_apply_production_order_resource_allocation_unpack
 _SkipApplicationResult = _extracted_SkipApplicationResult
 _apply_production_order_skip = _extracted_apply_production_order_skip
 _apply_elastic_min_batch_uplift = _extracted_apply_elastic_min_batch_uplift
@@ -755,11 +761,14 @@ def build_production_order_proposal(
             _build_competition_aware_resource_allocation
         ),
     )
-    resource_allocation = resource_allocation_application.resource_allocation
-    competition_raw_by_bundle = resource_allocation_application.competition_raw_by_bundle
-    competition_raw_bundle_stock = resource_allocation_application.competition_raw_bundle_stock
-    competition_raw_breakdown = resource_allocation_application.competition_raw_breakdown
-    available_bundles_for_cover = resource_allocation_application.available_bundles_for_cover
+    resource_allocation_unpack = _apply_production_order_resource_allocation_unpack(
+        resource_allocation_application=resource_allocation_application,
+    )
+    resource_allocation = resource_allocation_unpack.resource_allocation
+    competition_raw_by_bundle = resource_allocation_unpack.competition_raw_by_bundle
+    competition_raw_bundle_stock = resource_allocation_unpack.competition_raw_bundle_stock
+    competition_raw_breakdown = resource_allocation_unpack.competition_raw_breakdown
+    available_bundles_for_cover = resource_allocation_unpack.available_bundles_for_cover
     reorder_point_days = settings.lead_time_days_total + settings.safety_stock_days
 
     assorti_application = _apply_production_order_assorti_classification(
