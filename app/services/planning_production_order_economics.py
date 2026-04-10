@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 from app.models.models import ArticlePlanningSettings, GlobalPlanningSettings
 from app.schemas.planning_production_order import PlanningOverridesInput
@@ -45,6 +46,15 @@ class _EffectiveEconomicSettings:
     available_capital: float | None
     calibration_state: str
     source: dict[str, str]
+
+
+@dataclass(frozen=True)
+class _EconomicGovernanceResolution:
+    economic_settings: _EffectiveEconomicSettings
+    economics_trust: dict[str, object]
+    economics_warnings: list[dict[str, object]]
+    capital_governance: dict[str, object]
+    missing_available_capital_detail: dict[str, object] | None
 
 
 def _normalize_non_negative_float(value: object) -> float | None:
@@ -408,3 +418,76 @@ def _build_economics_trust_diagnostics(economic_source: dict[str, str]) -> dict[
         "code_default_dominance_ratio": code_default_dominance_ratio,
         "warnings": warnings,
     }
+
+
+def _resolve_economic_trust_and_capital_governance(
+    *,
+    article_id: int,
+    economic_settings: _EffectiveEconomicSettings,
+    overrides: PlanningOverridesInput | None,
+    capital_governance_mode_strict: str,
+    capital_governance_mode_safe_default: str,
+    capital_governance_source_safe_default: str,
+    build_available_capital_safe_default_warning: Callable[..., dict[str, object]],
+    build_missing_available_capital_strict_detail: Callable[..., dict[str, object]],
+) -> _EconomicGovernanceResolution:
+    economics_trust = _build_economics_trust_diagnostics(economic_settings.source)
+    economics_warnings = list(economics_trust.get("warnings", []))
+
+    capital_governance_mode = capital_governance_mode_strict
+    if overrides is not None:
+        capital_governance_mode = str(overrides.capital_governance_mode).strip().lower()
+
+    capital_governance = {
+        "mode": capital_governance_mode,
+        "missing_available_capital_policy": capital_governance_mode,
+        "safe_default_applied": False,
+        "available_capital_effective": economic_settings.available_capital,
+        "effective_source": economic_settings.source.get("available_capital"),
+    }
+
+    missing_available_capital_detail: dict[str, object] | None = None
+    if economic_settings.available_capital is None:
+        if capital_governance_mode == capital_governance_mode_safe_default:
+            economic_settings = replace(
+                economic_settings,
+                available_capital=0.0,
+                source={
+                    **economic_settings.source,
+                    "available_capital": capital_governance_source_safe_default,
+                },
+            )
+            economics_warnings.append(
+                build_available_capital_safe_default_warning(
+                    article_id=article_id,
+                    economics_trust_level=economics_trust.get("economics_trust_level"),
+                )
+            )
+            capital_governance = {
+                "mode": capital_governance_mode,
+                "missing_available_capital_policy": capital_governance_mode,
+                "safe_default_applied": True,
+                "available_capital_effective": 0.0,
+                "effective_source": capital_governance_source_safe_default,
+            }
+        else:
+            missing_available_capital_detail = build_missing_available_capital_strict_detail(
+                article_id=article_id,
+                economics_trust_level=economics_trust.get("economics_trust_level"),
+            )
+    else:
+        capital_governance = {
+            "mode": capital_governance_mode,
+            "missing_available_capital_policy": capital_governance_mode,
+            "safe_default_applied": False,
+            "available_capital_effective": economic_settings.available_capital,
+            "effective_source": economic_settings.source.get("available_capital"),
+        }
+
+    return _EconomicGovernanceResolution(
+        economic_settings=economic_settings,
+        economics_trust=economics_trust,
+        economics_warnings=economics_warnings,
+        capital_governance=capital_governance,
+        missing_available_capital_detail=missing_available_capital_detail,
+    )

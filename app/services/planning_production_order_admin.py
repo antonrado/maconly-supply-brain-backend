@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.models import (
-    Article,
     ArticlePlanningSettings,
     BundleType,
     ElasticType,
@@ -23,7 +22,12 @@ from app.schemas.planning_production_order_admin import (
     ProductionOrderInFlightDefaultInput,
     ProductionOrderSizeWeightInput,
 )
+from app.services.planning_production_order_article import _require_article
 from app.services.planning_production_order_assorti import _parse_assorti_bundle_type_ids
+from app.services.planning_production_order_operator_contracts import (
+    _build_admin_settings_field_metadata,
+    _build_admin_settings_validation_detail,
+)
 
 
 def _serialize_assorti_bundle_type_ids(bundle_type_ids: list[int]) -> str | None:
@@ -39,30 +43,6 @@ def _serialize_assorti_bundle_type_ids(bundle_type_ids: list[int]) -> str | None
     return ",".join(str(bundle_type_id) for bundle_type_id in normalized)
 
 
-def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
-    return {
-        "code": "article_not_found",
-        "message": "Article not found",
-        "article_id": int(article_id),
-        "field": "article_id",
-        "field_metadata": {
-            "description": "Requested article identifier",
-            "type": "int",
-        },
-        "next_steps": ["use_existing_article_id"],
-    }
-
-
-def _require_article(db: Session, article_id: int) -> Article:
-    article = db.query(Article).filter(Article.id == article_id).first()
-    if article is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_build_article_not_found_detail(article_id=article_id),
-        )
-    return article
-
-
 def _get_article_sku_index(db: Session, article_id: int) -> tuple[set[int], set[int], dict[int, SkuUnit], dict[tuple[int, int], int]]:
     sku_rows = db.query(SkuUnit).filter(SkuUnit.article_id == article_id).all()
 
@@ -72,65 +52,6 @@ def _get_article_sku_index(db: Session, article_id: int) -> tuple[set[int], set[
     sku_by_color_size = {(sku.color_id, sku.size_id): sku.id for sku in sku_rows}
 
     return color_ids, size_ids, sku_by_id, sku_by_color_size
-
-
-def _build_admin_settings_field_metadata(*, field: str) -> dict[str, str]:
-    if field == "size_weights.size_id":
-        return {
-            "description": "Size identifiers from size_weights input",
-            "type": "list[int]",
-        }
-    if field == "elastic_bindings.elastic_type_id":
-        return {
-            "description": "Elastic type identifiers from elastic_bindings input",
-            "type": "list[int]",
-        }
-    if field == "elastic_bindings.color_id":
-        return {
-            "description": "Color identifier from elastic_bindings input",
-            "type": "int",
-        }
-    if field == "elastic_bindings.sku_unit_id":
-        return {
-            "description": "SKU unit identifier from elastic_bindings input",
-            "type": "int",
-        }
-    if field == "assorti_bundle_type_ids":
-        return {
-            "description": "Assorti bundle type identifiers",
-            "type": "list[int]",
-        }
-    if field == "in_flight_supply_defaults":
-        return {
-            "description": "In-flight supply default entries from request input",
-            "type": "list[object]",
-        }
-    return {
-        "description": "Production-order admin settings input field",
-        "type": "unknown",
-    }
-
-
-def _build_admin_settings_validation_detail(
-    *,
-    code: str,
-    message: str,
-    article_id: int,
-    field: str,
-    next_steps: list[str],
-    extra: dict[str, object] | None = None,
-) -> dict[str, object]:
-    detail = {
-        "code": code,
-        "message": message,
-        "article_id": int(article_id),
-        "field": field,
-        "field_metadata": _build_admin_settings_field_metadata(field=field),
-        "next_steps": list(next_steps),
-    }
-    if extra:
-        detail.update(extra)
-    return detail
 
 
 def _validate_size_weights(
@@ -295,7 +216,7 @@ def get_production_order_admin_settings(
     db: Session,
     article_id: int,
 ) -> ProductionOrderAdminSettingsResponse:
-    _require_article(db, article_id)
+    _require_article(db=db, article_id=article_id)
 
     size_rows = (
         db.query(ProductionOrderSizeWeightSetting)
@@ -457,7 +378,7 @@ def upsert_production_order_admin_settings(
     article_id: int,
     payload: ProductionOrderAdminSettingsUpsertRequest,
 ) -> ProductionOrderAdminSettingsResponse:
-    _require_article(db, article_id)
+    _require_article(db=db, article_id=article_id)
 
     article_color_ids, _, sku_by_id, sku_by_color_size = _get_article_sku_index(
         db=db,

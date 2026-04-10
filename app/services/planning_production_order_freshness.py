@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, timezone
+
+from fastapi import HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.models.models import ArticlePlanningSettings
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
@@ -114,6 +120,39 @@ def build_from_wb_freshness_snapshot(
     )
 
 
+def _resolve_from_wb_freshness_thresholds(
+    db: Session,
+    article_id: int,
+    request_sales_stale_after_days: int | None,
+    request_stock_stale_after_days: int | None,
+) -> tuple[int, int, dict[str, str]]:
+    article_settings = (
+        db.query(ArticlePlanningSettings)
+        .filter(ArticlePlanningSettings.article_id == article_id)
+        .first()
+    )
+
+    admin_sales_stale_after_days = (
+        int(article_settings.production_order_freshness_sales_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_sales_stale_after_days is not None
+        else None
+    )
+    admin_stock_stale_after_days = (
+        int(article_settings.production_order_freshness_stock_stale_after_days)
+        if article_settings is not None
+        and article_settings.production_order_freshness_stock_stale_after_days is not None
+        else None
+    )
+
+    return resolve_from_wb_freshness_thresholds(
+        request_sales_stale_after_days=request_sales_stale_after_days,
+        request_stock_stale_after_days=request_stock_stale_after_days,
+        admin_sales_stale_after_days=admin_sales_stale_after_days,
+        admin_stock_stale_after_days=admin_stock_stale_after_days,
+    )
+
+
 def build_from_wb_freshness_next_steps(
     *,
     freshness_status: str,
@@ -162,3 +201,33 @@ def build_from_wb_freshness_blocker(
     if stale_stock:
         return "stale_wb_stock_data"
     return None
+
+
+def _raise_from_wb_strict_freshness_failure_if_needed(
+    *,
+    article_id: int,
+    freshness_mode: str,
+    freshness_status: str,
+    sales_age_days: int | None,
+    stock_oldest_age_days: int | None,
+    sales_stale_after_days: int,
+    stock_stale_after_days: int,
+    threshold_source: dict[str, object],
+    build_from_wb_freshness_failure_detail: Callable[..., dict[str, object]],
+) -> None:
+    if freshness_mode != "strict" or freshness_status == "fresh":
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=build_from_wb_freshness_failure_detail(
+            article_id=article_id,
+            freshness_status=freshness_status,
+            freshness_mode=freshness_mode,
+            sales_age_days=sales_age_days,
+            stock_oldest_age_days=stock_oldest_age_days,
+            sales_stale_after_days=sales_stale_after_days,
+            stock_stale_after_days=stock_stale_after_days,
+            threshold_source=threshold_source,
+        ),
+    )
