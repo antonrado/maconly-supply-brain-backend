@@ -284,6 +284,10 @@ from app.services.planning_production_order_settings_resolution_application impo
     _SettingsResolutionApplicationResult as _extracted_SettingsResolutionApplicationResult,
     _apply_production_order_settings_resolution as _extracted_apply_production_order_settings_resolution,
 )
+from app.services.planning_production_order_settings_resolution_unpack_application import (
+    _SettingsResolutionUnpackApplicationResult as _extracted_SettingsResolutionUnpackApplicationResult,
+    _apply_production_order_settings_resolution_unpack as _extracted_apply_production_order_settings_resolution_unpack,
+)
 from app.services.planning_production_order_supply_policy import (
     _compute_economic_buffer_days as _extracted_compute_economic_buffer_days,
     _estimate_effective_in_flight_qty as _extracted_estimate_effective_in_flight_qty,
@@ -589,6 +593,10 @@ _SettingsResolutionApplicationResult = _extracted_SettingsResolutionApplicationR
 _apply_production_order_settings_resolution = (
     _extracted_apply_production_order_settings_resolution
 )
+_SettingsResolutionUnpackApplicationResult = _extracted_SettingsResolutionUnpackApplicationResult
+_apply_production_order_settings_resolution_unpack = (
+    _extracted_apply_production_order_settings_resolution_unpack
+)
 _load_admin_size_weights = _extracted_load_admin_size_weights
 _load_admin_in_flight_defaults = _extracted_load_admin_in_flight_defaults
 _PreparedProductionOrderInputs = _extracted_PreparedProductionOrderInputs
@@ -748,9 +756,12 @@ def build_production_order_proposal(
         resolve_layer_proxy_settings=_resolve_layer_proxy_settings,
         resolve_economic_settings=_resolve_economic_settings,
     )
-    settings = settings_resolution_application.settings
-    layer_proxy_settings = settings_resolution_application.layer_proxy_settings
-    economic_settings = settings_resolution_application.economic_settings
+    settings_resolution_unpack = _apply_production_order_settings_resolution_unpack(
+        settings_resolution_application=settings_resolution_application,
+    )
+    settings = settings_resolution_unpack.settings
+    layer_proxy_settings = settings_resolution_unpack.layer_proxy_settings
+    economic_settings = settings_resolution_unpack.economic_settings
 
     if not settings.include_in_planning:
         skip_application = _apply_production_order_skip(

@@ -337,12 +337,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order constraint-unpack application ownership extraction is regression-locked: `planning_production_order_constraint_unpack_application.py` now solely owns `_ConstraintUnpackApplicationResult` and `_apply_production_order_constraint_unpack`, including post-constraint result projection for the direct production-order path (`constraints_applied`, `shared_color_pool`, `applicable_elastic_type_ids`, `elastic_scope_line_keys`, `elastic_scope_mode`, `scoped_elastic_rows_count`, `elastic_uplift_delta`, `elastic_uplift_scope`, `elastic_uplift_keys`, `elastic_uplift_line_alloc`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order candidate-lines-unpack application ownership extraction is regression-locked: `planning_production_order_candidate_lines_unpack_application.py` now solely owns `_CandidateLinesUnpackApplicationResult` and `_apply_production_order_candidate_lines_unpack`, including post-candidate-lines result projection for the direct production-order path (`candidate_lines`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order settings-loading-unpack application ownership extraction is regression-locked: `planning_production_order_settings_loading_unpack_application.py` now solely owns `_SettingsLoadingUnpackApplicationResult` and `_apply_production_order_settings_loading_unpack`, including post-settings-loading result projection for the direct production-order path (`article_settings`, `planning_settings`, `global_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order settings-resolution-unpack application ownership extraction is regression-locked: `planning_production_order_settings_resolution_unpack_application.py` now solely owns `_SettingsResolutionUnpackApplicationResult` and `_apply_production_order_settings_resolution_unpack`, including post-settings-resolution result projection for the direct production-order path (`settings`, `layer_proxy_settings`, `economic_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 05:31 +07:00`
+- Date: `2026-04-11 05:38 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `445b5c1`
+- Last commit (`git log -1 --oneline`): `e950f77`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
