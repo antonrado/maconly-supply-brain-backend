@@ -165,6 +165,10 @@ from app.services.planning_production_order_explanation_warning_application impo
     _ExplanationWarningApplicationResult as _extracted_ExplanationWarningApplicationResult,
     _apply_production_order_explanation_warnings as _extracted_apply_production_order_explanation_warnings,
 )
+from app.services.planning_production_order_explanation_warning_unpack_application import (
+    _ExplanationWarningUnpackApplicationResult as _extracted_ExplanationWarningUnpackApplicationResult,
+    _apply_production_order_explanation_warning_unpack as _extracted_apply_production_order_explanation_warning_unpack,
+)
 from app.services.planning_production_order_alpha_proxy_application import (
     _AlphaProxyApplicationResult as _extracted_AlphaProxyApplicationResult,
     _apply_production_order_alpha_proxy_economics as _extracted_apply_production_order_alpha_proxy_economics,
@@ -558,6 +562,8 @@ _ScopeRecommendationUnpackApplicationResult = _extracted_ScopeRecommendationUnpa
 _apply_production_order_scope_recommendation_unpack = _extracted_apply_production_order_scope_recommendation_unpack
 _ExplanationWarningApplicationResult = _extracted_ExplanationWarningApplicationResult
 _apply_production_order_explanation_warnings = _extracted_apply_production_order_explanation_warnings
+_ExplanationWarningUnpackApplicationResult = _extracted_ExplanationWarningUnpackApplicationResult
+_apply_production_order_explanation_warning_unpack = _extracted_apply_production_order_explanation_warning_unpack
 _AlphaProxyApplicationResult = _extracted_AlphaProxyApplicationResult
 _apply_production_order_alpha_proxy_economics = _extracted_apply_production_order_alpha_proxy_economics
 _ExplanationApplicationResult = _extracted_ExplanationApplicationResult
@@ -1019,7 +1025,10 @@ def build_production_order_proposal(
             _build_shortage_wait_blocked_by_capital_constraint_warning
         ),
     )
-    explanation_warnings = explanation_warning_application.explanation_warnings
+    explanation_warning_unpack = _apply_production_order_explanation_warning_unpack(
+        explanation_warning_application=explanation_warning_application,
+    )
+    explanation_warnings = explanation_warning_unpack.explanation_warnings
 
     alpha_proxy_application = _apply_production_order_alpha_proxy_economics(
         layer4_scenario_factors=LAYER4_SCENARIO_FACTORS,
