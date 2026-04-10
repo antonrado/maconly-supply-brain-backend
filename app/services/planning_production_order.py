@@ -126,6 +126,10 @@ from app.services.planning_production_order_layer3_application import (
     _Layer3ApplicationResult as _extracted_Layer3ApplicationResult,
     _apply_production_order_layer3 as _extracted_apply_production_order_layer3,
 )
+from app.services.planning_production_order_layer3_unpack_application import (
+    _Layer3UnpackApplicationResult as _extracted_Layer3UnpackApplicationResult,
+    _apply_production_order_layer3_unpack as _extracted_apply_production_order_layer3_unpack,
+)
 from app.services.planning_production_order_line_requirements_application import (
     _LineRequirementsApplicationResult as _extracted_LineRequirementsApplicationResult,
     _apply_production_order_line_requirements as _extracted_apply_production_order_line_requirements,
@@ -589,6 +593,8 @@ _Layer2SummaryUnpackApplicationResult = _extracted_Layer2SummaryUnpackApplicatio
 _apply_production_order_layer2_summary_unpack = _extracted_apply_production_order_layer2_summary_unpack
 _Layer3ApplicationResult = _extracted_Layer3ApplicationResult
 _apply_production_order_layer3 = _extracted_apply_production_order_layer3
+_Layer3UnpackApplicationResult = _extracted_Layer3UnpackApplicationResult
+_apply_production_order_layer3_unpack = _extracted_apply_production_order_layer3_unpack
 _LineRequirementsApplicationResult = _extracted_LineRequirementsApplicationResult
 _apply_production_order_line_requirements = (
     _extracted_apply_production_order_line_requirements
@@ -953,9 +959,12 @@ def build_production_order_proposal(
         apply_layer3_purchase_shaping=_apply_layer3_purchase_shaping,
         build_layer3_contract_summary=_build_layer3_contract_summary,
     )
-    layer3_decision_by_line = layer3_application.layer3_decision_by_line
-    layer3_purchase_shaping = layer3_application.layer3_purchase_shaping
-    layer3_contract = layer3_application.layer3_contract
+    layer3_unpack = _apply_production_order_layer3_unpack(
+        layer3_application=layer3_application,
+    )
+    layer3_decision_by_line = layer3_unpack.layer3_decision_by_line
+    layer3_purchase_shaping = layer3_unpack.layer3_purchase_shaping
+    layer3_contract = layer3_unpack.layer3_contract
 
     constraint_application = _apply_production_order_constraints(
         db=db,
