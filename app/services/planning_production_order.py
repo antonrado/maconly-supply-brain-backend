@@ -225,6 +225,10 @@ from app.services.planning_production_order_risk_application import (
     _RiskApplicationResult as _extracted_RiskApplicationResult,
     _apply_production_order_risk_level as _extracted_apply_production_order_risk_level,
 )
+from app.services.planning_production_order_risk_unpack_application import (
+    _RiskUnpackApplicationResult as _extracted_RiskUnpackApplicationResult,
+    _apply_production_order_risk_unpack as _extracted_apply_production_order_risk_unpack,
+)
 from app.services.planning_production_order_resource_allocation_application import (
     _ResourceAllocationApplicationResult as _extracted_ResourceAllocationApplicationResult,
     _apply_production_order_resource_allocation as _extracted_apply_production_order_resource_allocation,
@@ -624,6 +628,8 @@ _HorizonApplicationResult = _extracted_HorizonApplicationResult
 _apply_production_order_horizon = _extracted_apply_production_order_horizon
 _RiskApplicationResult = _extracted_RiskApplicationResult
 _apply_production_order_risk_level = _extracted_apply_production_order_risk_level
+_RiskUnpackApplicationResult = _extracted_RiskUnpackApplicationResult
+_apply_production_order_risk_unpack = _extracted_apply_production_order_risk_unpack
 _ResponseApplicationResult = _extracted_ResponseApplicationResult
 _apply_production_order_response = _extracted_apply_production_order_response
 _ResponseUnpackApplicationResult = _extracted_ResponseUnpackApplicationResult
@@ -882,8 +888,11 @@ def build_production_order_proposal(
         alert_threshold_days=settings.alert_threshold_days,
         target_coverage_days=settings.target_coverage_days,
     )
-    days_of_cover_estimate = risk_application.days_of_cover_estimate
-    risk_level = risk_application.risk_level
+    risk_unpack = _apply_production_order_risk_unpack(
+        risk_application=risk_application,
+    )
+    days_of_cover_estimate = risk_unpack.days_of_cover_estimate
+    risk_level = risk_unpack.risk_level
 
     horizon_application = _apply_production_order_horizon(
         risk_level=risk_level,
