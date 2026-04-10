@@ -173,6 +173,10 @@ from app.services.planning_production_order_alpha_proxy_application import (
     _AlphaProxyApplicationResult as _extracted_AlphaProxyApplicationResult,
     _apply_production_order_alpha_proxy_economics as _extracted_apply_production_order_alpha_proxy_economics,
 )
+from app.services.planning_production_order_alpha_proxy_unpack_application import (
+    _AlphaProxyUnpackApplicationResult as _extracted_AlphaProxyUnpackApplicationResult,
+    _apply_production_order_alpha_proxy_unpack as _extracted_apply_production_order_alpha_proxy_unpack,
+)
 from app.services.planning_production_order_explanation_application import (
     _ExplanationApplicationResult as _extracted_ExplanationApplicationResult,
     _apply_production_order_explanation as _extracted_apply_production_order_explanation,
@@ -566,6 +570,8 @@ _ExplanationWarningUnpackApplicationResult = _extracted_ExplanationWarningUnpack
 _apply_production_order_explanation_warning_unpack = _extracted_apply_production_order_explanation_warning_unpack
 _AlphaProxyApplicationResult = _extracted_AlphaProxyApplicationResult
 _apply_production_order_alpha_proxy_economics = _extracted_apply_production_order_alpha_proxy_economics
+_AlphaProxyUnpackApplicationResult = _extracted_AlphaProxyUnpackApplicationResult
+_apply_production_order_alpha_proxy_unpack = _extracted_apply_production_order_alpha_proxy_unpack
 _ExplanationApplicationResult = _extracted_ExplanationApplicationResult
 _apply_production_order_explanation = _extracted_apply_production_order_explanation
 _ExplainabilityModeApplicationResult = _extracted_ExplainabilityModeApplicationResult
@@ -1082,8 +1088,11 @@ def build_production_order_proposal(
         build_layer2_legacy_alias_deprecation_plan=_build_layer2_legacy_alias_deprecation_plan,
         build_alpha_proxy_economics_meta=_build_alpha_proxy_economics_meta,
     )
-    layer4_scenario_factor_items = alpha_proxy_application.layer4_scenario_factor_items
-    alpha_proxy_economics = alpha_proxy_application.alpha_proxy_economics
+    alpha_proxy_unpack = _apply_production_order_alpha_proxy_unpack(
+        alpha_proxy_application=alpha_proxy_application,
+    )
+    layer4_scenario_factor_items = alpha_proxy_unpack.layer4_scenario_factor_items
+    alpha_proxy_economics = alpha_proxy_unpack.alpha_proxy_economics
 
     explanation_application = _apply_production_order_explanation(
         risk_level=risk_level,
