@@ -221,6 +221,10 @@ from app.services.planning_production_order_horizon_application import (
     _HorizonApplicationResult as _extracted_HorizonApplicationResult,
     _apply_production_order_horizon as _extracted_apply_production_order_horizon,
 )
+from app.services.planning_production_order_horizon_unpack_application import (
+    _HorizonUnpackApplicationResult as _extracted_HorizonUnpackApplicationResult,
+    _apply_production_order_horizon_unpack as _extracted_apply_production_order_horizon_unpack,
+)
 from app.services.planning_production_order_risk_application import (
     _RiskApplicationResult as _extracted_RiskApplicationResult,
     _apply_production_order_risk_level as _extracted_apply_production_order_risk_level,
@@ -626,6 +630,8 @@ _ExplainabilityModeUnpackApplicationResult = _extracted_ExplainabilityModeUnpack
 _apply_production_order_explainability_mode_unpack = _extracted_apply_production_order_explainability_mode_unpack
 _HorizonApplicationResult = _extracted_HorizonApplicationResult
 _apply_production_order_horizon = _extracted_apply_production_order_horizon
+_HorizonUnpackApplicationResult = _extracted_HorizonUnpackApplicationResult
+_apply_production_order_horizon_unpack = _extracted_apply_production_order_horizon_unpack
 _RiskApplicationResult = _extracted_RiskApplicationResult
 _apply_production_order_risk_level = _extracted_apply_production_order_risk_level
 _RiskUnpackApplicationResult = _extracted_RiskUnpackApplicationResult
@@ -906,10 +912,13 @@ def build_production_order_proposal(
         compute_economic_buffer_days=_compute_economic_buffer_days,
         ceil_to_int=_ceil_to_int,
     )
-    economic_buffer_days = horizon_application.economic_buffer_days
-    target_bundle_horizon_days = horizon_application.target_bundle_horizon_days
-    required_bundle_units = horizon_application.required_bundle_units
-    bundle_deficit_total = horizon_application.bundle_deficit_total
+    horizon_unpack = _apply_production_order_horizon_unpack(
+        horizon_application=horizon_application,
+    )
+    economic_buffer_days = horizon_unpack.economic_buffer_days
+    target_bundle_horizon_days = horizon_unpack.target_bundle_horizon_days
+    required_bundle_units = horizon_unpack.required_bundle_units
+    bundle_deficit_total = horizon_unpack.bundle_deficit_total
 
     line_requirements_application = _apply_production_order_line_requirements(
         bundle_deficit_total=bundle_deficit_total,

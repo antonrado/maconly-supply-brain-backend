@@ -331,12 +331,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order layer2-summary-unpack application ownership extraction is regression-locked: `planning_production_order_layer2_summary_unpack_application.py` now solely owns `_Layer2SummaryUnpackApplicationResult` and `_apply_production_order_layer2_summary_unpack`, including post-layer2-summary result projection for the direct production-order path (`layer2_contract`, `layer2_decision_quality`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order layer1-summary-unpack application ownership extraction is regression-locked: `planning_production_order_layer1_summary_unpack_application.py` now solely owns `_Layer1SummaryUnpackApplicationResult` and `_apply_production_order_layer1_summary_unpack`, including post-layer1-summary result projection for the direct production-order path (`layer1_avg_coverage_days`, `layer1_high_stockout_risk_count`, `layer1_contract`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order risk-unpack application ownership extraction is regression-locked: `planning_production_order_risk_unpack_application.py` now solely owns `_RiskUnpackApplicationResult` and `_apply_production_order_risk_unpack`, including post-risk result projection for the direct production-order path (`days_of_cover_estimate`, `risk_level`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order horizon-unpack application ownership extraction is regression-locked: `planning_production_order_horizon_unpack_application.py` now solely owns `_HorizonUnpackApplicationResult` and `_apply_production_order_horizon_unpack`, including post-horizon result projection for the direct production-order path (`economic_buffer_days`, `target_bundle_horizon_days`, `required_bundle_units`, `bundle_deficit_total`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 04:47 +07:00`
+- Date: `2026-04-11 04:54 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `5cf69c0`
+- Last commit (`git log -1 --oneline`): `216e677`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
