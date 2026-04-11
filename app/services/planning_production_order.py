@@ -102,6 +102,10 @@ from app.services.planning_production_order_inputs import (
     _PreparedProductionOrderInputs as _extracted_PreparedProductionOrderInputs,
     _prepare_production_order_inputs as _extracted_prepare_production_order_inputs,
 )
+from app.services.planning_production_order_inputs_unpack_application import (
+    _InputsUnpackApplicationResult as _extracted_InputsUnpackApplicationResult,
+    _apply_production_order_inputs_unpack as _extracted_apply_production_order_inputs_unpack,
+)
 from app.services.planning_production_order_layer1_summary_application import (
     _Layer1SummaryApplicationResult as _extracted_Layer1SummaryApplicationResult,
     _apply_production_order_layer1_summary as _extracted_apply_production_order_layer1_summary,
@@ -609,6 +613,8 @@ _load_admin_size_weights = _extracted_load_admin_size_weights
 _load_admin_in_flight_defaults = _extracted_load_admin_in_flight_defaults
 _PreparedProductionOrderInputs = _extracted_PreparedProductionOrderInputs
 _prepare_production_order_inputs = _extracted_prepare_production_order_inputs
+_InputsUnpackApplicationResult = _extracted_InputsUnpackApplicationResult
+_apply_production_order_inputs_unpack = _extracted_apply_production_order_inputs_unpack
 _Layer1SummaryApplicationResult = _extracted_Layer1SummaryApplicationResult
 _apply_production_order_layer1_summary = _extracted_apply_production_order_layer1_summary
 _Layer1SummaryUnpackApplicationResult = _extracted_Layer1SummaryUnpackApplicationResult
@@ -816,27 +822,30 @@ def build_production_order_proposal(
         build_direct_missing_bundle_recipe_detail=_build_direct_missing_bundle_recipe_detail,
         build_direct_missing_sku_scope_detail=_build_direct_missing_sku_scope_detail,
     )
-    bundle_type_ids = prepared_inputs.bundle_type_ids
-    recipe_colors_by_bundle = prepared_inputs.recipe_colors_by_bundle
-    all_recipe_color_ids = prepared_inputs.all_recipe_color_ids
-    sku_by_color_size = prepared_inputs.sku_by_color_size
-    color_to_sizes = prepared_inputs.color_to_sizes
-    size_ids = prepared_inputs.size_ids
-    size_weights_source = prepared_inputs.size_weights_source
-    size_weights = prepared_inputs.size_weights
-    stock_by_color_size = prepared_inputs.stock_by_color_size
-    current_stock_by_color_size = prepared_inputs.current_stock_by_color_size
-    in_flight_source = prepared_inputs.in_flight_source
-    in_flight_raw_qty_total = prepared_inputs.in_flight_raw_qty_total
-    in_flight_effective_qty_total = prepared_inputs.in_flight_effective_qty_total
-    in_flight_effective_lines = prepared_inputs.in_flight_effective_lines
-    in_flight_effective_by_color_size = prepared_inputs.in_flight_effective_by_color_size
-    in_flight_eta_days_by_color_size = prepared_inputs.in_flight_eta_days_by_color_size
-    demand_by_bundle = prepared_inputs.demand_by_bundle
-    total_daily_sales = prepared_inputs.total_daily_sales
-    bundle_stock_source = prepared_inputs.bundle_stock_source
-    ready_bundle_stock_total = prepared_inputs.ready_bundle_stock_total
-    shares_by_bundle = prepared_inputs.shares_by_bundle
+    inputs_unpack = _apply_production_order_inputs_unpack(
+        inputs_application=prepared_inputs,
+    )
+    bundle_type_ids = inputs_unpack.bundle_type_ids
+    recipe_colors_by_bundle = inputs_unpack.recipe_colors_by_bundle
+    all_recipe_color_ids = inputs_unpack.all_recipe_color_ids
+    sku_by_color_size = inputs_unpack.sku_by_color_size
+    color_to_sizes = inputs_unpack.color_to_sizes
+    size_ids = inputs_unpack.size_ids
+    size_weights_source = inputs_unpack.size_weights_source
+    size_weights = inputs_unpack.size_weights
+    stock_by_color_size = inputs_unpack.stock_by_color_size
+    current_stock_by_color_size = inputs_unpack.current_stock_by_color_size
+    in_flight_source = inputs_unpack.in_flight_source
+    in_flight_raw_qty_total = inputs_unpack.in_flight_raw_qty_total
+    in_flight_effective_qty_total = inputs_unpack.in_flight_effective_qty_total
+    in_flight_effective_lines = inputs_unpack.in_flight_effective_lines
+    in_flight_effective_by_color_size = inputs_unpack.in_flight_effective_by_color_size
+    in_flight_eta_days_by_color_size = inputs_unpack.in_flight_eta_days_by_color_size
+    demand_by_bundle = inputs_unpack.demand_by_bundle
+    total_daily_sales = inputs_unpack.total_daily_sales
+    bundle_stock_source = inputs_unpack.bundle_stock_source
+    ready_bundle_stock_total = inputs_unpack.ready_bundle_stock_total
+    shares_by_bundle = inputs_unpack.shares_by_bundle
 
     resource_allocation_application = _apply_production_order_resource_allocation(
         bundle_type_ids=bundle_type_ids,

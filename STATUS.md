@@ -339,12 +339,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Production-order settings-loading-unpack application ownership extraction is regression-locked: `planning_production_order_settings_loading_unpack_application.py` now solely owns `_SettingsLoadingUnpackApplicationResult` and `_apply_production_order_settings_loading_unpack`, including post-settings-loading result projection for the direct production-order path (`article_settings`, `planning_settings`, `global_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order settings-resolution-unpack application ownership extraction is regression-locked: `planning_production_order_settings_resolution_unpack_application.py` now solely owns `_SettingsResolutionUnpackApplicationResult` and `_apply_production_order_settings_resolution_unpack`, including post-settings-resolution result projection for the direct production-order path (`settings`, `layer_proxy_settings`, `economic_settings`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 - Production-order economic-governance-unpack application ownership extraction is regression-locked: `planning_production_order_economic_governance_unpack_application.py` now solely owns `_EconomicGovernanceUnpackApplicationResult` and `_apply_production_order_economic_governance_unpack`, including post-economic-governance result projection for the direct production-order path (`economic_settings`, `economics_trust`, `economics_warnings`, `capital_governance`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
+- Production-order inputs-unpack application ownership extraction is regression-locked: `planning_production_order_inputs_unpack_application.py` now solely owns `_InputsUnpackApplicationResult` and `_apply_production_order_inputs_unpack`, including post-inputs result projection for the direct production-order path (`bundle_type_ids`, `recipe_colors_by_bundle`, `all_recipe_color_ids`, `sku_by_color_size`, `color_to_sizes`, `size_ids`, `size_weights_source`, `size_weights`, `stock_by_color_size`, `current_stock_by_color_size`, `in_flight_source`, `in_flight_raw_qty_total`, `in_flight_effective_qty_total`, `in_flight_effective_lines`, `in_flight_effective_by_color_size`, `in_flight_eta_days_by_color_size`, `demand_by_bundle`, `total_daily_sales`, `bundle_stock_source`, `ready_bundle_stock_total`, `shares_by_bundle`), while `planning_production_order.py` preserves façade compatibility helper names and runtime semantics unchanged.
 
 ## Last verification
 
-- Date: `2026-04-11 05:50 +07:00`
+- Date: `2026-04-11 11:28 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `b696fc3`
+- Last commit (`git log -1 --oneline`): `d990481`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
