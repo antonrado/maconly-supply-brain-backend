@@ -48,3 +48,4 @@ alembic/versions/__pycache__/
 
 # Misc
 *.pid
+audit_pytest.txt

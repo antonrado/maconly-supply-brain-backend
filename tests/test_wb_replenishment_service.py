@@ -27,7 +27,7 @@ def _create_basic_article_with_stock(db_session, code: str):
 
 
 def _add_nsk_stock(db_session, sku: SkuUnit, qty: int):
-    wh = Warehouse(code="NSK", name="NSK", type="internal")
+    wh = Warehouse(code=f"NSK-{sku.id}", name="NSK", type="internal")
     db_session.add(wh)
     db_session.flush()
     sb = StockBalance(sku_unit_id=sku.id, warehouse_id=wh.id, quantity=qty)
@@ -170,7 +170,7 @@ def test_replenishment_limited_by_max_coverage(db_session):
     )
 
     item = compute_replenishment(db_session, payload)[0]
-    assert item.coverage_after_transfer <= pytest.approx(30, rel=0.1)
+    assert item.coverage_after_transfer == pytest.approx(30, rel=0.1)
     assert item.limited_by_max_coverage
 
 

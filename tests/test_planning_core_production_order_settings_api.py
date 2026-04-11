@@ -1,0 +1,656 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.db import get_db
+from app.main import app
+from app.services.planning_production_order import (
+    ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+    LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    LAYER_PROXY_VALUE_SOURCE,
+)
+from app.models.models import (
+    Article,
+    ArticlePlanningSettings,
+    BundleRecipe,
+    BundleType,
+    Color,
+    ElasticType,
+    GlobalPlanningSettings,
+    PlanningSettings,
+    Size,
+    SkuUnit,
+    StockBalance,
+    Warehouse,
+)
+
+
+@pytest.fixture
+def client(db_session):
+    def _get_db_override():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = _get_db_override
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def _seed_scope(db_session):
+    article = Article(code="PO-SET-1", name="PO-SET-1")
+    article_other = Article(code="PO-SET-2", name="PO-SET-2")
+    db_session.add_all([article, article_other])
+    db_session.flush()
+
+    color_1 = Color(inner_code="PO-SC-1", pantone_code="P-1", description="C1")
+    color_2 = Color(inner_code="PO-SC-2", pantone_code="P-2", description="C2")
+    db_session.add_all([color_1, color_2])
+    db_session.flush()
+
+    size_s = Size(label="PO-SZ-S", sort_order=1)
+    size_m = Size(label="PO-SZ-M", sort_order=2)
+    db_session.add_all([size_s, size_m])
+    db_session.flush()
+
+    sku_11 = SkuUnit(article_id=article.id, color_id=color_1.id, size_id=size_s.id)
+    sku_12 = SkuUnit(article_id=article.id, color_id=color_1.id, size_id=size_m.id)
+    sku_21 = SkuUnit(article_id=article.id, color_id=color_2.id, size_id=size_s.id)
+    sku_22 = SkuUnit(article_id=article.id, color_id=color_2.id, size_id=size_m.id)
+    sku_other = SkuUnit(article_id=article_other.id, color_id=color_1.id, size_id=size_s.id)
+    db_session.add_all([sku_11, sku_12, sku_21, sku_22, sku_other])
+    db_session.flush()
+
+    elastic_1 = ElasticType(code="PO-EL-A", name="PO-EL-A")
+    elastic_2 = ElasticType(code="PO-EL-B", name="PO-EL-B")
+    db_session.add_all([elastic_1, elastic_2])
+    db_session.flush()
+
+    bundle_type = BundleType(code="PO-SBT-1", name="PO-SBT-1")
+    db_session.add(bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            BundleRecipe(article_id=article.id, bundle_type_id=bundle_type.id, color_id=color_1.id, position=1),
+            BundleRecipe(article_id=article.id, bundle_type_id=bundle_type.id, color_id=color_2.id, position=2),
+        ]
+    )
+
+    warehouse = Warehouse(code="PO-SET-NSK", name="PO-SET-NSK", type="local")
+    db_session.add(warehouse)
+    db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    db_session.add_all(
+        [
+            StockBalance(sku_unit_id=sku_11.id, warehouse_id=warehouse.id, quantity=20, updated_at=now),
+            StockBalance(sku_unit_id=sku_12.id, warehouse_id=warehouse.id, quantity=15, updated_at=now),
+            StockBalance(sku_unit_id=sku_21.id, warehouse_id=warehouse.id, quantity=18, updated_at=now),
+            StockBalance(sku_unit_id=sku_22.id, warehouse_id=warehouse.id, quantity=12, updated_at=now),
+        ]
+    )
+
+    db_session.add(
+        GlobalPlanningSettings(
+            default_target_coverage_days=60,
+            default_lead_time_days=70,
+            default_service_level_percent=90,
+            default_fabric_min_batch_qty=7000,
+            default_elastic_min_batch_qty=3000,
+        )
+    )
+    db_session.add(
+        ArticlePlanningSettings(
+            article_id=article.id,
+            include_in_planning=True,
+            priority=1,
+            target_coverage_days=60,
+            lead_time_days=70,
+            service_level_percent=90,
+        )
+    )
+    db_session.add(
+        PlanningSettings(
+            article_id=article.id,
+            is_active=True,
+            min_fabric_batch=0,
+            min_elastic_batch=0,
+            alert_threshold_days=90,
+            safety_stock_days=0,
+            strictness=1.0,
+            notes=None,
+        )
+    )
+
+    db_session.commit()
+
+    return {
+        "article": article,
+        "article_other": article_other,
+        "color_1": color_1,
+        "size_s": size_s,
+        "size_m": size_m,
+        "sku_22": sku_22,
+        "sku_other": sku_other,
+        "elastic_1": elastic_1,
+        "elastic_2": elastic_2,
+        "bundle_type": bundle_type,
+    }
+
+
+def test_production_order_settings_get_empty(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    response = client.get(f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}")
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    assert body["article_id"] == seeded["article"].id
+    assert body["size_weights"] == []
+    assert body["elastic_bindings"] == []
+    assert body["in_flight_supply_defaults"] == []
+    assert body["assorti_bundle_type_ids"] == []
+    assert body["freshness_sales_stale_after_days"] is None
+    assert body["freshness_stock_stale_after_days"] is None
+    assert body["layer3_stockout_boost_max"] is None
+    assert body["layer3_overstock_dampen_max"] is None
+    assert body["layer5_unavoidable_stockout_risk_threshold"] is None
+    assert body["layer5_accelerate_production_risk_threshold"] is None
+    assert body["production_cost_per_unit"] is None
+    assert body["logistics_cost_per_unit"] is None
+    assert body["wb_commission_percent_main"] is None
+    assert body["wb_commission_percent_assorti"] is None
+    assert body["average_realized_price_main"] is None
+    assert body["average_realized_price_assorti"] is None
+    assert body["available_capital"] is None
+
+
+def test_production_order_settings_returns_404_for_unknown_article(client, db_session):  # noqa: ARG001
+    response = client.get("/api/v1/planning/core/production-order/settings/999999999")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
+def test_production_order_settings_put_and_get_roundtrip(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [
+            {"size_id": seeded["size_s"].id, "weight": 0.6},
+            {"size_id": seeded["size_m"].id, "weight": 0.4},
+        ],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": seeded["elastic_1"].id,
+                "color_id": seeded["color_1"].id,
+                "is_active": True,
+            },
+            {
+                "elastic_type_id": seeded["elastic_2"].id,
+                "sku_unit_id": seeded["sku_22"].id,
+                "is_active": True,
+            },
+        ],
+        "in_flight_supply_defaults": [
+            {
+                "color_id": seeded["color_1"].id,
+                "size_id": seeded["size_s"].id,
+                "qty": 150,
+                "eta_days": 25,
+                "stage": "production",
+                "is_active": True,
+            }
+        ],
+        "assorti_bundle_type_ids": [seeded["bundle_type"].id],
+        "freshness_sales_stale_after_days": 14,
+        "freshness_stock_stale_after_days": 9,
+        "layer3_stockout_boost_max": 0.22,
+        "layer3_overstock_dampen_max": 0.18,
+        "layer5_unavoidable_stockout_risk_threshold": 0.28,
+        "layer5_accelerate_production_risk_threshold": 0.42,
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.2,
+        "wb_commission_percent_main": 0.08,
+        "wb_commission_percent_assorti": 0.12,
+        "average_realized_price_main": 2.8,
+        "average_realized_price_assorti": 3.1,
+        "available_capital": 450.0,
+    }
+
+    put_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert put_response.status_code == 200, put_response.text
+
+    body = put_response.json()
+    assert len(body["size_weights"]) == 2
+    assert len(body["elastic_bindings"]) == 2
+    assert len(body["in_flight_supply_defaults"]) == 1
+    assert body["assorti_bundle_type_ids"] == [seeded["bundle_type"].id]
+    assert body["freshness_sales_stale_after_days"] == 14
+    assert body["freshness_stock_stale_after_days"] == 9
+    assert body["layer3_stockout_boost_max"] == 0.22
+    assert body["layer3_overstock_dampen_max"] == 0.18
+    assert body["layer5_unavoidable_stockout_risk_threshold"] == 0.28
+    assert body["layer5_accelerate_production_risk_threshold"] == 0.42
+    assert body["production_cost_per_unit"] == 1.0
+    assert body["logistics_cost_per_unit"] == 0.2
+    assert body["wb_commission_percent_main"] == 0.08
+    assert body["wb_commission_percent_assorti"] == 0.12
+    assert body["average_realized_price_main"] == 2.8
+    assert body["average_realized_price_assorti"] == 3.1
+    assert body["available_capital"] == 450.0
+
+    get_response = client.get(f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}")
+    assert get_response.status_code == 200, get_response.text
+
+    get_body = get_response.json()
+    assert get_body == body
+
+
+def test_production_order_settings_rejects_sku_from_other_article(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": seeded["elastic_1"].id,
+                "sku_unit_id": seeded["sku_other"].id,
+                "is_active": True,
+            }
+        ],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "elastic_binding_sku_out_of_article_scope",
+        "message": "sku_unit_id does not belong to article",
+        "article_id": seeded["article"].id,
+        "field": "elastic_bindings.sku_unit_id",
+        "field_metadata": {
+            "description": "SKU unit identifier from elastic_bindings input",
+            "type": "int",
+        },
+        "next_steps": ["use_article_sku_unit_ids_only"],
+        "invalid_sku_unit_id": seeded["sku_other"].id,
+    }
+
+
+def test_production_order_settings_rejects_elastic_binding_color_out_of_article_scope_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_scope(db_session)
+    color_other = Color(inner_code="PO-SC-OUT", pantone_code="P-OUT", description="OUT")
+    db_session.add(color_other)
+    db_session.commit()
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": seeded["elastic_1"].id,
+                "color_id": color_other.id,
+                "is_active": True,
+            }
+        ],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "elastic_binding_color_out_of_article_scope",
+        "message": "color_id does not belong to article SKU scope",
+        "article_id": seeded["article"].id,
+        "field": "elastic_bindings.color_id",
+        "field_metadata": {
+            "description": "Color identifier from elastic_bindings input",
+            "type": "int",
+        },
+        "next_steps": ["use_article_color_ids_only"],
+        "invalid_color_id": color_other.id,
+    }
+
+
+def test_production_order_settings_rejects_unknown_size_ids_with_structured_detail(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [
+            {"size_id": 999999, "weight": 1.0},
+        ],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "unknown_size_ids",
+        "message": "Unknown size_id(s)",
+        "article_id": seeded["article"].id,
+        "field": "size_weights.size_id",
+        "field_metadata": {
+            "description": "Size identifiers from size_weights input",
+            "type": "list[int]",
+        },
+        "next_steps": ["use_existing_size_ids"],
+        "invalid_size_ids": [999999],
+    }
+
+
+def test_production_order_settings_rejects_unknown_elastic_type_ids_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": 999999,
+                "sku_unit_id": seeded["sku_22"].id,
+                "is_active": True,
+            }
+        ],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "unknown_elastic_type_ids",
+        "message": "Unknown elastic_type_id(s)",
+        "article_id": seeded["article"].id,
+        "field": "elastic_bindings.elastic_type_id",
+        "field_metadata": {
+            "description": "Elastic type identifiers from elastic_bindings input",
+            "type": "list[int]",
+        },
+        "next_steps": ["use_existing_elastic_type_ids"],
+        "invalid_elastic_type_ids": [999999],
+    }
+
+
+def test_production_order_settings_rejects_elastic_binding_sku_color_mismatch_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [
+            {
+                "elastic_type_id": seeded["elastic_1"].id,
+                "sku_unit_id": seeded["sku_22"].id,
+                "color_id": seeded["color_1"].id,
+                "is_active": True,
+            }
+        ],
+        "in_flight_supply_defaults": [],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "elastic_binding_sku_color_mismatch",
+        "message": "sku_unit_id color mismatch with color_id",
+        "article_id": seeded["article"].id,
+        "field": "elastic_bindings.color_id",
+        "field_metadata": {
+            "description": "Color identifier from elastic_bindings input",
+            "type": "int",
+        },
+        "next_steps": ["align_elastic_binding_color_with_sku"],
+        "sku_unit_id": seeded["sku_22"].id,
+        "requested_color_id": seeded["color_1"].id,
+        "sku_color_id": seeded["sku_22"].color_id,
+    }
+
+
+def test_production_order_settings_rejects_invalid_in_flight_scope_with_structured_detail(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [
+            {
+                "color_id": seeded["color_1"].id,
+                "size_id": 999999,
+                "qty": 100,
+                "eta_days": 12,
+                "stage": "production",
+                "is_active": True,
+            }
+        ],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "in_flight_default_out_of_article_sku_scope",
+        "message": "In-flight default does not match any SKU for article",
+        "article_id": seeded["article"].id,
+        "field": "in_flight_supply_defaults",
+        "field_metadata": {
+            "description": "In-flight supply default entries from request input",
+            "type": "list[object]",
+        },
+        "next_steps": ["use_article_color_size_pairs_only"],
+        "color_id": seeded["color_1"].id,
+        "size_id": 999999,
+    }
+
+
+def test_production_order_settings_rejects_unknown_assorti_bundle_type_ids_with_structured_detail(
+    client,
+    db_session,
+):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [],
+        "assorti_bundle_type_ids": [999999],
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "unknown_assorti_bundle_type_ids",
+        "message": "Unknown assorti_bundle_type_id(s)",
+        "article_id": seeded["article"].id,
+        "field": "assorti_bundle_type_ids",
+        "field_metadata": {
+            "description": "Assorti bundle type identifiers",
+            "type": "list[int]",
+        },
+        "next_steps": ["use_existing_bundle_type_ids"],
+        "invalid_bundle_type_ids": [999999],
+    }
+
+
+def test_production_order_settings_rejects_invalid_layer5_threshold_order(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    payload = {
+        "size_weights": [],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [],
+        "layer5_unavoidable_stockout_risk_threshold": 0.5,
+        "layer5_accelerate_production_risk_threshold": 0.2,
+    }
+
+    response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=payload,
+    )
+    assert response.status_code == 422, response.text
+
+
+def test_production_order_proposal_uses_admin_defaults(client, db_session):
+    seeded = _seed_scope(db_session)
+
+    settings_payload = {
+        "size_weights": [
+            {"size_id": seeded["size_s"].id, "weight": 0.75},
+            {"size_id": seeded["size_m"].id, "weight": 0.25},
+        ],
+        "elastic_bindings": [],
+        "in_flight_supply_defaults": [
+            {
+                "color_id": seeded["color_1"].id,
+                "size_id": seeded["size_s"].id,
+                "qty": 200,
+                "eta_days": 15,
+                "stage": "china_to_nsk",
+                "is_active": True,
+            }
+        ],
+        "assorti_bundle_type_ids": [seeded["bundle_type"].id],
+        "layer3_stockout_boost_max": 0.21,
+        "layer3_overstock_dampen_max": 0.17,
+        "layer5_unavoidable_stockout_risk_threshold": 0.24,
+        "layer5_accelerate_production_risk_threshold": 0.31,
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.3,
+        "wb_commission_percent_main": 0.10,
+        "wb_commission_percent_assorti": 0.20,
+        "average_realized_price_main": 3.0,
+        "average_realized_price_assorti": 3.5,
+        "available_capital": 500.0,
+    }
+
+    save_resp = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json=settings_payload,
+    )
+    assert save_resp.status_code == 200, save_resp.text
+
+    proposal_payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "bundle_daily_sales": [
+            {"bundle_type_id": seeded["bundle_type"].id, "daily_sales": 18.0},
+        ],
+        "bundle_stock": [
+            {"bundle_type_id": seeded["bundle_type"].id, "wb_qty": 5, "local_qty": 5},
+        ],
+        "size_weights": {},
+        "in_flight_supply": [],
+    }
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=proposal_payload,
+    )
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    steps = body["explanation"]["steps"]
+    assert any("size_weights=admin_defaults" in step for step in steps)
+    assert any("in_flight=admin_defaults" in step for step in steps)
+
+    assorti_classification = body["explanation"]["meta"]["layer_1_stock_health"]["assorti_classification"]
+    assert assorti_classification["summary"] == {
+        "assorti_bundle_types": 1,
+        "main_bundle_types": 0,
+    }
+    assert assorti_classification["bundle_types"] == [
+        {
+            "bundle_type_id": seeded["bundle_type"].id,
+            "is_assorti": True,
+            "source": ASSORTI_CLASSIFICATION_ADMIN_FALLBACK_SOURCE,
+        }
+    ]
+
+    alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["layer_3_calibration"]["stockout_boost_max"] == 0.21
+    assert alpha_proxy["layer_3_calibration"]["overstock_dampen_max"] == 0.17
+    assert alpha_proxy["layer_5_unavoidable_stockout_risk_threshold"] == 0.24
+    assert alpha_proxy["layer_5_signal_thresholds"] == {
+        "accelerate_production": 0.31,
+        "increase_price_to_slow_velocity": 0.24,
+        "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    }
+    assert alpha_proxy["layer_proxy_source"] == {
+        "layer3_stockout_boost_max": "admin_defaults",
+        "layer3_overstock_dampen_max": "admin_defaults",
+        "layer5_unavoidable_stockout_risk_threshold": "admin_defaults",
+        "layer5_accelerate_production_risk_threshold": "admin_defaults",
+        "layer2_capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer2_stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "layer2_overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_accelerate_action_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_price_slowdown_lost_volume_rate": LAYER_PROXY_VALUE_SOURCE,
+        "layer5_reduce_order_marginal_profit_rate": LAYER_PROXY_VALUE_SOURCE,
+    }
+    assert alpha_proxy["economic_source"] == {
+        "production_cost_per_unit": "admin_defaults",
+        "logistics_cost_per_unit": "admin_defaults",
+        "wb_commission_percent_main": "admin_defaults",
+        "wb_commission_percent_assorti": "admin_defaults",
+        "average_realized_price_main": "admin_defaults",
+        "average_realized_price_assorti": "admin_defaults",
+        "available_capital": "admin_defaults",
+    }
+    assert alpha_proxy["economic_inputs"] == {
+        "production_cost_per_unit": 1.0,
+        "logistics_cost_per_unit": 0.3,
+        "wb_commission_percent_main": 0.1,
+        "wb_commission_percent_assorti": 0.2,
+        "average_realized_price_main": 3.0,
+        "average_realized_price_assorti": 3.5,
+        "available_capital": 500.0,
+    }
+    assert alpha_proxy["margin_proxy"] == {
+        "main": 1.4,
+        "assorti": 1.5,
+    }
+    assert alpha_proxy["unit_capital_proxy"] == 1.3

@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from fastapi import Depends
+from fastapi.params import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -115,4 +115,4 @@ def test_monitoring_bootstrap_signatures_use_db():
     service_params = list(sig_service.parameters.values())
     assert len(service_params) == 1
     sp = service_params[0]
-    assert sp.annotation is Session
+    assert sp.annotation in {Session, "Session"}

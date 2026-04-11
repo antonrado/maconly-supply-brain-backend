@@ -32,6 +32,20 @@ from app.services.bundle_planning import calculate_bundle_availability
 CapacityKey = Tuple[int, int]  # (bundle_type_id, size_id)
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def compute_bundle_capacity_for_article(db: Session, article_id: int) -> Dict[CapacityKey, int]:
     """Compute max number of bundles from NSC single-stock per (bundle_type, size).
 
@@ -41,14 +55,29 @@ def compute_bundle_capacity_for_article(db: Session, article_id: int) -> Dict[Ca
 
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=article_id),
+        )
 
     nsk_warehouse = (
         db.query(Warehouse)
-        .filter(Warehouse.type == "internal")
+        .join(StockBalance, StockBalance.warehouse_id == Warehouse.id)
+        .join(SkuUnit, SkuUnit.id == StockBalance.sku_unit_id)
+        .filter(
+            Warehouse.type == "internal",
+            SkuUnit.article_id == article_id,
+        )
         .order_by(Warehouse.id)
         .first()
     )
+    if nsk_warehouse is None:
+        nsk_warehouse = (
+            db.query(Warehouse)
+            .filter(Warehouse.type == "internal")
+            .order_by(Warehouse.id)
+            .first()
+        )
     if nsk_warehouse is None:
         # No internal warehouse configured; no capacity from singles
         return {}
@@ -168,7 +197,10 @@ def build_article_inventory_snapshot(db: Session, article_id: int) -> ArticleInv
 
     article = db.query(Article).filter(Article.id == article_id).first()
     if article is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=article_id),
+        )
 
     # NSK single SKU stock (raw singles by color/size across internal warehouses)
     sku_units = db.query(SkuUnit).filter(SkuUnit.article_id == article.id).all()

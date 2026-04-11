@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class MonitoringSnapshotRecordSchema(BaseModel):
@@ -23,9 +23,7 @@ class MonitoringSnapshotRecordSchema(BaseModel):
     articles_with_orders: int
     total_final_order_qty: int
 
-    class Config:
-        orm_mode = True
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MonitoringHistoryResponse(BaseModel):

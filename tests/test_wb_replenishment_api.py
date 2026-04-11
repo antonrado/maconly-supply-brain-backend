@@ -43,7 +43,7 @@ def _setup_article_with_data(db_session, code: str):
 
 
 def _add_nsk_stock(db_session, sku: SkuUnit, qty: int):
-    wh = Warehouse(code="NSK", name="NSK", type="internal")
+    wh = Warehouse(code=f"NSK-{sku.id}", name="NSK", type="internal")
     db_session.add(wh)
     db_session.flush()
     from datetime import datetime, timezone
@@ -97,9 +97,18 @@ def test_wb_replenishment_proposal_invalid_dates(client, db_session):
 
     resp = client.post("/api/v1/wb/manager/proposal", json=payload)
     assert resp.status_code == 400
-    assert "wb_arrival_date cannot be earlier than target_date" in resp.json().get(
-        "detail", ""
-    )
+    assert resp.json()["detail"] == {
+        "code": "wb_arrival_date_before_target_date",
+        "message": "wb_arrival_date cannot be earlier than target_date",
+        "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
+        "target_date": "2025-01-31",
+        "wb_arrival_date": "2025-01-01",
+        "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
+    }
 
 
 def test_wb_replenishment_proposal_article_filter(client, db_session):

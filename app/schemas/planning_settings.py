@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ArticlePlanningSettingsBase(BaseModel):
@@ -25,8 +25,7 @@ class ArticlePlanningSettingsUpdate(BaseModel):
 class ArticlePlanningSettingsRead(ArticlePlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ColorPlanningSettingsBase(BaseModel):
@@ -46,8 +45,7 @@ class ColorPlanningSettingsUpdate(BaseModel):
 class ColorPlanningSettingsRead(ColorPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ElasticTypeBase(BaseModel):
@@ -67,8 +65,7 @@ class ElasticTypeUpdate(BaseModel):
 class ElasticTypeRead(ElasticTypeBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ElasticPlanningSettingsBase(BaseModel):
@@ -88,8 +85,7 @@ class ElasticPlanningSettingsUpdate(BaseModel):
 class ElasticPlanningSettingsRead(ElasticPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GlobalPlanningSettingsBase(BaseModel):
@@ -98,6 +94,13 @@ class GlobalPlanningSettingsBase(BaseModel):
     default_service_level_percent: int = 90
     default_fabric_min_batch_qty: int = 7000
     default_elastic_min_batch_qty: int = 3000
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsCreate(GlobalPlanningSettingsBase):
@@ -110,13 +113,19 @@ class GlobalPlanningSettingsUpdate(BaseModel):
     default_service_level_percent: int | None = None
     default_fabric_min_batch_qty: int | None = None
     default_elastic_min_batch_qty: int | None = None
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsRead(GlobalPlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PlanningSettingsBase(BaseModel):
@@ -148,8 +157,7 @@ class PlanningSettingsUpdate(BaseModel):
 class PlanningSettingsRead(PlanningSettingsBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ArticlePlanningSettingsExperimentalSnapshot(BaseModel):
@@ -194,6 +202,13 @@ class GlobalPlanningSettingsExperimentalSnapshot(BaseModel):
     default_service_level_percent: int | None = None
     default_fabric_min_batch_qty: int | None = None
     default_elastic_min_batch_qty: int | None = None
+    default_production_order_production_cost_per_unit: float | None = None
+    default_production_order_logistics_cost_per_unit: float | None = None
+    default_production_order_wb_commission_percent_main: float | None = None
+    default_production_order_wb_commission_percent_assorti: float | None = None
+    default_production_order_average_realized_price_main: float | None = None
+    default_production_order_average_realized_price_assorti: float | None = None
+    default_production_order_available_capital: float | None = None
 
 
 class GlobalPlanningSettingsSnapshot(BaseModel):
@@ -206,8 +221,8 @@ class ArticlePlanningConfigSnapshot(BaseModel):
     article_code: str
     article_planning_settings: ArticlePlanningSettingsSnapshot | None = None
     planning_settings: PlanningSettingsSnapshot | None = None
-    color_settings: list[ColorPlanningSettingsSnapshot] = []
-    elastic_settings: list[ElasticPlanningSettingsSnapshot] = []
+    color_settings: list[ColorPlanningSettingsSnapshot] = Field(default_factory=list)
+    elastic_settings: list[ElasticPlanningSettingsSnapshot] = Field(default_factory=list)
 
 
 class PlanningConfigSnapshotResponse(BaseModel):

@@ -38,7 +38,7 @@ def update_alert_rule(
     if rule is None:
         return None
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(rule, field, value)
 

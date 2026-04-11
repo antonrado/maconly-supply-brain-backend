@@ -23,6 +23,9 @@
 - `AGENT_WORKFLOW.md` — стандарт выполнения задач агентом и шаблон machine-readable задач.
 - `RUNBOOK.md` — локальный запуск/диагностика (Windows PowerShell).
 - `STATUS.md` — текущее состояние, команды верификации и минимальные raw outputs.
+- `CONTRIBUTING.md` — правила вклада и Definition of Done.
+- `RELEASE_POLICY.md` — политика релизов, совместимости и rollback.
+- `docs/adr/` — журнал архитектурных решений (ADR).
 
 ---
 
@@ -116,14 +119,34 @@
   - Модуль `app/core/planning/service.py` содержит `PlanningService`:
     - `compute_order_proposal(...)` и `get_planning_health(...)` пока остаются заглушками интерфейса.
     - `build_proposal(...)` уже подключён к БД на минимальном уровне: читает SKU-строки (`SkuUnit` + `Article`) и формирует детерминированный `PlanningProposal`.
+  - Модуль `app/services/planning_production_order.py` реализует MVP-расчёт proposal заказа в Китай:
+    - учитывает настройки статьи и override из запроса,
+    - конвертирует дефицит по модели B,
+    - применяет минималки ткани/резинки,
+    - использует admin-defaults для `size_weights` и `in_flight_supply`, если они не переданы в запросе,
+    - включает Layer 1 deterministic stock-health метрики в `explanation.meta.layer_1_stock_health`,
+    - включает Layer 2 deterministic allocation comparison в `explanation.meta.layer_2_allocation`,
+    - возвращает альтернативы и explanation-блок.
+  - Модуль `app/services/planning_production_order_admin.py` реализует контракт admin-настроек Production Order:
+    - size weights по статье,
+    - elastic bindings (на уровне color/SKU),
+    - in-flight defaults по color/size/stage/eta.
+  - Добавлены таблицы admin-настроек Production Order:
+    - `production_order_size_weight_settings`
+    - `production_order_elastic_bindings`
+    - `production_order_in_flight_defaults`
+    - миграция `0009_add_production_order_admin_settings.py`.
   - HTTP-эндпоинты в `app/api/v1/endpoints/planning_core.py` + роутинг в `app/api/v1/router.py`:
     - `GET  /api/v1/planning/core/health` — HTTP 200 и `{ "status": "ok" }`.
     - `POST /api/v1/planning/core/proposal` — HTTP 200 и структурированный `PlanningProposal`.
+    - `POST /api/v1/planning/core/production-order/proposal` — HTTP 200 и структурированный `ProductionOrderProposalResponse`.
+    - `GET /api/v1/planning/core/production-order/settings/{article_id}` — чтение admin defaults для production order.
+    - `PUT /api/v1/planning/core/production-order/settings/{article_id}` — атомарная замена admin defaults для production order.
 
 - **Explicitly NOT implemented yet**
-  - Полноценные расчёты спроса/поставок и оптимизация объёмов заказа.
-  - Выделенная схема БД/миграции именно под Planning Core decision engine.
-  - Продвинутая explainability-логика причин рекомендаций.
+  - Прямая online-интеграция WB API/МойСклад API в production-order proposal.
+  - Полноценная ML-модель прогнозирования и экономическая модель OOS vs holding cost.
+  - Workflow согласования и автосоздание финального PO-документа.
 
 ---
 
@@ -152,7 +175,13 @@
 - **Stage name**: Planning Core v1
 - **Goal**: сформировать и зафиксировать в backend-е первую версию ядра планирования (модели, сервисы, API), на которое будут опираться остальные модули.
 - **Status**: CONTRACT STABLE, LOGIC MINIMAL  
-  Контракт API зафиксирован; минимальная интеграция с БД присутствует в `build_proposal(...)`. Полноценная decision-логика остаётся задачей следующих этапов.
+  Контракт API зафиксирован; слой production-order развивается по layer-by-layer модели как детерминированный capital-aware engine.
+
+- **Production Order v1 Stable Alpha focus (текущий фокус)**
+  - Layer 1: deterministic stock-health метрики по SKU.
+  - Layer 2: deterministic allocation comparison (`main` / `assorti` / `hold`) на horizon до ETA.
+  - Layer 3+ реализуются поэтапно после стабилизации Layer 1/2.
+  - Вне scope v1 alpha: ML, глобальная оптимизация, расширение elasticity-модели, multi-warehouse оптимизация.
 
 ---
 
@@ -182,6 +211,7 @@
 - Любое изменение в коде или схемах должно фиксироваться коммитом в git и пушиться на настроенный удалённый репозиторий.
 - Каждый завершённый мини-этап работы фиксируется коммитом в git, пушится на удалённый репозиторий и сопровождается записью в Change Log.
 - Canonical context обновляется в репо-доках (VISION/ARCHITECTURE_CANON/ROADMAP/AGENT_WORKFLOW/RUNBOOK/STATUS), а не хранится только в чате.
+- PR с runtime/API/planning-изменениями не должен мержиться без синхронизации канонических доков (контролируется CI-guard `scripts/context_guard.py`).
 - Если потребован формат `RAW OUTPUT`, агент возвращает только raw output без комментариев.
 
 ## 7. Change Log
@@ -197,3 +227,7 @@
 | 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, stub endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
 | 2025-12-31 | Updated Planning Core v1 endpoints to return HTTP 200 stub responses for health and proposal. | Обновить Planning Core v1 для возвращения stub-ответов. |
 | 2026-02-24 | Added canonical docs set (VISION, ARCHITECTURE_CANON, ROADMAP, AGENT_WORKFLOW, RUNBOOK) and refreshed STATUS/PROJECT_CANON with reproducible verification commands. | Перенести ключевой контекст и решения из чата в репозиторий как единый источник правды. |
+| 2026-02-24 | Added engineering foundation pack (CI workflow, PR template, CONTRIBUTING, CODEOWNERS scaffold, ADR process, release policy). | Снизить риск рефакторинга «задним числом» и зафиксировать quality gates для масштабирования платформы. |
+| 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
+| 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
+| 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |

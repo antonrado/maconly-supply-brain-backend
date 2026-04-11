@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.main import app
 from app.models.models import PlanningSettings
+from app.services import order_explanation
 from tests.test_utils import (
     add_wb_sales,
     add_wb_stock,
@@ -57,7 +59,7 @@ def _setup_basic_article_with_deficit(db_session):
     )
 
     wb_sku = "SKU-EXPL-A-1"
-    target_date = date(2025, 1, 31)
+    target_date = date.today()
     create_wb_mapping(db_session, article, wb_sku=wb_sku)
     add_wb_sales(db_session, wb_sku=wb_sku, day=target_date, sales_qty=10)
     add_wb_stock(db_session, wb_sku=wb_sku, stock_qty=0)
@@ -157,6 +159,27 @@ def test_color_minimum_binds(client, db_session):
     assert reason_for_color["limiting_constraint"] == "color_min_batch"
 
 
+def test_build_order_explanation_for_article_rejects_unknown_article_with_structured_detail(db_session):
+    with pytest.raises(HTTPException) as exc:
+        order_explanation.build_order_explanation_for_article(
+            db=db_session,
+            article_id=999999999,
+        )
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def test_filtering_by_article_ids_and_is_active(client, db_session):
     article_active, _color_active = _setup_basic_article_with_deficit(db_session)
     article_inactive = create_article(db_session, code="EXPL-INACTIVE")
@@ -193,3 +216,17 @@ def test_filtering_by_article_ids_and_is_active(client, db_session):
 
     ids_filtered = {it["article_id"] for it in body_filtered["items"]}
     assert article_inactive.id in ids_filtered
+
+
+def test_filtering_by_article_ids_skips_unknown_article_ids(client, db_session):
+    article_active, _color_active = _setup_basic_article_with_deficit(db_session)
+
+    response = client.get(
+        "/api/v1/planning/order-explanation-portfolio",
+        params={"article_ids": [article_active.id, 999999999]},
+    )
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    ids = {item["article_id"] for item in body["items"]}
+    assert ids == {article_active.id}

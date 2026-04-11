@@ -50,17 +50,104 @@ def list_purchase_orders(
 def get_purchase_order(order_id: int, db: Session = Depends(get_db)) -> PurchaseOrder:
     po = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
     if po is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PurchaseOrder not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_purchase_order_not_found_detail(order_id=order_id),
+        )
     return po
 
 
-_ALLOWED_STATUSES = {"draft", "approved", "cancelled"}
+_ALLOWED_STATUSES = {"draft", "approved", "cancelled", "ordered", "received"}
 
 _ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"draft", "approved", "cancelled"},
-    "approved": {"approved", "cancelled"},
+    "approved": {"approved", "ordered", "cancelled"},
+    "ordered": {"ordered", "received", "cancelled"},
+    "received": {"received"},
     "cancelled": {"cancelled"},
 }
+
+
+def _build_invalid_purchase_order_status_detail(*, order_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "invalid_purchase_order_status",
+        "message": f"Invalid status '{status_value}'",
+        "order_id": int(order_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status",
+            "type": "string",
+        },
+        "status": str(status_value),
+        "allowed_values": sorted(_ALLOWED_STATUSES),
+        "next_steps": ["use_supported_purchase_order_status"],
+    }
+
+
+def _build_invalid_purchase_order_status_transition_detail(
+    *,
+    order_id: int,
+    current_status: str,
+    target_status: str,
+) -> dict[str, object]:
+    return {
+        "code": "invalid_purchase_order_status_transition",
+        "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
+        "order_id": int(order_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status transition target",
+            "type": "string",
+        },
+        "current_status": str(current_status),
+        "target_status": str(target_status),
+        "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
+
+
+def _build_purchase_order_not_found_detail(*, order_id: int) -> dict[str, object]:
+    return {
+        "code": "purchase_order_not_found",
+        "message": "PurchaseOrder not found",
+        "order_id": int(order_id),
+        "field": "order_id",
+        "field_metadata": {
+            "description": "Requested purchase order identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_purchase_order_id"],
+    }
+
+
+def _build_purchase_order_item_not_found_detail(*, order_id: int, item_id: int) -> dict[str, object]:
+    return {
+        "code": "purchase_order_item_not_found",
+        "message": "PurchaseOrderItem not found",
+        "order_id": int(order_id),
+        "item_id": int(item_id),
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested purchase order item identifier within order scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_purchase_order_item_id"],
+    }
+
+
+def _build_purchase_order_item_non_draft_locked_detail(*, order_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "purchase_order_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft purchase order",
+        "order_id": int(order_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current purchase order status blocking item updates",
+            "type": "string",
+        },
+        "status": str(status_value),
+        "next_steps": ["use_draft_purchase_order_for_item_updates"],
+    }
 
 
 @router.patch("/{order_id}", response_model=PurchaseOrderRead)
@@ -71,9 +158,12 @@ def update_purchase_order(
 ) -> PurchaseOrder:
     po = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
     if po is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PurchaseOrder not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_purchase_order_not_found_detail(order_id=order_id),
+        )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
 
     changed = False
 
@@ -82,14 +172,21 @@ def update_purchase_order(
         if new_status not in _ALLOWED_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status '{new_status}', must be one of: {sorted(_ALLOWED_STATUSES)}",
+                detail=_build_invalid_purchase_order_status_detail(
+                    order_id=order_id,
+                    status_value=new_status,
+                ),
             )
         old_status = po.status
         allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(old_status, set())
         if new_status not in allowed_targets:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status transition from '{old_status}' to '{new_status}'",
+                detail=_build_invalid_purchase_order_status_transition_detail(
+                    order_id=order_id,
+                    current_status=old_status,
+                    target_status=new_status,
+                ),
             )
         if new_status != old_status:
             po.status = new_status
@@ -122,12 +219,18 @@ def update_purchase_order_item(
 ) -> PurchaseOrder:
     po = db.query(PurchaseOrder).filter(PurchaseOrder.id == order_id).first()
     if po is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PurchaseOrder not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_purchase_order_not_found_detail(order_id=order_id),
+        )
 
     if po.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify items of a non-draft purchase order",
+            detail=_build_purchase_order_item_non_draft_locked_detail(
+                order_id=order_id,
+                status_value=po.status,
+            ),
         )
 
     item = (
@@ -139,7 +242,13 @@ def update_purchase_order_item(
         .first()
     )
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PurchaseOrderItem not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_purchase_order_item_not_found_detail(
+                order_id=order_id,
+                item_id=item_id,
+            ),
+        )
 
     # Minimal v1 behavior: allow updating quantity and notes if provided
     if "quantity" in payload:

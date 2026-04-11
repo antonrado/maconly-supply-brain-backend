@@ -125,6 +125,38 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
     assert len(items_db) == len(items)
 
 
+def test_create_shipment_from_proposal_invalid_dates(client):
+    payload = {
+        "items": [],
+        "target_date": "2025-01-31",
+        "wb_arrival_date": "2025-01-01",
+        "target_coverage_days": 30,
+        "min_coverage_days": 7,
+        "replenishment_strategy": "normal",
+        "zero_sales_policy": "ignore",
+        "max_coverage_days_after": 60,
+        "comment": "invalid dates",
+    }
+
+    resp = client.post(
+        "/api/v1/wb/manager/shipment/from-proposal",
+        json=payload,
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"] == {
+        "code": "wb_arrival_date_before_target_date",
+        "message": "wb_arrival_date cannot be earlier than target_date",
+        "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
+        "target_date": "2025-01-31",
+        "wb_arrival_date": "2025-01-01",
+        "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
+    }
+
+
 def test_shipment_list_filters_by_status_and_article(client, db_session):
     """GET /wb/manager/shipment/ supports filters by status, article_id and date range."""
     # Prepare two articles and shipments
@@ -235,6 +267,87 @@ def test_get_shipment_by_id(client, db_session):
 
     resp_404 = client.get("/api/v1/wb/manager/shipment/999999")
     assert resp_404.status_code == 404
+    assert resp_404.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_update_shipment_returns_structured_404_for_unknown_shipment(client):
+    response = client.patch(
+        "/api/v1/wb/manager/shipment/999999",
+        json={"comment": "missing shipment"},
+    )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_get_shipment_item_summary_returns_structured_404_for_unknown_shipment(client):
+    response = client.get("/api/v1/wb/manager/shipment/999999/items/1/summary")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def test_get_shipment_item_summary_returns_structured_404_for_unknown_item(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="draft",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment="summary missing item",
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/wb/manager/shipment/{shipment.id}/items/999999/summary")
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": shipment.id,
+        "item_id": 999999,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
 
 
 def test_shipment_status_transitions_and_final_states(client, db_session):
@@ -344,7 +457,97 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
         json={"status": "weird"},
     )
     assert resp_bad.status_code == 400
-    assert "Invalid status" in resp_bad.json().get("detail", "")
+    assert resp_bad.json()["detail"] == {
+        "code": "invalid_wb_shipment_status",
+        "message": "Invalid status 'weird'",
+        "shipment_id": shipment.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status",
+            "type": "string",
+        },
+        "status": "weird",
+        "allowed_values": ["approved", "cancelled", "draft", "shipped"],
+        "next_steps": ["use_supported_wb_shipment_status"],
+    }
+
+
+def test_update_shipment_returns_structured_400_for_invalid_status_transition(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="approved",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment=None,
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment.id}",
+        json={"status": "draft"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "invalid_wb_shipment_status_transition",
+        "message": "Invalid status transition from 'approved' to 'draft'",
+        "shipment_id": shipment.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status transition target",
+            "type": "string",
+        },
+        "current_status": "approved",
+        "target_status": "draft",
+        "allowed_target_statuses": ["approved", "cancelled", "shipped"],
+        "next_steps": ["use_allowed_wb_shipment_status_transition"],
+    }
+
+
+def test_update_shipment_returns_structured_400_for_final_status(client, db_session):
+    now = datetime.now(timezone.utc)
+    shipment = WbShipment(
+        status="shipped",
+        target_date=date(2025, 1, 1),
+        wb_arrival_date=date(2025, 1, 1),
+        comment=None,
+        created_at=now,
+        updated_at=now,
+        strategy="normal",
+        zero_sales_policy="ignore",
+        target_coverage_days=30,
+        min_coverage_days=7,
+        max_coverage_days_after=60,
+        max_replenishment_per_article=None,
+    )
+    db_session.add(shipment)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment.id}",
+        json={"comment": "blocked"},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_final_status_locked",
+        "message": "Cannot modify a shipment in final status",
+        "shipment_id": shipment.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking the requested mutation",
+            "type": "string",
+        },
+        "status": "shipped",
+        "next_steps": ["use_draft_or_approved_shipment_for_updates"],
+    }
 
 
 def test_shipment_item_editing_respects_status(client, db_session):
@@ -371,7 +574,7 @@ def test_shipment_item_editing_respects_status(client, db_session):
     item_id = shipment["items"][0]["id"]
     old_updated_at = shipment["updated_at"]
 
-    patch_payload = {"final_qty": 999, "explanation": "Manual adjustment"}
+    patch_payload = {"final_qty": 50, "explanation": "Manual adjustment"}
 
     # Successful patch in draft status
     resp_patch = client.patch(
@@ -381,7 +584,7 @@ def test_shipment_item_editing_respects_status(client, db_session):
     assert resp_patch.status_code == 200
     shipment_after = resp_patch.json()
     patched_item = next(i for i in shipment_after["items"] if i["id"] == item_id)
-    assert patched_item["final_qty"] == 999
+    assert patched_item["final_qty"] == 50
     assert patched_item["explanation"] == "Manual adjustment"
     assert shipment_after["updated_at"] != old_updated_at
 
@@ -391,6 +594,17 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_order_404.status_code == 404
+    assert resp_order_404.json()["detail"] == {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": 999999,
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
 
     # 404 for non-existing item in existing draft shipment
     resp_item_404 = client.patch(
@@ -398,6 +612,18 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_item_404.status_code == 404
+    assert resp_item_404.json()["detail"] == {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": shipment_id,
+        "item_id": 999999,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
 
     # Change status to approved
     resp_status = client.patch(
@@ -412,9 +638,59 @@ def test_shipment_item_editing_respects_status(client, db_session):
         json=patch_payload,
     )
     assert resp_forbidden.status_code == 400
-    assert "Cannot modify items of a non-draft shipment" in resp_forbidden.json().get(
-        "detail", ""
+    assert resp_forbidden.json()["detail"] == {
+        "code": "wb_shipment_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft shipment",
+        "shipment_id": shipment_id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking item updates",
+            "type": "string",
+        },
+        "status": "approved",
+        "next_steps": ["use_draft_shipment_for_item_updates"],
+    }
+
+
+def test_update_shipment_item_returns_structured_400_when_final_qty_exceeds_stock(client, db_session):
+    article, target_date = _setup_article_for_replenishment(
+        db_session, code="SHIP-API-STOCK-LIMIT"
     )
+
+    payload = {
+        "target_date": target_date.isoformat(),
+        "wb_arrival_date": target_date.isoformat(),
+        "comment": "stock limit",
+    }
+
+    resp_create = client.post(
+        "/api/v1/wb/manager/shipment/from-proposal",
+        json=payload,
+    )
+    assert resp_create.status_code == 201, resp_create.text
+    shipment = resp_create.json()
+    shipment_id = shipment["id"]
+    item = shipment["items"][0]
+
+    response = client.patch(
+        f"/api/v1/wb/manager/shipment/{shipment_id}/items/{item['id']}",
+        json={"final_qty": int(item["nsk_stock_available"]) + 1},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "wb_shipment_item_final_qty_exceeds_stock",
+        "message": "final_qty exceeds available NSC stock",
+        "shipment_id": shipment_id,
+        "item_id": item["id"],
+        "final_qty": int(item["nsk_stock_available"]) + 1,
+        "nsk_stock_available": int(item["nsk_stock_available"]),
+        "field": "final_qty",
+        "field_metadata": {
+            "description": "Requested final shipment quantity",
+            "type": "int",
+        },
+        "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
+    }
 
 
 def test_shipment_headers_basic_aggregates(client, db_session):
@@ -729,8 +1005,18 @@ def test_shipment_headers_invalid_sort_by(client):
 		params={"sort_by": "nonexistent_field"},
 	)
 	assert resp.status_code == 400
-	body = resp.json()
-	assert "Invalid sort_by" in body.get("detail", "")
+	assert resp.json()["detail"] == {
+		"code": "invalid_sort_by",
+		"message": "Invalid sort_by 'nonexistent_field'",
+		"field": "sort_by",
+		"field_metadata": {
+			"description": "Shipment header sort field query parameter",
+			"type": "string",
+		},
+		"sort_by": "nonexistent_field",
+		"allowed_values": ["created_at", "id", "status", "target_date", "updated_at", "wb_arrival_date"],
+		"next_steps": ["use_supported_shipment_sort_by"],
+	}
 
 
 def test_shipment_headers_invalid_sort_dir(client):
@@ -739,8 +1025,18 @@ def test_shipment_headers_invalid_sort_dir(client):
 		params={"sort_dir": "sideways"},
 	)
 	assert resp.status_code == 400
-	body = resp.json()
-	assert "Invalid sort_dir" in body.get("detail", "")
+	assert resp.json()["detail"] == {
+		"code": "invalid_sort_dir",
+		"message": "Invalid sort_dir",
+		"field": "sort_dir",
+		"field_metadata": {
+			"description": "Shipment header sort direction query parameter",
+			"type": "Literal['asc','desc']",
+		},
+		"sort_dir": "sideways",
+		"allowed_values": ["asc", "desc"],
+		"next_steps": ["use_sort_dir_asc_or_desc"],
+	}
 
 
 def test_shipment_preset_no_history(client, db_session):

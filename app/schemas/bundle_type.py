@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class BundleTypeBase(BaseModel):
@@ -18,5 +18,4 @@ class BundleTypeUpdate(BaseModel):
 class BundleTypeRead(BundleTypeBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

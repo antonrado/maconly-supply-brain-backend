@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 from app.schemas.monitoring import MonitoringSnapshot
 from app.schemas.monitoring_history import MonitoringHistoryResponse
@@ -14,7 +14,8 @@ class MonitoringStatusSummary(BaseModel):
     critical_alerts: int
     warning_alerts: int
 
-    @validator("overall_status")
+    @field_validator("overall_status")
+    @classmethod
     def validate_overall_status(cls, value: str) -> str:  # noqa: D417
         if value not in {"ok", "warning", "critical"}:
             raise ValueError("overall_status must be 'ok', 'warning' or 'critical'")
@@ -27,7 +28,8 @@ class MonitoringStatusResponse(BaseModel):
     warning_alerts: int
     updated_at: datetime
 
-    @validator("overall_status")
+    @field_validator("overall_status")
+    @classmethod
     def validate_overall_status(cls, value: str) -> str:  # noqa: D417
         if value not in {"ok", "warning", "critical"}:
             raise ValueError("overall_status must be 'ok', 'warning' or 'critical'")

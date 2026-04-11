@@ -1,0 +1,143 @@
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+class ProductionOrderSizeWeightInput(BaseModel):
+    size_id: int = Field(..., ge=1)
+    weight: float = Field(..., gt=0)
+
+
+class ProductionOrderElasticBindingInput(BaseModel):
+    elastic_type_id: int = Field(..., ge=1)
+    color_id: int | None = Field(default=None, ge=1)
+    sku_unit_id: int | None = Field(default=None, ge=1)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "ProductionOrderElasticBindingInput":
+        if self.color_id is None and self.sku_unit_id is None:
+            raise ValueError("Either color_id or sku_unit_id must be provided")
+        return self
+
+
+class ProductionOrderInFlightDefaultInput(BaseModel):
+    color_id: int = Field(..., ge=1)
+    size_id: int = Field(..., ge=1)
+    qty: int = Field(..., ge=0)
+    eta_days: int = Field(..., ge=0)
+    stage: Literal["production", "china_to_nsk", "packaging", "nsk_to_wb", "other"] = "other"
+    is_active: bool = True
+
+
+class ProductionOrderAdminSettingsUpsertRequest(BaseModel):
+    size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
+    elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
+    in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    assorti_bundle_type_ids: list[int] = Field(default_factory=list)
+    freshness_sales_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
+    freshness_stock_stale_after_days: int | None = Field(default=None, ge=0, le=3650)
+    layer3_stockout_boost_max: float | None = Field(default=None, ge=0, le=1)
+    layer3_overstock_dampen_max: float | None = Field(default=None, ge=0, le=1)
+    layer5_unavoidable_stockout_risk_threshold: float | None = Field(default=None, ge=0, le=1)
+    layer5_accelerate_production_risk_threshold: float | None = Field(default=None, ge=0, le=1)
+    production_cost_per_unit: float | None = Field(default=None, ge=0)
+    logistics_cost_per_unit: float | None = Field(default=None, ge=0)
+    wb_commission_percent_main: float | None = Field(default=None, ge=0, le=1)
+    wb_commission_percent_assorti: float | None = Field(default=None, ge=0, le=1)
+    average_realized_price_main: float | None = Field(default=None, ge=0)
+    average_realized_price_assorti: float | None = Field(default=None, ge=0)
+    available_capital: float | None = Field(default=None, ge=0)
+
+    @field_validator("size_weights")
+    @classmethod
+    def validate_unique_size_ids(
+        cls,
+        value: list[ProductionOrderSizeWeightInput],
+    ) -> list[ProductionOrderSizeWeightInput]:
+        seen: set[int] = set()
+        for item in value:
+            if item.size_id in seen:
+                raise ValueError("size_weights contains duplicate size_id")
+            seen.add(item.size_id)
+        return value
+
+    @field_validator("elastic_bindings")
+    @classmethod
+    def validate_unique_elastic_bindings(
+        cls,
+        value: list[ProductionOrderElasticBindingInput],
+    ) -> list[ProductionOrderElasticBindingInput]:
+        seen: set[tuple[int, int | None, int | None]] = set()
+        for item in value:
+            key = (item.elastic_type_id, item.color_id, item.sku_unit_id)
+            if key in seen:
+                raise ValueError("elastic_bindings contains duplicate entries")
+            seen.add(key)
+        return value
+
+    @field_validator("assorti_bundle_type_ids")
+    @classmethod
+    def validate_unique_assorti_bundle_type_ids(
+        cls,
+        value: list[int],
+    ) -> list[int]:
+        seen: set[int] = set()
+        for bundle_type_id in value:
+            if bundle_type_id <= 0:
+                raise ValueError("assorti_bundle_type_ids must contain positive ids")
+            if bundle_type_id in seen:
+                raise ValueError("assorti_bundle_type_ids contains duplicate ids")
+            seen.add(bundle_type_id)
+        return value
+
+    @field_validator("in_flight_supply_defaults")
+    @classmethod
+    def validate_unique_in_flight_defaults(
+        cls,
+        value: list[ProductionOrderInFlightDefaultInput],
+    ) -> list[ProductionOrderInFlightDefaultInput]:
+        seen: set[tuple[int, int, str, int]] = set()
+        for item in value:
+            key = (item.color_id, item.size_id, item.stage, item.eta_days)
+            if key in seen:
+                raise ValueError("in_flight_supply_defaults contains duplicate entries")
+            seen.add(key)
+        return value
+
+    @model_validator(mode="after")
+    def validate_layer5_threshold_order(self) -> "ProductionOrderAdminSettingsUpsertRequest":
+        if (
+            self.layer5_unavoidable_stockout_risk_threshold is not None
+            and self.layer5_accelerate_production_risk_threshold is not None
+            and self.layer5_accelerate_production_risk_threshold
+            < self.layer5_unavoidable_stockout_risk_threshold
+        ):
+            raise ValueError(
+                "layer5_accelerate_production_risk_threshold must be greater than or equal to "
+                "layer5_unavoidable_stockout_risk_threshold"
+            )
+        return self
+
+
+class ProductionOrderAdminSettingsResponse(BaseModel):
+    article_id: int
+    size_weights: list[ProductionOrderSizeWeightInput] = Field(default_factory=list)
+    elastic_bindings: list[ProductionOrderElasticBindingInput] = Field(default_factory=list)
+    in_flight_supply_defaults: list[ProductionOrderInFlightDefaultInput] = Field(default_factory=list)
+    assorti_bundle_type_ids: list[int] = Field(default_factory=list)
+    freshness_sales_stale_after_days: int | None = None
+    freshness_stock_stale_after_days: int | None = None
+    layer3_stockout_boost_max: float | None = None
+    layer3_overstock_dampen_max: float | None = None
+    layer5_unavoidable_stockout_risk_threshold: float | None = None
+    layer5_accelerate_production_risk_threshold: float | None = None
+    production_cost_per_unit: float | None = None
+    logistics_cost_per_unit: float | None = None
+    wb_commission_percent_main: float | None = None
+    wb_commission_percent_assorti: float | None = None
+    average_realized_price_main: float | None = None
+    average_realized_price_assorti: float | None = None
+    available_capital: float | None = None

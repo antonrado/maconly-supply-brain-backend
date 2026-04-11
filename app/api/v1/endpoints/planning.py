@@ -115,6 +115,34 @@ def get_demand(
     )
 
 
+def _build_article_not_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
+def _build_no_planning_settings_found_detail(*, article_id: int) -> dict[str, object]:
+    return {
+        "code": "no_planning_settings_found",
+        "message": "No planning settings found for this article",
+        "article_id": int(article_id),
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings lookup",
+            "type": "int",
+        },
+        "next_steps": ["configure_article_planning_settings"],
+    }
+
+
 def _build_global_settings_snapshot(db: Session) -> GlobalPlanningSettingsSnapshot | None:
     gps = db.query(GlobalPlanningSettings).order_by(GlobalPlanningSettings.id).first()
     if gps is None:
@@ -125,6 +153,27 @@ def _build_global_settings_snapshot(db: Session) -> GlobalPlanningSettingsSnapsh
         default_service_level_percent=gps.default_service_level_percent,
         default_fabric_min_batch_qty=gps.default_fabric_min_batch_qty,
         default_elastic_min_batch_qty=gps.default_elastic_min_batch_qty,
+        default_production_order_production_cost_per_unit=(
+            gps.default_production_order_production_cost_per_unit
+        ),
+        default_production_order_logistics_cost_per_unit=(
+            gps.default_production_order_logistics_cost_per_unit
+        ),
+        default_production_order_wb_commission_percent_main=(
+            gps.default_production_order_wb_commission_percent_main
+        ),
+        default_production_order_wb_commission_percent_assorti=(
+            gps.default_production_order_wb_commission_percent_assorti
+        ),
+        default_production_order_average_realized_price_main=(
+            gps.default_production_order_average_realized_price_main
+        ),
+        default_production_order_average_realized_price_assorti=(
+            gps.default_production_order_average_realized_price_assorti
+        ),
+        default_production_order_available_capital=(
+            gps.default_production_order_available_capital
+        ),
     )
 
     return GlobalPlanningSettingsSnapshot(
@@ -240,7 +289,7 @@ def get_planning_config_snapshot(
         if article is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Article not found",
+                detail=_build_article_not_found_detail(article_id=article_id),
             )
 
         snapshot = _build_article_snapshot(db, article)
@@ -253,7 +302,7 @@ def get_planning_config_snapshot(
         ):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="No planning settings found for this article",
+                detail=_build_no_planning_settings_found_detail(article_id=article_id),
             )
 
         articles.append(snapshot)
@@ -337,7 +386,10 @@ def get_article_dashboard(
 ) -> ArticleDashboardResponse:
     dashboard = build_article_dashboard(db=db, article_id=article_id)
     if dashboard is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_article_not_found_detail(article_id=article_id),
+        )
     return dashboard
 
 
@@ -421,11 +473,34 @@ def get_monitoring_timeseries(
     if not metrics:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="metrics query parameter is required",
+            detail={
+                "code": "missing_metrics_query_parameter",
+                "message": "metrics query parameter is required",
+                "field": "metrics",
+                "field_metadata": {
+                    "description": "Monitoring timeseries metrics query parameter",
+                    "type": "list[string]",
+                },
+                "next_steps": ["provide_at_least_one_metrics_query_parameter"],
+            },
         )
 
     series = build_monitoring_timeseries(db=db, metrics=metrics, limit=limit)
     return MonitoringTimeseriesResponse(items=series)
+
+
+def _build_alert_rule_not_found_detail(*, rule_id: int) -> dict[str, object]:
+    return {
+        "code": "alert_rule_not_found",
+        "message": "Alert rule not found",
+        "rule_id": int(rule_id),
+        "field": "rule_id",
+        "field_metadata": {
+            "description": "Requested monitoring alert rule identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_alert_rule_id"],
+    }
 
 
 @router.get(
@@ -472,7 +547,7 @@ def get_monitoring_dashboard(
     history_items = get_monitoring_history(db=db, limit=30)
     alert_items = evaluate_active_alerts(db=db)
     rules = list_alert_rules(db=db)
-    rule_items = [AlertRuleSchema.from_orm(rule) for rule in rules]
+    rule_items = [AlertRuleSchema.model_validate(rule) for rule in rules]
 
     status_response = build_monitoring_status(db=db)
     status_summary = MonitoringStatusSummary(
@@ -498,7 +573,7 @@ def get_alert_rules(
     db: Session = Depends(get_db),
 ) -> AlertRuleListResponse:
     rules = list_alert_rules(db=db)
-    items = [AlertRuleSchema.from_orm(rule) for rule in rules]
+    items = [AlertRuleSchema.model_validate(rule) for rule in rules]
     return AlertRuleListResponse(items=items)
 
 
@@ -511,7 +586,7 @@ def create_alert_rule_api(
     db: Session = Depends(get_db),
 ) -> AlertRuleSchema:
     rule = create_alert_rule(db=db, data=payload)
-    return AlertRuleSchema.from_orm(rule)
+    return AlertRuleSchema.model_validate(rule)
 
 
 @router.patch(
@@ -527,9 +602,9 @@ def update_alert_rule_api(
     if rule is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alert rule not found",
+            detail=_build_alert_rule_not_found_detail(rule_id=rule_id),
         )
-    return AlertRuleSchema.from_orm(rule)
+    return AlertRuleSchema.model_validate(rule)
 
 
 @router.delete(
@@ -544,7 +619,7 @@ def delete_alert_rule_api(
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Alert rule not found",
+            detail=_build_alert_rule_not_found_detail(rule_id=rule_id),
         )
     return None
 

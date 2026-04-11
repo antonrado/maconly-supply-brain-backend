@@ -147,6 +147,17 @@ def test_get_purchase_order_by_id(client, db_session):
 
     resp_404 = client.get("/api/v1/purchase-order/999999")
     assert resp_404.status_code == 404
+    assert resp_404.json()["detail"] == {
+        "code": "purchase_order_not_found",
+        "message": "PurchaseOrder not found",
+        "order_id": 999999,
+        "field": "order_id",
+        "field_metadata": {
+            "description": "Requested purchase order identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_purchase_order_id"],
+    }
 
 
 def test_patch_purchase_order_status_and_fields(client, db_session):
@@ -180,7 +191,19 @@ def test_patch_purchase_order_status_and_fields(client, db_session):
         json={"status": "something-weird"},
     )
     assert resp_bad.status_code == 400
-    assert "Invalid status" in resp_bad.json().get("detail", "")
+    assert resp_bad.json()["detail"] == {
+        "code": "invalid_purchase_order_status",
+        "message": "Invalid status 'something-weird'",
+        "order_id": po.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status",
+            "type": "string",
+        },
+        "status": "something-weird",
+        "allowed_values": ["approved", "cancelled", "draft", "ordered", "received"],
+        "next_steps": ["use_supported_purchase_order_status"],
+    }
 
 
 def test_allowed_status_transitions(client, db_session):
@@ -239,21 +262,60 @@ def test_invalid_status_transitions(client, db_session):
         f"/api/v1/purchase-order/{po_approved.id}", json={"status": "draft"}
     )
     assert resp_back_to_draft.status_code == 400
-    assert "Invalid status transition" in resp_back_to_draft.json().get("detail", "")
+    assert resp_back_to_draft.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'approved' to 'draft'",
+        "order_id": po_approved.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status transition target",
+            "type": "string",
+        },
+        "current_status": "approved",
+        "target_status": "draft",
+        "allowed_target_statuses": ["approved", "cancelled", "ordered"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
     # cancelled -> approved is forbidden
     resp_cancelled_to_approved = client.patch(
         f"/api/v1/purchase-order/{po_cancelled.id}", json={"status": "approved"}
     )
     assert resp_cancelled_to_approved.status_code == 400
-    assert "Invalid status transition" in resp_cancelled_to_approved.json().get("detail", "")
+    assert resp_cancelled_to_approved.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'cancelled' to 'approved'",
+        "order_id": po_cancelled.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status transition target",
+            "type": "string",
+        },
+        "current_status": "cancelled",
+        "target_status": "approved",
+        "allowed_target_statuses": ["cancelled"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
     # cancelled -> draft is forbidden
     resp_cancelled_to_draft = client.patch(
         f"/api/v1/purchase-order/{po_cancelled.id}", json={"status": "draft"}
     )
     assert resp_cancelled_to_draft.status_code == 400
-    assert "Invalid status transition" in resp_cancelled_to_draft.json().get("detail", "")
+    assert resp_cancelled_to_draft.json()["detail"] == {
+        "code": "invalid_purchase_order_status_transition",
+        "message": "Invalid status transition from 'cancelled' to 'draft'",
+        "order_id": po_cancelled.id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested purchase order status transition target",
+            "type": "string",
+        },
+        "current_status": "cancelled",
+        "target_status": "draft",
+        "allowed_target_statuses": ["cancelled"],
+        "next_steps": ["use_allowed_purchase_order_status_transition"],
+    }
 
 
 def test_purchase_order_updated_at_changes_on_patch(client, db_session):
@@ -323,6 +385,17 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_order_404.status_code == 404
+    assert resp_order_404.json()["detail"] == {
+        "code": "purchase_order_not_found",
+        "message": "PurchaseOrder not found",
+        "order_id": 999999,
+        "field": "order_id",
+        "field_metadata": {
+            "description": "Requested purchase order identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_purchase_order_id"],
+    }
 
     # 404 for non-existing item in existing draft order
     resp_item_404 = client.patch(
@@ -330,6 +403,18 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_item_404.status_code == 404
+    assert resp_item_404.json()["detail"] == {
+        "code": "purchase_order_item_not_found",
+        "message": "PurchaseOrderItem not found",
+        "order_id": order_id,
+        "item_id": 999999,
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested purchase order item identifier within order scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_purchase_order_item_id"],
+    }
 
     # Change status to approved
     resp_status = client.patch(
@@ -343,6 +428,15 @@ def test_patch_purchase_order_item_respects_status_and_updates_timestamp(client,
         json=patch_payload,
     )
     assert resp_forbidden.status_code == 400
-    assert "Cannot modify items of a non-draft purchase order" in resp_forbidden.json().get(
-        "detail", ""
-    )
+    assert resp_forbidden.json()["detail"] == {
+        "code": "purchase_order_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft purchase order",
+        "order_id": order_id,
+        "field": "status",
+        "field_metadata": {
+            "description": "Current purchase order status blocking item updates",
+            "type": "string",
+        },
+        "status": "approved",
+        "next_steps": ["use_draft_purchase_order_for_item_updates"],
+    }

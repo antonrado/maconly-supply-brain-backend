@@ -15,6 +15,14 @@ DEFAULT_ALERT_THRESHOLD_DAYS = 14
 OVERSTOCK_MULTIPLIER = 3
 
 
+def _is_article_not_found_detail(detail: object) -> bool:
+    if detail == "Article not found":
+        return True
+    if isinstance(detail, dict):
+        return detail.get("code") == "article_not_found"
+    return False
+
+
 def resolve_thresholds_for_article(
     db: Session,
     article_id: int,
@@ -172,7 +180,7 @@ def build_bundle_risk_portfolio(
         try:
             snapshot = build_article_inventory_snapshot(db=db, article_id=article_id)
         except HTTPException as exc:  # type: ignore[py310-no-except-type-comments]
-            if exc.status_code == status.HTTP_404_NOT_FOUND and exc.detail == "Article not found":
+            if exc.status_code == status.HTTP_404_NOT_FOUND and _is_article_not_found_detail(exc.detail):
                 # Ignore unknown article IDs
                 continue
             raise

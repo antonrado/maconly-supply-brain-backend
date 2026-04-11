@@ -1,0 +1,23 @@
+# CODEOWNERS
+#
+# IMPORTANT:
+# Replace @REPLACE_WITH_GITHUB_USERNAME with your actual GitHub handle
+# (or team like @org/backend-team) before enforcing required reviews.
+
+* @REPLACE_WITH_GITHUB_USERNAME
+
+# High-impact project docs
+/VISION.md @REPLACE_WITH_GITHUB_USERNAME
+/ARCHITECTURE_CANON.md @REPLACE_WITH_GITHUB_USERNAME
+/PROJECT_CANON.md @REPLACE_WITH_GITHUB_USERNAME
+/ROADMAP.md @REPLACE_WITH_GITHUB_USERNAME
+/STATUS.md @REPLACE_WITH_GITHUB_USERNAME
+
+# Planning core and services
+/app/core/planning/ @REPLACE_WITH_GITHUB_USERNAME
+/app/services/ @REPLACE_WITH_GITHUB_USERNAME
+/app/models/ @REPLACE_WITH_GITHUB_USERNAME
+
+# API contracts and tests
+/app/api/v1/ @REPLACE_WITH_GITHUB_USERNAME
+/tests/ @REPLACE_WITH_GITHUB_USERNAME

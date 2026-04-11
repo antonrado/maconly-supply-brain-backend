@@ -208,4 +208,14 @@ def test_article_dashboard_article_not_found(client, db_session, monkeypatch):  
     resp = client.get("/api/v1/planning/article-dashboard/9999")
     assert resp.status_code == 404, resp.text
     body = resp.json()
-    assert body["detail"] == "Article not found"
+    assert body["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 9999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }

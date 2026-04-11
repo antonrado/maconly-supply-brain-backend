@@ -1,6 +1,7 @@
 # MACONLY Supply Brain Backend
 
-This is a minimal backend scaffold for experimenting with the core MACONLY Supply Brain domain models and Alembic migrations.
+Production backend for MACONLY Supply Brain. The system powers internal planning,
+monitoring, and order decision workflows with a stable API-first contract.
 
 ## Setup
 
@@ -10,11 +11,16 @@ pip install -r requirements.txt
 
 ## Database
 
-By default Alembic is configured to use a local SQLite database file:
+Default DB runtime and migrations are configured for PostgreSQL:
 
 ```ini
-sqlalchemy.url = sqlite:///./maconly_supply_brain.db
+sqlalchemy.url = postgresql+psycopg2://maconly:maconly@db:5432/maconly_db
 ```
+
+Notes:
+
+- Local Docker Compose runs PostgreSQL under service name `db`.
+- CI runs tests on SQLite with `DATABASE_URL=sqlite:///./ci.db` for fast isolated checks.
 
 ## Migrations
 
@@ -77,6 +83,16 @@ Notes:
 - All changes performed by tools (including Windsurf) should be committed with meaningful messages.
 - Resolve conflicts consciously; do not just overwrite remote or local changes blindly.
 
+## Engineering governance and quality gates
+
+- Contribution and Definition of Done: `CONTRIBUTING.md`
+- Release discipline and rollback requirements: `RELEASE_POLICY.md`
+- Architecture decision records: `docs/adr/README.md`
+- CI workflow and automated checks: `.github/workflows/ci.yml`
+- Context synchronization guard (prevents code/docs drift): `scripts/context_guard.py`
+- Pull request template: `.github/pull_request_template.md`
+- Ownership policy: `.github/CODEOWNERS` (replace placeholder owner before enforcing required review)
+
 ## WB Manager Public API
 
 The backend exposes a small public API surface used by the WB Manager frontend under the common prefix:
@@ -113,7 +129,19 @@ This backend also exposes read-only planning and bundle-related endpoints used f
 Main endpoints:
 
 - `GET /demand` — WB-based demand metrics per article.
-- `GET /order-proposal` — article/SKU-level purchase proposal based on WB demand and planning settings.
+- `GET /order-proposal` — legacy low-fidelity article/SKU purchase proposal based on WB demand and planning settings; deprecated in favor of production-order core endpoints.
+- `POST /core/production-order/proposal` — primary Planning Core production-order recommendation for a single article with explicit `physical_scope`, `arrival_projection`, alternatives, constraints, and explanation.
+- `POST /core/production-order/proposal/from-wb` — same production-order core recommendation flow using WB-derived sales/stock snapshots with freshness diagnostics.
+- `POST /wb/sales-daily/sync-live` — pulls operational sales rows from WB Reports API (`/api/v1/supplier/sales`) using the active configured WB integration account token and upserts them into `wb_sales_daily`.
+- `POST /wb/stock/sync-live` — pulls stock rows from WB Reports API (`/api/v1/supplier/stocks`) using the active configured WB integration account token and upserts aggregated totals into `wb_stock`.
+- `POST /wb/commission/sync-live` — pulls WB tariff commissions from `common-api` (`/api/v1/tariffs/commission`) and returns top subject diagnostics plus aggregate commission stats.
+- `POST /wb/supplies/sync-live` — pulls WB supplies statuses from `supplies-api` (`POST /api/v1/supplies`) and returns status distribution plus recent supply snapshots.
+- `POST /wb/article-mapping/sync-live` — derives candidate `(supplierArticle, barcode)` pairs from WB sales feed, matches `supplierArticle -> article.code`, and upserts matched records into `article_wb_mapping` (optionally with `default_bundle_type_id`).
+- `POST /wb/article-mapping/discover-live` — returns top supplier articles from WB sales feed with row counts, unique WB SKU counts, and match diagnostics (`exact` / `normalized` / `none` / `ambiguous_normalized`) to help prepare local `article.code` values before sync.
+- `POST /wb/article/bootstrap-live` — discovers supplier articles from WB sales feed and bootstraps missing local `article` rows (`article.code=supplierArticle`, `article.name=supplierArticle`) with `dry_run` support for safe preview.
+- `POST /wb/from-wb/readiness` — audits whether mapped articles are ready for `/core/production-order/proposal/from-wb` (checks mapping bundle types, `bundle_recipe` coverage, and presence of WB sales/stock data; returns blockers like `no_bundle_recipe`, `missing_bundle_recipe_bundle_types`, `no_wb_sales_data`, and `no_wb_stock_data`).
+- `GET /core/production-order/settings/{article_id}` — read admin-configured defaults for production-order calculations (size weights, elastic bindings, in-flight supply defaults).
+- `PUT /core/production-order/settings/{article_id}` — replace admin-configured production-order defaults for the article.
 - `GET /bundle-availability` — number of bundles that can be assembled from NSC single-stock for a given article, bundle type and warehouse.
 - `GET /article-bundle-snapshot` — article-level bundle & inventory snapshot for NSC/WB:
   - NSC single-SKU stock by color/size.

@@ -9,6 +9,43 @@ from app.schemas.bundle_recipe import BundleRecipeCreate, BundleRecipeRead, Bund
 router = APIRouter()
 
 
+def _build_bundle_recipe_not_found_detail(*, bundle_recipe_id: int) -> dict[str, object]:
+    return {
+        "code": "bundle_recipe_not_found",
+        "message": "BundleRecipe not found",
+        "bundle_recipe_id": int(bundle_recipe_id),
+        "field": "bundle_recipe_id",
+        "field_metadata": {
+            "description": "Requested bundle recipe identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_bundle_recipe_id"],
+    }
+
+
+def _build_bundle_recipe_combination_already_exists_detail(
+    *,
+    article_id: int,
+    bundle_type_id: int,
+    color_id: int,
+    position: int,
+) -> dict[str, object]:
+    return {
+        "code": "bundle_recipe_combination_already_exists",
+        "message": "BundleRecipe with same combination already exists",
+        "field": "article_id,bundle_type_id,color_id,position",
+        "field_metadata": {
+            "description": "Requested bundle recipe uniqueness tuple",
+            "type": "tuple[int,int,int,int]",
+        },
+        "article_id": int(article_id),
+        "bundle_type_id": int(bundle_type_id),
+        "color_id": int(color_id),
+        "position": int(position),
+        "next_steps": ["use_unique_bundle_recipe_combination"],
+    }
+
+
 def _ensure_unique_constraints(
     db: Session,
     article_id: int,
@@ -35,7 +72,15 @@ def _ensure_unique_constraints(
         q_position = q_position.filter(BundleRecipe.id != current_id)
 
     if q_color.first() is not None or q_position.first() is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="BundleRecipe with same combination already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_build_bundle_recipe_combination_already_exists_detail(
+                article_id=article_id,
+                bundle_type_id=bundle_type_id,
+                color_id=color_id,
+                position=position,
+            ),
+        )
 
 
 @router.get("/", response_model=list[BundleRecipeRead])
@@ -48,7 +93,10 @@ def list_bundle_recipes(db: Session = Depends(get_db)):
 def get_bundle_recipe(id: int, db: Session = Depends(get_db)):
     item = db.query(BundleRecipe).filter(BundleRecipe.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BundleRecipe not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_bundle_recipe_not_found_detail(bundle_recipe_id=id),
+        )
     return item
 
 
@@ -78,7 +126,10 @@ def create_bundle_recipe(data: BundleRecipeCreate, db: Session = Depends(get_db)
 def update_bundle_recipe(id: int, data: BundleRecipeCreate, db: Session = Depends(get_db)):
     item = db.query(BundleRecipe).filter(BundleRecipe.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BundleRecipe not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_bundle_recipe_not_found_detail(bundle_recipe_id=id),
+        )
 
     _ensure_unique_constraints(
         db,
@@ -102,9 +153,12 @@ def update_bundle_recipe(id: int, data: BundleRecipeCreate, db: Session = Depend
 def partial_update_bundle_recipe(id: int, data: BundleRecipeUpdate, db: Session = Depends(get_db)):
     item = db.query(BundleRecipe).filter(BundleRecipe.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BundleRecipe not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_bundle_recipe_not_found_detail(bundle_recipe_id=id),
+        )
 
-    update_data = data.dict(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
 
     new_article_id = update_data.get("article_id", item.article_id)
     new_bundle_type_id = update_data.get("bundle_type_id", item.bundle_type_id)
@@ -133,7 +187,10 @@ def partial_update_bundle_recipe(id: int, data: BundleRecipeUpdate, db: Session 
 def delete_bundle_recipe(id: int, db: Session = Depends(get_db)):
     item = db.query(BundleRecipe).filter(BundleRecipe.id == id).first()
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BundleRecipe not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_build_bundle_recipe_not_found_detail(bundle_recipe_id=id),
+        )
 
     db.delete(item)
     db.commit()

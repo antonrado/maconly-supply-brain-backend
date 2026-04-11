@@ -38,6 +38,171 @@ _ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+def _build_wb_shipment_not_found_detail(*, shipment_id: int) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_not_found",
+        "message": "WbShipment not found",
+        "shipment_id": int(shipment_id),
+        "field": "shipment_id",
+        "field_metadata": {
+            "description": "Requested WB shipment identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_id"],
+    }
+
+
+def _build_wb_shipment_item_not_found_detail(*, shipment_id: int, item_id: int) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_not_found",
+        "message": "WbShipmentItem not found",
+        "shipment_id": int(shipment_id),
+        "item_id": int(item_id),
+        "field": "item_id",
+        "field_metadata": {
+            "description": "Requested WB shipment item identifier within shipment scope",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_wb_shipment_item_id"],
+    }
+
+
+def _build_invalid_sort_by_detail(*, sort_by: str, allowed_fields: list[str]) -> dict[str, object]:
+    return {
+        "code": "invalid_sort_by",
+        "message": f"Invalid sort_by '{sort_by}'",
+        "field": "sort_by",
+        "field_metadata": {
+            "description": "Shipment header sort field query parameter",
+            "type": "string",
+        },
+        "sort_by": str(sort_by),
+        "allowed_values": list(allowed_fields),
+        "next_steps": ["use_supported_shipment_sort_by"],
+    }
+
+
+def _build_invalid_sort_dir_detail(*, sort_dir: str) -> dict[str, object]:
+    return {
+        "code": "invalid_sort_dir",
+        "message": "Invalid sort_dir",
+        "field": "sort_dir",
+        "field_metadata": {
+            "description": "Shipment header sort direction query parameter",
+            "type": "Literal['asc','desc']",
+        },
+        "sort_dir": str(sort_dir),
+        "allowed_values": ["asc", "desc"],
+        "next_steps": ["use_sort_dir_asc_or_desc"],
+    }
+
+
+def _build_wb_shipment_final_status_locked_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_final_status_locked",
+        "message": "Cannot modify a shipment in final status",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking the requested mutation",
+            "type": "string",
+        },
+        "status": str(status_value),
+        "next_steps": ["use_draft_or_approved_shipment_for_updates"],
+    }
+
+
+def _build_wb_shipment_item_non_draft_locked_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_non_draft_locked",
+        "message": "Cannot modify items of a non-draft shipment",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Current WB shipment status blocking item updates",
+            "type": "string",
+        },
+        "status": str(status_value),
+        "next_steps": ["use_draft_shipment_for_item_updates"],
+    }
+
+
+def _build_wb_shipment_item_final_qty_exceeds_stock_detail(
+    *,
+    shipment_id: int,
+    item_id: int,
+    final_qty: int,
+    nsk_stock_available: int,
+) -> dict[str, object]:
+    return {
+        "code": "wb_shipment_item_final_qty_exceeds_stock",
+        "message": "final_qty exceeds available NSC stock",
+        "shipment_id": int(shipment_id),
+        "item_id": int(item_id),
+        "final_qty": int(final_qty),
+        "nsk_stock_available": int(nsk_stock_available),
+        "field": "final_qty",
+        "field_metadata": {
+            "description": "Requested final shipment quantity",
+            "type": "int",
+        },
+        "next_steps": ["use_final_qty_not_greater_than_nsk_stock_available"],
+    }
+
+
+def _build_invalid_wb_shipment_status_detail(*, shipment_id: int, status_value: str) -> dict[str, object]:
+    return {
+        "code": "invalid_wb_shipment_status",
+        "message": f"Invalid status '{status_value}'",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status",
+            "type": "string",
+        },
+        "status": str(status_value),
+        "allowed_values": sorted(_ALLOWED_STATUSES),
+        "next_steps": ["use_supported_wb_shipment_status"],
+    }
+
+
+def _build_invalid_wb_shipment_status_transition_detail(
+    *,
+    shipment_id: int,
+    current_status: str,
+    target_status: str,
+) -> dict[str, object]:
+    return {
+        "code": "invalid_wb_shipment_status_transition",
+        "message": f"Invalid status transition from '{current_status}' to '{target_status}'",
+        "shipment_id": int(shipment_id),
+        "field": "status",
+        "field_metadata": {
+            "description": "Requested WB shipment status transition target",
+            "type": "string",
+        },
+        "current_status": str(current_status),
+        "target_status": str(target_status),
+        "allowed_target_statuses": sorted(_ALLOWED_STATUS_TRANSITIONS.get(current_status, set())),
+        "next_steps": ["use_allowed_wb_shipment_status_transition"],
+    }
+
+
+def _build_invalid_wb_arrival_date_detail(*, target_date: object, wb_arrival_date: object) -> dict[str, object]:
+    return {
+        "code": "wb_arrival_date_before_target_date",
+        "message": "wb_arrival_date cannot be earlier than target_date",
+        "field": "wb_arrival_date",
+        "field_metadata": {
+            "description": "Requested WB arrival date",
+            "type": "date",
+        },
+        "target_date": str(target_date),
+        "wb_arrival_date": str(wb_arrival_date),
+        "next_steps": ["use_wb_arrival_date_on_or_after_target_date"],
+    }
+
+
 class WbShipmentStatusList(BaseModel):
     statuses: list[str]
 
@@ -71,7 +236,10 @@ def create_shipment_from_proposal(
     if payload.wb_arrival_date < payload.target_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="wb_arrival_date cannot be earlier than target_date",
+            detail=_build_invalid_wb_arrival_date_detail(
+                target_date=payload.target_date,
+                wb_arrival_date=payload.wb_arrival_date,
+            ),
         )
 
     shipment = create_wb_shipment_from_proposal(db=db, payload=payload)
@@ -111,7 +279,7 @@ def list_shipments(
     ),
 )
 def list_shipment_headers(
-    status: str | None = Query(None),
+    shipment_status: str | None = Query(None, alias="status"),
     article_id: int | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
@@ -132,14 +300,17 @@ def list_shipment_headers(
     if sort_by not in sortable_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sort_by '{sort_by}', must be one of: {sorted(sortable_fields.keys())}",
+            detail=_build_invalid_sort_by_detail(
+                sort_by=sort_by,
+                allowed_fields=sorted(sortable_fields.keys()),
+            ),
         )
 
     sort_dir_normalized = sort_dir.lower()
     if sort_dir_normalized not in {"asc", "desc"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid sort_dir, must be 'asc' or 'desc'",
+            detail=_build_invalid_sort_dir_detail(sort_dir=sort_dir),
         )
 
     sort_column = sortable_fields[sort_by]
@@ -171,8 +342,8 @@ def list_shipment_headers(
         .outerjoin(WbShipmentItem, WbShipmentItem.shipment_id == WbShipment.id)
     )
 
-    if status is not None:
-        query = query.filter(WbShipment.status == status)
+    if shipment_status is not None:
+        query = query.filter(WbShipment.status == shipment_status)
     if date_from is not None:
         query = query.filter(WbShipment.target_date >= date_from)
     if date_to is not None:
@@ -258,7 +429,7 @@ def get_shipment_aggregates(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     return WbShipmentAggregates(
@@ -310,7 +481,7 @@ def get_shipment(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
     return shipment
 
@@ -334,7 +505,7 @@ def get_shipment_item_summary(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     item = (
@@ -348,7 +519,10 @@ def get_shipment_item_summary(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipmentItem not found",
+            detail=_build_wb_shipment_item_not_found_detail(
+                shipment_id=shipment_id,
+                item_id=item_id,
+            ),
         )
 
     return WbShipmentItemSummary(
@@ -389,17 +563,20 @@ def update_shipment(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     if shipment.status in {"shipped", "cancelled"}:
         # Final states: no further modifications allowed
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify a shipment in final status",
+            detail=_build_wb_shipment_final_status_locked_detail(
+                shipment_id=shipment_id,
+                status_value=shipment.status,
+            ),
         )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
     changed = False
 
     if "status" in data:
@@ -407,14 +584,21 @@ def update_shipment(
         if new_status not in _ALLOWED_STATUSES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status '{new_status}', must be one of: {sorted(_ALLOWED_STATUSES)}",
+                detail=_build_invalid_wb_shipment_status_detail(
+                    shipment_id=shipment_id,
+                    status_value=new_status,
+                ),
             )
         old_status = shipment.status
         allowed_targets = _ALLOWED_STATUS_TRANSITIONS.get(old_status, set())
         if new_status not in allowed_targets:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid status transition from '{old_status}' to '{new_status}'",
+                detail=_build_invalid_wb_shipment_status_transition_detail(
+                    shipment_id=shipment_id,
+                    current_status=old_status,
+                    target_status=new_status,
+                ),
             )
         if new_status != old_status:
             shipment.status = new_status
@@ -450,13 +634,16 @@ def update_shipment_item(
     if shipment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipment not found",
+            detail=_build_wb_shipment_not_found_detail(shipment_id=shipment_id),
         )
 
     if shipment.status != "draft":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify items of a non-draft shipment",
+            detail=_build_wb_shipment_item_non_draft_locked_detail(
+                shipment_id=shipment_id,
+                status_value=shipment.status,
+            ),
         )
 
     item = (
@@ -470,16 +657,24 @@ def update_shipment_item(
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="WbShipmentItem not found",
+            detail=_build_wb_shipment_item_not_found_detail(
+                shipment_id=shipment_id,
+                item_id=item_id,
+            ),
         )
 
-    data = payload.dict(exclude_unset=True)
+    data = payload.model_dump(exclude_unset=True)
     if "final_qty" in data:
         new_final_qty = int(data["final_qty"])
         if new_final_qty > item.nsk_stock_available:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="final_qty exceeds available NSC stock",
+                detail=_build_wb_shipment_item_final_qty_exceeds_stock_detail(
+                    shipment_id=shipment_id,
+                    item_id=item_id,
+                    final_qty=new_final_qty,
+                    nsk_stock_available=item.nsk_stock_available,
+                ),
             )
         item.final_qty = new_final_qty
     if "explanation" in data:

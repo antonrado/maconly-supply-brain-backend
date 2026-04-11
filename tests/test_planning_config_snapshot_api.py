@@ -44,6 +44,13 @@ def _setup_full_planning_config(db_session):
         default_service_level_percent=90,
         default_fabric_min_batch_qty=7000,
         default_elastic_min_batch_qty=3000,
+        default_production_order_production_cost_per_unit=1.0,
+        default_production_order_logistics_cost_per_unit=0.2,
+        default_production_order_wb_commission_percent_main=0.1,
+        default_production_order_wb_commission_percent_assorti=0.2,
+        default_production_order_average_realized_price_main=3.0,
+        default_production_order_average_realized_price_assorti=3.5,
+        default_production_order_available_capital=500.0,
     )
 
     # Article planning settings (used + experimental fields)
@@ -103,6 +110,13 @@ def test_planning_config_snapshot_happy_path_single_article(client, db_session):
     gs = body["global_settings"]
     assert gs["default_target_coverage_days"] == 10
     assert "experimental" in gs
+    assert gs["experimental"]["default_production_order_production_cost_per_unit"] == 1.0
+    assert gs["experimental"]["default_production_order_logistics_cost_per_unit"] == 0.2
+    assert gs["experimental"]["default_production_order_wb_commission_percent_main"] == 0.1
+    assert gs["experimental"]["default_production_order_wb_commission_percent_assorti"] == 0.2
+    assert gs["experimental"]["default_production_order_average_realized_price_main"] == 3.0
+    assert gs["experimental"]["default_production_order_average_realized_price_assorti"] == 3.5
+    assert gs["experimental"]["default_production_order_available_capital"] == 500.0
 
     # Single article snapshot
     articles = body["articles"]
@@ -153,7 +167,17 @@ def test_planning_config_snapshot_article_not_found(client):
     )
     assert resp.status_code == 404
     body = resp.json()
-    assert body["detail"] == "Article not found"
+    assert body["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
 
 
 def test_planning_config_snapshot_article_without_settings_returns_404(client, db_session):
@@ -165,7 +189,17 @@ def test_planning_config_snapshot_article_without_settings_returns_404(client, d
     )
     assert resp.status_code == 404
     body = resp.json()
-    assert body["detail"] == "No planning settings found for this article"
+    assert body["detail"] == {
+        "code": "no_planning_settings_found",
+        "message": "No planning settings found for this article",
+        "article_id": article.id,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier for planning settings lookup",
+            "type": "int",
+        },
+        "next_steps": ["configure_article_planning_settings"],
+    }
 
 
 def test_planning_config_snapshot_without_article_id_lists_active_planning_settings(client, db_session):

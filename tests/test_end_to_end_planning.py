@@ -34,6 +34,53 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+def test_legacy_core_proposal_stub_exposes_deprecation_headers(client, monkeypatch):
+    from app.api.v1.endpoints import planning_core
+
+    class _FakeProposal:
+        def dict(self):
+            return {
+                "version": "v1",
+                "generated_at": "stub",
+                "inputs": {
+                    "sales_window_days": None,
+                    "horizon_days": None,
+                },
+                "summary": {
+                    "total_skus": 0,
+                    "total_units": 0,
+                },
+                "lines": [],
+            }
+
+    monkeypatch.setattr(
+        planning_core.PlanningService,
+        "build_proposal",
+        lambda self, sales_window_days=None, horizon_days=None: _FakeProposal(),
+    )
+
+    response = client.post("/api/v1/planning/core/proposal", json={})
+
+    assert response.status_code == 200, response.text
+    assert response.headers["Deprecation"] == "true"
+    assert response.headers["X-Planning-Fidelity"] == "stub_legacy_low_fidelity"
+    assert response.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert response.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
+    body = response.json()
+    assert body["status"] == "ok"
+
+
+def test_openapi_hides_legacy_planning_paths_and_keeps_canonical_production_order_paths(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200, response.text
+    paths = response.json()["paths"]
+    assert "/api/v1/planning/core/proposal" not in paths
+    assert "/api/v1/planning/order-proposal" not in paths
+    assert "/api/v1/planning/core/production-order/proposal" in paths
+    assert "/api/v1/planning/core/production-order/proposal/from-wb" in paths
+
+
 def _setup_article_with_skus_and_planning(db_session):
     """Create article with multiple SKUs and planning settings for end-to-end tests."""
     article = create_article(db_session, code="E2E-ART-1")
@@ -151,6 +198,10 @@ def test_end_to_end_happy_path_wb_to_po(client, db_session):
         },
     )
     assert resp_proposal.status_code == 200, resp_proposal.text
+    assert resp_proposal.headers["Deprecation"] == "true"
+    assert resp_proposal.headers["X-Planning-Fidelity"] == "legacy_live_low_fidelity"
+    assert resp_proposal.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert resp_proposal.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
     proposal = resp_proposal.json()
 
     assert proposal["target_date"] == target_date.isoformat()
@@ -225,6 +276,10 @@ def test_end_to_end_zero_demand_creates_empty_po(client, db_session):
         },
     )
     assert resp_proposal.status_code == 200, resp_proposal.text
+    assert resp_proposal.headers["Deprecation"] == "true"
+    assert resp_proposal.headers["X-Planning-Fidelity"] == "legacy_live_low_fidelity"
+    assert resp_proposal.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert resp_proposal.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
     proposal = resp_proposal.json()
 
     assert proposal["items"] == []

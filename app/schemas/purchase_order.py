@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PurchaseOrderItemBase(BaseModel):
@@ -28,8 +28,7 @@ class PurchaseOrderItemRead(PurchaseOrderItemBase):
     id: int
     purchase_order_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderBase(BaseModel):
@@ -53,10 +52,9 @@ class PurchaseOrderRead(PurchaseOrderBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    items: list[PurchaseOrderItemRead] = []
+    items: list[PurchaseOrderItemRead] = Field(default_factory=list)
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PurchaseOrderFromProposalRequest(BaseModel):
