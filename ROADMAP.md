@@ -302,7 +302,7 @@
 - Layer 5 thresholds now support deterministic precedence (`request -> admin_defaults -> global_default -> code_default_constants`) with source tracing and safe threshold-order clamping.
 - Layer 5 contract summary is now exposed (version/checks/status; threshold sanity, signal validity/order, reason-policy consistency) and projected in compact explainability mode.
 - Layer 5 signal-only semantics are explicitly regression-locked: intervention signals may vary with thresholds while recommendation action remains unchanged for equivalent planning state.
-- Current signal set: `accelerate_production` / `increase_price_to_slow_velocity` (dual signal allowed under severe in-flight risk).
+- Current signal set: `accelerate_production` / `increase_price_to_slow_velocity` / `reduce_order_size` (dual-signal combinations remain allowed under severe in-flight risk and mixed risk/cost conditions).
 - Keep signal-only behavior in v1 (no dynamic pricing model).
 
 ### 2.6 Explainability payload controls (in progress)
