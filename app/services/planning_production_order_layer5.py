@@ -205,6 +205,7 @@ def _build_layer5_intervention_signals(
 def _build_layer5_contract_summary(
     *,
     layer5_intervention: dict[str, object],
+    layer4_scenarios: list[dict[str, object]],
     unavoidable_stockout_risk_threshold: float,
     accelerate_production_risk_threshold: float,
     reduce_order_marginal_profit_rate: float = LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
@@ -270,11 +271,27 @@ def _build_layer5_contract_summary(
         "reduce_order_size",
     ]
     canonical_signals_filtered = [signal for signal in canonical_order if signal in signals_set]
+    layer4_scenario_names = [
+        str(item.get("scenario", "")).strip().lower()
+        for item in layer4_scenarios
+        if isinstance(item, dict)
+    ]
+    required_layer4_scenarios = {
+        "conservative",
+        "balanced",
+        "aggressive",
+    }
 
     checks = {
         "method_matches_expected": method == "deterministic_unavoidable_stockout_flags",
         "signal_policy_matches_expected": signal_policy == "critical_risk_thresholds",
         "economic_policy_present": economic_policy == "cost_aware_thresholds",
+        "required_layer4_scenarios_present": required_layer4_scenarios.issubset(
+            set(layer4_scenario_names)
+        ),
+        "required_layer4_scenarios_unique": all(
+            layer4_scenario_names.count(name) == 1 for name in required_layer4_scenarios
+        ),
         "unavoidable_stockout_is_bool": unavoidable_stockout_is_bool,
         "aggressive_risk_in_unit_interval": 0.0 <= aggressive_stockout_risk <= 1.0,
         "thresholds_in_unit_interval": (

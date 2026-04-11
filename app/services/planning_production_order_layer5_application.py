@@ -36,6 +36,7 @@ def _apply_production_order_layer5_analysis(
     )
     layer5_contract = build_layer5_contract_summary(
         layer5_intervention=layer5_intervention,
+        layer4_scenarios=layer4_scenarios,
         unavoidable_stockout_risk_threshold=unavoidable_stockout_risk_threshold,
         accelerate_production_risk_threshold=accelerate_production_risk_threshold,
         reduce_order_marginal_profit_rate=reduce_order_marginal_profit_rate,
