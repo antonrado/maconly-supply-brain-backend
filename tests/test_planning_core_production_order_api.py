@@ -7380,6 +7380,8 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert layer4_contract_checks["scenario_deltas_match_balanced"] is True
 
     layer5_contract_checks = body["explanation"]["meta"]["layer_5_intervention"]["contract"]["checks"]
+    assert layer5_contract_checks["required_layer4_scenarios_present"] is True
+    assert layer5_contract_checks["required_layer4_scenarios_unique"] is True
     assert layer5_contract_checks["thresholds_in_unit_interval"] is True
     assert layer5_contract_checks["threshold_sources_match_effective"] is True
     assert layer5_contract_checks["threshold_order_valid"] is True
