@@ -1686,6 +1686,11 @@ def test_layer5_contract_summary_marks_violated_for_threshold_and_signal_invaria
                 "reduce_order_size": 0.1,
             },
         },
+        layer4_scenarios=[
+            {"scenario": "Conservative"},
+            {"scenario": "Aggressive"},
+            {"scenario": "Aggressive"},
+        ],
         unavoidable_stockout_risk_threshold=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
         accelerate_production_risk_threshold=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
         reduce_order_marginal_profit_rate=LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
@@ -1698,6 +1703,8 @@ def test_layer5_contract_summary_marks_violated_for_threshold_and_signal_invaria
     assert checks["method_matches_expected"] is False
     assert checks["signal_policy_matches_expected"] is False
     assert checks["economic_policy_present"] is False
+    assert checks["required_layer4_scenarios_present"] is False
+    assert checks["required_layer4_scenarios_unique"] is False
     assert checks["unavoidable_stockout_is_bool"] is False
     assert checks["aggressive_risk_in_unit_interval"] is False
     assert checks["thresholds_in_unit_interval"] is False
@@ -1713,6 +1720,41 @@ def test_layer5_contract_summary_marks_violated_for_threshold_and_signal_invaria
     assert checks["accelerate_signal_requires_severe_risk"] is False
     assert checks["price_slowdown_signal_requires_unavoidable_threshold"] is False
     assert checks["reduce_order_signal_requires_overstock_penalty_gate"] is True
+
+
+def test_layer5_contract_summary_marks_violated_when_required_layer4_scenarios_missing():
+    intervention = _build_layer5_intervention_signals(
+        risk_level="critical",
+        layer4_scenarios=[
+            {"scenario": "Conservative", "stockout_risk_proxy": 0.7},
+            {"scenario": "Balanced", "stockout_risk_proxy": 0.6},
+            {"scenario": "Aggressive", "stockout_risk_proxy": 0.45},
+        ],
+        in_flight_effective_qty_total=50,
+    )
+
+    contract = _build_layer5_contract_summary(
+        layer5_intervention=intervention,
+        layer4_scenarios=[
+            {"scenario": "Conservative"},
+            {"scenario": "Aggressive"},
+        ],
+        unavoidable_stockout_risk_threshold=LAYER5_UNAVOIDABLE_STOCKOUT_RISK_THRESHOLD,
+        accelerate_production_risk_threshold=LAYER5_ACCELERATE_PRODUCTION_RISK_THRESHOLD,
+        reduce_order_marginal_profit_rate=LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
+    )
+
+    checks = contract["checks"]
+    assert contract["version"] == LAYER5_CONTRACT_VERSION
+    assert contract["status"] == "violated"
+    assert checks["method_matches_expected"] is True
+    assert checks["signal_policy_matches_expected"] is True
+    assert checks["economic_policy_present"] is True
+    assert checks["required_layer4_scenarios_present"] is False
+    assert checks["required_layer4_scenarios_unique"] is False
+    assert checks["signals_known_only"] is True
+    assert checks["signals_order_is_canonical"] is True
+    assert checks["reason_consistent_with_signals"] is True
 
 
 def test_resource_allocation_contract_summary_marks_violated_for_double_use_payload():
@@ -4497,6 +4539,8 @@ def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_me
             "method_matches_expected": True,
             "signal_policy_matches_expected": True,
             "economic_policy_present": True,
+            "required_layer4_scenarios_present": True,
+            "required_layer4_scenarios_unique": True,
             "unavoidable_stockout_is_bool": True,
             "aggressive_risk_in_unit_interval": True,
             "thresholds_in_unit_interval": True,
