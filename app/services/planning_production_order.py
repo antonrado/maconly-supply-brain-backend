@@ -269,6 +269,10 @@ from app.services.planning_production_order_skip_application import (
     _SkipApplicationResult as _extracted_SkipApplicationResult,
     _apply_production_order_skip as _extracted_apply_production_order_skip,
 )
+from app.services.planning_production_order_skip_unpack_application import (
+    _SkipUnpackApplicationResult as _extracted_SkipUnpackApplicationResult,
+    _apply_production_order_skip_unpack as _extracted_apply_production_order_skip_unpack,
+)
 from app.services.planning_production_order_scope import (
     _build_physical_scope_contract as _extracted_build_physical_scope_contract,
     _build_arrival_horizon_projection as _extracted_build_arrival_horizon_projection,
@@ -700,6 +704,9 @@ _ResourceAllocationUnpackApplicationResult = _extracted_ResourceAllocationUnpack
 _apply_production_order_resource_allocation_unpack = _extracted_apply_production_order_resource_allocation_unpack
 _SkipApplicationResult = _extracted_SkipApplicationResult
 _apply_production_order_skip = _extracted_apply_production_order_skip
+_SkipUnpackApplicationResult = _extracted_SkipUnpackApplicationResult
+_apply_production_order_skip_unpack = _extracted_apply_production_order_skip_unpack
+
 _apply_elastic_min_batch_uplift = _extracted_apply_elastic_min_batch_uplift
 _resolve_elastic_binding_scope = _extracted_resolve_elastic_binding_scope
 _estimate_competition_aware_raw_bundle_stock = _extracted_estimate_competition_aware_raw_bundle_stock
@@ -789,7 +796,10 @@ def build_production_order_proposal(
             apply_explainability_mode=_apply_explainability_mode,
             apply_production_order_response=_apply_production_order_response,
         )
-        return skip_application.response
+        skip_unpack = _apply_production_order_skip_unpack(
+            skip_application=skip_application,
+        )
+        return skip_unpack.response
 
     economic_governance_application = _apply_production_order_economic_governance(
         article_id=request.article_id,
