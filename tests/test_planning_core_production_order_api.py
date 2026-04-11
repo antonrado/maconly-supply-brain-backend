@@ -5232,6 +5232,14 @@ def test_production_order_proposal_uses_admin_economic_defaults_when_request_mis
         "available_capital": 300.0,
     }
 
+    economics_trust = meta["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_TRUSTED
+    assert economics_trust["code_default_key_fields"] == []
+    assert economics_trust["code_default_key_fields_count"] == 0
+    assert economics_trust["code_default_dominance_ratio"] == 0.0
+    assert economics_trust["warnings"] == []
+    assert meta["warnings"] == []
+
     capital_gap = meta["capital_gap"]
     assert capital_gap["status"] == "ok"
     assert capital_gap["available_capital"] == 300.0
@@ -5251,6 +5259,8 @@ def test_production_order_proposal_uses_admin_economic_defaults_when_request_mis
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
+    assert compact_meta["economics_trust"] == economics_trust
+    assert compact_meta["warnings"] == []
 
 
 def test_production_order_proposal_uses_global_economic_defaults_when_admin_and_request_missing(client, db_session):
@@ -9972,6 +9982,14 @@ def test_production_order_proposal_from_wb_uses_admin_economic_defaults_when_req
         "available_capital": 300.0,
     }
 
+    economics_trust = meta["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_TRUSTED
+    assert economics_trust["code_default_key_fields"] == []
+    assert economics_trust["code_default_key_fields_count"] == 0
+    assert economics_trust["code_default_dominance_ratio"] == 0.0
+    assert economics_trust["warnings"] == []
+    assert meta["warnings"] == []
+
     capital_gap = meta["capital_gap"]
     assert capital_gap["status"] == "ok"
     assert capital_gap["available_capital"] == 300.0
@@ -9991,6 +10009,8 @@ def test_production_order_proposal_from_wb_uses_admin_economic_defaults_when_req
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
+    assert compact_meta["economics_trust"] == economics_trust
+    assert compact_meta["warnings"] == []
 
 
 def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_global(
