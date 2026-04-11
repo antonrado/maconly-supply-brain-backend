@@ -345,9 +345,9 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-11 11:42 +07:00`
+- Date: `2026-04-12 00:21 +07:00`
 - Branch: `feature/po-layer1-layer2-foundation`
-- Last commit (`git log -1 --oneline`): `5330a2d`
+- Last commit (`git log -1 --oneline`): `c5ee4e6`
 - Gates:
   - `python -m pytest -q tests/test_planning_core_production_order_api.py` → `170 passed`
   - `python -m pytest -q` → `404 passed`
@@ -356,10 +356,10 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ```text
 $ python -m pytest -q tests/test_planning_core_production_order_api.py
-170 passed in 3.83s
+170 passed in 4.25s
 ```
 
 ```text
 $ python -m pytest -q
-404 passed in 6.28s
+404 passed in 6.59s
 ```
