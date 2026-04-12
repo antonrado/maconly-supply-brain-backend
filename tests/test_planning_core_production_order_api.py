@@ -11220,6 +11220,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["explainability"]["steps_omitted"] >= 1
     assert "metrics" not in meta["layer_1_stock_health"]
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
+    assert "bundle_types" not in meta["layer_1_stock_health"]["assorti_classification"]
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
     assert meta["capital_constraint"]["contract"]["status"] == "ok"
