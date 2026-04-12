@@ -2276,6 +2276,7 @@ def test_production_order_proposal_reports_budget_limited_capital_constraint_sum
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_constraint"] == capital_constraint
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_production_order_proposal_price_flip_changes_layer2_allocation_decision_end_to_end(client, db_session):
@@ -10377,6 +10378,7 @@ def test_production_order_proposal_from_wb_reports_budget_limited_capital_constr
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_constraint"] == capital_constraint
+    assert compact_meta["warnings"] == meta["warnings"]
 
 
 def test_production_order_proposal_from_wb_assorti_classification_prefers_admin_fallback_over_global(
