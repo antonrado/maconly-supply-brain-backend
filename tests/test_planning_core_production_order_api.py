@@ -5231,6 +5231,9 @@ def test_production_order_proposal_uses_admin_economic_defaults_when_request_mis
         "average_realized_price_assorti": 2.4,
         "available_capital": 300.0,
     }
+    assert alpha_proxy["economics_trust"] == meta["economics_trust"]
+    assert alpha_proxy["economics_trust_level"] == meta["economics_trust"]["economics_trust_level"]
+    assert alpha_proxy["capital_governance"] == meta["capital_governance"]
 
     economics_trust = meta["economics_trust"]
     assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_TRUSTED
@@ -9981,6 +9984,10 @@ def test_production_order_proposal_from_wb_uses_admin_economic_defaults_when_req
         "average_realized_price_assorti": 2.4,
         "available_capital": 300.0,
     }
+
+    assert alpha_proxy["economics_trust"] == meta["economics_trust"]
+    assert alpha_proxy["economics_trust_level"] == meta["economics_trust"]["economics_trust_level"]
+    assert alpha_proxy["capital_governance"] == meta["capital_governance"]
 
     economics_trust = meta["economics_trust"]
     assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_TRUSTED
