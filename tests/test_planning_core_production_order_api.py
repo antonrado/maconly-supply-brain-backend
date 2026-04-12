@@ -5673,6 +5673,7 @@ def test_production_order_proposal_safe_default_mode_applies_zero_capital_fallba
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_governance"] == meta["capital_governance"]
+    assert compact_meta["economics_trust"] == meta["economics_trust"]
     assert compact_meta["warnings"] == meta["warnings"]
     assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
@@ -9510,6 +9511,7 @@ def test_production_order_proposal_from_wb_safe_default_mode_applies_zero_capita
     compact_meta = compact_body["explanation"]["meta"]
     assert _business_projection(body) == _business_projection(compact_body)
     assert compact_meta["capital_governance"] == meta["capital_governance"]
+    assert compact_meta["economics_trust"] == meta["economics_trust"]
     assert compact_meta["warnings"] == meta["warnings"]
     assert compact_meta["alpha_proxy_economics"] == meta["alpha_proxy_economics"]
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
