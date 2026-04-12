@@ -11217,6 +11217,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
 
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
+    assert meta["explainability"]["steps_omitted"] >= 1
     assert meta["layer_1_stock_health"]["contract"]["status"] == "ok"
     assert "decisions" not in meta["layer_2_allocation"]
     assert meta["layer_2_allocation"]["contract"]["status"] == "ok"
