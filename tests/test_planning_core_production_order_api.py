@@ -4258,6 +4258,21 @@ def test_production_order_proposal_applies_safety_stock_days_to_reorder_policy(c
         "reorder_point_days": 91,
     }
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=payload,
+    )
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body_with) == _business_projection(compact_body)
+    assert compact_body["explanation"]["meta"]["reorder_policy"] == {
+        "lead_time_days_total": 70,
+        "safety_stock_days": 21,
+        "reorder_point_days": 91,
+    }
+
 
 def test_production_order_proposal_exposes_layer1_layer2_layer3_layer4_layer5_meta(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
