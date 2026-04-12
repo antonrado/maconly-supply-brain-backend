@@ -3330,6 +3330,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output(c
         "objective_parameters": full_layer2.get("objective_parameters", {}),
         "objective_source": full_layer2.get("objective_source", {}),
     }
+    assert compact_meta["sources"] == full_meta["sources"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
@@ -11445,6 +11446,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
         "objective_parameters": full_layer2.get("objective_parameters", {}),
         "objective_source": full_layer2.get("objective_source", {}),
     }
+    assert compact_meta["sources"] == full_meta["sources"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
     assert compact_meta["economic_buffer"] == full_meta["economic_buffer"]
