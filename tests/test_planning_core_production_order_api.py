@@ -3267,6 +3267,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     }
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
+    assert meta["physical_scope"] == full_meta["physical_scope"]
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
@@ -11339,6 +11340,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     }
     assert _business_projection(body) == _business_projection(full_body)
     assert meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
+    assert meta["physical_scope"] == full_meta["physical_scope"]
     assert meta["capital_gap"] == full_meta["capital_gap"]
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
