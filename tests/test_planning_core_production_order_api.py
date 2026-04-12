@@ -3034,6 +3034,38 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         "source_breakdown": meta["layer_1_stock_health"]["assorti_classification"]["source_breakdown"],
         "summary": meta["layer_1_stock_health"]["assorti_classification"]["summary"],
     }
+    full_layer4 = meta["layer_4_scenarios"]
+    expected_compact_layer4 = {
+        "method": full_layer4["method"],
+        "factors": full_layer4["factors"],
+        "contract": full_layer4["contract"],
+        "aggregate_deltas": full_layer4["aggregate_deltas"],
+        "scenarios": [
+            {
+                "scenario": full_scenario["scenario"],
+                "purchase_units": full_scenario["purchase_units"],
+                "total_capital_required": full_scenario["total_capital_required"],
+                "expected_revenue": full_scenario["expected_revenue"],
+                "expected_gross_profit": full_scenario["expected_gross_profit"],
+                "objective_score": full_scenario["objective_score"],
+                "expected_margin_percent": full_scenario["expected_margin_percent"],
+                "expected_turnover_days": full_scenario["expected_turnover_days"],
+                "expected_turnover_proxy": full_scenario["expected_turnover_proxy"],
+                "stockout_probability_proxy": full_scenario["stockout_probability_proxy"],
+                "stockout_risk_proxy": full_scenario["stockout_risk_proxy"],
+                "overstock_risk_proxy": full_scenario["overstock_risk_proxy"],
+                "risk_adjusted_profit": full_scenario["risk_adjusted_profit"],
+                "capital_efficiency_metric": full_scenario["capital_efficiency_metric"],
+                "capital_delta_vs_balanced": full_scenario["capital_delta_vs_balanced"],
+                "expected_revenue_delta_vs_balanced": full_scenario["expected_revenue_delta_vs_balanced"],
+                "expected_gross_profit_delta_vs_balanced": full_scenario["expected_gross_profit_delta_vs_balanced"],
+                "gross_profit_delta_vs_balanced": full_scenario["gross_profit_delta_vs_balanced"],
+                "objective_score_delta_vs_balanced": full_scenario["objective_score_delta_vs_balanced"],
+                "assorti_sustainability_impact": full_scenario["assorti_sustainability_impact"],
+            }
+            for full_scenario in full_layer4["scenarios"]
+        ],
+    }
     compact_payload = deepcopy(payload)
     compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
     compact_response = client.post(
@@ -3052,6 +3084,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert compact_meta["layer_1_stock_health"]["assorti_classification"] == expected_compact_assorti_classification
     assert compact_layer2 == expected_compact_layer2
     assert compact_meta["alpha_proxy_economics"]["layer_2_objective_parameters"] == objective_parameters
+    assert compact_meta["layer_4_scenarios"] == expected_compact_layer4
     compact_from_wb = compact_meta["from_wb"]
     assert compact_from_wb == expected_compact_from_wb
     compact_layer5 = compact_meta["layer_5_intervention"]
