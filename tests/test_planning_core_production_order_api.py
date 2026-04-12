@@ -10277,6 +10277,7 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     assert compact_meta["alpha_proxy_economics"] == alpha_proxy
     assert compact_meta["alpha_proxy_economics"]["economic_source"] == alpha_proxy["economic_source"]
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
+    assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["alpha_proxy_economics"]["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     assert compact_meta["layer_2_allocation"]["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     assert compact_meta["layer_4_scenarios"] == expected_compact_layer4
