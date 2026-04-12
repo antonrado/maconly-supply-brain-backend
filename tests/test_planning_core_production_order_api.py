@@ -10280,6 +10280,7 @@ def test_production_order_proposal_from_wb_request_economic_overrides_admin_and_
     assert compact_meta["alpha_proxy_economics"]["layer_2_legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     assert compact_meta["layer_2_allocation"]["decision_quality"]["legacy_alias_deprecation_plan"] == layer2_legacy_alias_plan
     assert compact_meta["layer_4_scenarios"] == expected_compact_layer4
+    assert compact_meta["layer_5_intervention"] == meta["layer_5_intervention"]
 
 
 def test_production_order_proposal_from_wb_reports_budget_limited_capital_constraint_summary(
