@@ -3280,6 +3280,7 @@ def test_production_order_proposal_compact_explainability_mode(client, db_sessio
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["resource_allocation"] == full_meta["resource_allocation"]
+    assert meta["shared_color_pool"] == full_meta["shared_color_pool"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
     assert meta["layer_4_scenarios"] == expected_compact_layer4
@@ -11365,6 +11366,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["capital_constraint"] == full_meta["capital_constraint"]
     assert meta["alpha_proxy_economics"] == full_meta["alpha_proxy_economics"]
     assert meta["resource_allocation"] == full_meta["resource_allocation"]
+    assert meta["shared_color_pool"] == full_meta["shared_color_pool"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
     assert meta["layer_4_scenarios"] == expected_compact_layer4
