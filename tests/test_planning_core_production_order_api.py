@@ -5263,6 +5263,7 @@ def test_production_order_proposal_uses_admin_economic_defaults_when_request_mis
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["economics_trust"] == economics_trust
+    assert compact_meta["capital_governance"] == meta["capital_governance"]
     assert compact_meta["warnings"] == []
 
 
@@ -10023,6 +10024,7 @@ def test_production_order_proposal_from_wb_uses_admin_economic_defaults_when_req
     assert compact_meta["alpha_proxy_economics"]["economic_inputs"] == alpha_proxy["economic_inputs"]
     assert compact_meta["capital_gap"] == capital_gap
     assert compact_meta["economics_trust"] == economics_trust
+    assert compact_meta["capital_governance"] == meta["capital_governance"]
     assert compact_meta["warnings"] == []
 
 
