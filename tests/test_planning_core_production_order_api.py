@@ -3518,6 +3518,7 @@ def test_production_order_proposal_compact_mode_preserves_deterministic_output_a
     }
     assert compact_meta["warnings"] == full_meta["warnings"]
     assert compact_meta["economics_trust"] == full_meta["economics_trust"]
+    assert compact_meta["capital_governance"] == full_meta["capital_governance"]
     assert compact_meta["sources"] == full_meta["sources"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
@@ -13406,6 +13407,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     }
     assert compact_meta["warnings"] == full_meta["warnings"]
     assert compact_meta["economics_trust"] == full_meta["economics_trust"]
+    assert compact_meta["capital_governance"] == full_meta["capital_governance"]
     assert compact_meta["sources"] == full_meta["sources"]
     assert compact_meta["physical_scope"] == full_meta["physical_scope"]
     assert compact_meta["arrival_projection"] == full_meta["arrival_projection"]
