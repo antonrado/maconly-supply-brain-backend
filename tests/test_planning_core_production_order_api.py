@@ -11213,6 +11213,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     wb_adapter_step = next((step for step in steps if "WB ingestion adapter" in step), "")
     assert "freshness_mode=warn" in wb_adapter_step
     assert "requested_as_of_date=2026-01-10" in wb_adapter_step
+    assert "as_of_date=2026-01-10" in wb_adapter_step
     assert "sales_window=2025-12-12..2026-01-10" in wb_adapter_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
