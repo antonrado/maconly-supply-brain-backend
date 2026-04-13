@@ -11206,6 +11206,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     steps = body["explanation"]["steps"]
     assert any("WB ingestion adapter" in step for step in steps)
     assert any("Layer 2 allocation" in step for step in steps)
+    assert any("Physical scope:" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
