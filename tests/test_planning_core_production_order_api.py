@@ -11377,6 +11377,13 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
         "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
     }
+    expected_compact_observed_prices = {
+        "source": full_meta["from_wb"]["economic_observed_prices"]["source"],
+        "window": full_meta["from_wb"]["economic_observed_prices"]["window"],
+        "anomaly_max_deviation": full_meta["from_wb"]["economic_observed_prices"]["anomaly_max_deviation"],
+        "prices": full_meta["from_wb"]["economic_observed_prices"]["prices"],
+        "sample_counts": full_meta["from_wb"]["economic_observed_prices"]["sample_counts"],
+    }
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
         "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
@@ -11406,6 +11413,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_4_scenarios"] == expected_compact_layer4
     assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
     assert from_wb_meta["freshness"] == expected_compact_freshness
+    assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
 
 
