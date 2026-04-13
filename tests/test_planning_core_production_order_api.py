@@ -11292,6 +11292,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "increase_price_to_slow_velocity": LAYER5_PRICE_SLOWDOWN_RISK_THRESHOLD,
         "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
     }
+    assert meta["physical_scope"]["nsc_assembled_bundle_inventory_state"] == "not_persisted"
     assert meta["arrival_projection"]["status"] == "shortage_before_arrival"
     assert "line_keys" not in meta["elastic_uplift"]
     assert "line_alloc" not in meta["elastic_uplift"]
