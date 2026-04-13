@@ -11221,6 +11221,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 20}}" in wb_adapter_step
     assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
+    assert "freshness_status=" in wb_adapter_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
