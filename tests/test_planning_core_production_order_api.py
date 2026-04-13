@@ -11211,6 +11211,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert any("Arrival projection:" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
     wb_adapter_step = next((step for step in steps if "WB ingestion adapter" in step), "")
+    assert "observation_window_days=30" in wb_adapter_step
     assert "freshness_mode=warn" in wb_adapter_step
     assert "requested_as_of_date=2026-01-10" in wb_adapter_step
     assert "as_of_date=2026-01-10" in wb_adapter_step
