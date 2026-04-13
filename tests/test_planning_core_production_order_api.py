@@ -11281,6 +11281,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         alpha_proxy["layer_2_near_tie_objective_gap_threshold"]
         == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
     )
+    assert alpha_proxy["layer_2_objective_parameters"] == meta["layer_2_allocation"]["objective_parameters"]
     assert (
         alpha_proxy["layer_2_near_tie_profit_gap_threshold"]
         == LAYER2_NEAR_TIE_PROFIT_GAP_THRESHOLD
