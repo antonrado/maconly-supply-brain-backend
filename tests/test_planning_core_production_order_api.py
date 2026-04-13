@@ -11294,6 +11294,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     }
     assert meta["physical_scope"]["nsc_assembled_bundle_inventory_state"] == "not_persisted"
     assert meta["arrival_projection"]["status"] == "shortage_before_arrival"
+    assert meta["arrival_projection"]["projected_shortage_before_arrival"] == 100
     assert "line_keys" not in meta["elastic_uplift"]
     assert "line_alloc" not in meta["elastic_uplift"]
     from_wb_meta = meta["from_wb"]
