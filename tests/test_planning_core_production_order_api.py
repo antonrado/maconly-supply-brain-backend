@@ -11205,6 +11205,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     body = response.json()
     steps = body["explanation"]["steps"]
     assert any("WB ingestion adapter" in step for step in steps)
+    assert any("Layer 1 stock health" in step for step in steps)
     assert any("Layer 2 allocation" in step for step in steps)
     assert any("Physical scope:" in step for step in steps)
     assert any("Arrival projection:" in step for step in steps)
