@@ -11290,6 +11290,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "reduce_order_size": LAYER5_REDUCE_ORDER_MARGINAL_PROFIT_RATE,
     }
     assert "line_keys" not in meta["elastic_uplift"]
+    assert "line_alloc" not in meta["elastic_uplift"]
     from_wb_meta = meta["from_wb"]
     assert "daily_sales_by_bundle" not in from_wb_meta
     assert "wb_stock_by_bundle" not in from_wb_meta
