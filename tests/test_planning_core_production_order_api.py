@@ -11245,8 +11245,19 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert layer2_compact_contract_checks["profit_gap_consistent_with_profits"] is True
     assert layer2_compact_contract_checks["gmroi_gap_consistent_with_gmroi"] is True
     assert layer2_compact_contract_checks["capital_locked_metric_valid"] is True
+    assert meta["layer_2_allocation"]["decision_quality"]["decision_count"] > 0
     assert meta["layer_2_allocation"]["decision_quality"]["profit_gate_primary"] is False
     assert meta["layer_2_allocation"]["decision_quality"]["composite_objective_gate_primary"] is True
+    assert meta["layer_2_allocation"]["objective_parameters"] == {
+        "capital_cost_rate": 0.08,
+        "stockout_penalty_weight": 1.0,
+        "overstock_penalty_weight": 1.0,
+    }
+    assert meta["layer_2_allocation"]["objective_source"] == {
+        "capital_cost_rate": LAYER_PROXY_VALUE_SOURCE,
+        "stockout_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+        "overstock_penalty_weight": LAYER_PROXY_VALUE_SOURCE,
+    }
     assert (
         meta["layer_2_allocation"]["decision_quality"]["near_tie_objective_gap_threshold"]
         == LAYER2_NEAR_TIE_OBJECTIVE_GAP_THRESHOLD
