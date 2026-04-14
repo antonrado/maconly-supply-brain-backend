@@ -11461,6 +11461,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["gmroi_usage"] == full_meta["layer_2_allocation"]["gmroi_usage"]
     assert meta["layer_2_allocation"]["objective_formula"] == full_meta["layer_2_allocation"]["objective_formula"]
     assert meta["layer_2_allocation"]["method_canonical"] == full_meta["layer_2_allocation"]["method_canonical"]
+    assert meta["layer_2_allocation"]["decision_gate_canonical"] == full_meta["layer_2_allocation"]["decision_gate_canonical"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
     assert meta["layer_4_scenarios"] == expected_compact_layer4
