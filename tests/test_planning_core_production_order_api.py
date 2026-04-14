@@ -11229,6 +11229,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "bundle_stock=request" in source_step
+    assert "local_stock_scope=all_warehouses_merged" in physical_scope_step
     assert "wb_stock_scope=request_explicit_bundle_stock" in physical_scope_step
     assert "ready_bundle_source=request" in physical_scope_step
     assert "raw_single_source=stock_balance_by_sku_unit_recipe_projection" in physical_scope_step
