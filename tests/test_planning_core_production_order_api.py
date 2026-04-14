@@ -11231,6 +11231,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "bundle_stock=request" in source_step
     assert "wb_stock_scope=request_explicit_bundle_stock" in physical_scope_step
     assert "ready_bundle_source=request" in physical_scope_step
+    assert "raw_single_source=stock_balance_by_sku_unit_recipe_projection" in physical_scope_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
