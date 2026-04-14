@@ -11212,6 +11212,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
     layer1_step = next((step for step in steps if "Layer 1 stock health" in step), "")
     source_step = next((step for step in steps if "Источник параметров" in step), "")
+    assorti_step = next((step for step in steps if "Assorti classification" in step), "")
     physical_scope_step = next((step for step in steps if "Physical scope:" in step), "")
     wb_adapter_step = next((step for step in steps if "WB ingestion adapter" in step), "")
     arrival_projection_step = next((step for step in steps if "Arrival projection:" in step), "")
@@ -11241,6 +11242,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "sku_count=4" in layer1_step
     assert f"high_stockout_threshold={LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD}" in layer1_step
     assert "contract_status=ok" in layer1_step
+    assert f"source={ASSORTI_CLASSIFICATION_SOURCE}" in assorti_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"method={LAYER2_ALLOCATION_METHOD_CANONICAL}" in layer2_step
     assert f"legacy_method={LAYER2_ALLOCATION_METHOD}" in layer2_step
