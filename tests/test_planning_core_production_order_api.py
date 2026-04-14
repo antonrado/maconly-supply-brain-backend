@@ -11210,6 +11210,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert any("Physical scope:" in step for step in steps)
     assert any("Arrival projection:" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
+    layer1_step = next((step for step in steps if "Layer 1 stock health" in step), "")
     source_step = next((step for step in steps if "Источник параметров" in step), "")
     physical_scope_step = next((step for step in steps if "Physical scope:" in step), "")
     wb_adapter_step = next((step for step in steps if "WB ingestion adapter" in step), "")
@@ -11237,6 +11238,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "nsc_assembled_bundle_inventory_state=not_persisted" in physical_scope_step
     assert "status=shortage_before_arrival" in arrival_projection_step
     assert "projected_shortage_before_arrival=100" in arrival_projection_step
+    assert "sku_count=4" in layer1_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
