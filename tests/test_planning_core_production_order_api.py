@@ -11253,6 +11253,8 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "avg_profit_gap_until_eta=" in layer2_step
     assert "capital_locked_total=" in layer2_step
     assert "contract_status=ok" in layer2_step
+    layer3_step = next((step for step in steps if "Layer 3 purchase shaping" in step), "")
+    assert "main:0|assorti:4|hold:0" in layer3_step
 
     meta = body["explanation"]["meta"]
     assert meta["explainability"]["mode"] == EXPLAINABILITY_MODE_COMPACT
