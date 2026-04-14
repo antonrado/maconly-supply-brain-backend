@@ -11460,6 +11460,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["summary"] == full_meta["layer_2_allocation"]["summary"]
     assert meta["layer_2_allocation"]["gmroi_usage"] == full_meta["layer_2_allocation"]["gmroi_usage"]
     assert meta["layer_2_allocation"]["objective_formula"] == full_meta["layer_2_allocation"]["objective_formula"]
+    assert meta["layer_2_allocation"]["objective_parameters"] == full_meta["layer_2_allocation"]["objective_parameters"]
     assert meta["layer_2_allocation"]["method"] == full_meta["layer_2_allocation"]["method"]
     assert meta["layer_2_allocation"]["method_canonical"] == full_meta["layer_2_allocation"]["method_canonical"]
     assert meta["layer_2_allocation"]["legacy_method"] == full_meta["layer_2_allocation"]["legacy_method"]
