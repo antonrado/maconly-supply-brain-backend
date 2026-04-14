@@ -11211,6 +11211,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert any("Arrival projection:" in step for step in steps)
     assert any("Explainability compact mode: omitted_steps=" in step for step in steps)
     source_step = next((step for step in steps if "Источник параметров" in step), "")
+    physical_scope_step = next((step for step in steps if "Physical scope:" in step), "")
     wb_adapter_step = next((step for step in steps if "WB ingestion adapter" in step), "")
     assert "observation_window_days=30" in wb_adapter_step
     assert "freshness_mode=warn" in wb_adapter_step
@@ -11228,6 +11229,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "bundle_stock=request" in source_step
+    assert "wb_stock_scope=request_explicit_bundle_stock" in physical_scope_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
