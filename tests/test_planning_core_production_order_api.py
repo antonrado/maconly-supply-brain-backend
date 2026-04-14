@@ -11243,6 +11243,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"high_stockout_threshold={LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD}" in layer1_step
     assert "contract_status=ok" in layer1_step
     assert f"source={ASSORTI_CLASSIFICATION_SOURCE}" in assorti_step
+    assert "assorti_bundle_types=0" in assorti_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"method={LAYER2_ALLOCATION_METHOD_CANONICAL}" in layer2_step
     assert f"legacy_method={LAYER2_ALLOCATION_METHOD}" in layer2_step
