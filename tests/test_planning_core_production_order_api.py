@@ -11481,6 +11481,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert from_wb_meta["as_of_date"] == full_meta["from_wb"]["as_of_date"]
     assert from_wb_meta["sales_window"] == full_meta["from_wb"]["sales_window"]
     assert from_wb_meta["bundle_type_ids"] == full_meta["from_wb"]["bundle_type_ids"]
+    assert from_wb_meta["snapshot"]["daily_sales_bundle_count"] == len(full_meta["from_wb"]["daily_sales_by_bundle"])
     assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
