@@ -11235,6 +11235,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "ready_bundle_source=request" in physical_scope_step
     assert "raw_single_source=stock_balance_by_sku_unit_recipe_projection" in physical_scope_step
     assert "nsc_assembled_bundle_inventory_state=not_persisted" in physical_scope_step
+    assert "status=shortage_before_arrival" in arrival_projection_step
     assert "projected_shortage_before_arrival=100" in arrival_projection_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
