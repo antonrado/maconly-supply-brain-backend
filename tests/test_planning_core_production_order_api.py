@@ -11476,6 +11476,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
     assert from_wb_meta["observation_window_days"] == full_meta["from_wb"]["observation_window_days"]
     assert from_wb_meta["as_of_source"] == full_meta["from_wb"]["as_of_source"]
+    assert from_wb_meta["freshness_mode"] == full_meta["from_wb"]["freshness_mode"]
     assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
