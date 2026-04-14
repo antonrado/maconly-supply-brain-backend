@@ -11246,6 +11246,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"legacy_method={LAYER2_ALLOCATION_METHOD}" in layer2_step
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
     assert "legacy_decision_gate=profit_until_eta" in layer2_step
+    assert "tie_break=hold" in layer2_step
     assert "reason_counts={" in layer2_step
     assert "avg_profit_gap_until_eta=" in layer2_step
     assert "capital_locked_total=" in layer2_step
