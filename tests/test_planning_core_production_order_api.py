@@ -11258,6 +11258,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "contract_status=ok" in layer3_step
     layer4_step = next((step for step in steps if "Layer 4 scenarios" in step), "")
     assert "Conservative(capital=" in layer4_step
+    assert "Balanced(capital=" in layer4_step
     assert "Aggressive(capital=" in layer4_step
 
     meta = body["explanation"]["meta"]
