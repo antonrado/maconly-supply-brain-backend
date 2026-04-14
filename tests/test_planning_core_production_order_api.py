@@ -11465,6 +11465,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["legacy_method"] == full_meta["layer_2_allocation"]["legacy_method"]
     assert meta["layer_2_allocation"]["decision_gate"] == full_meta["layer_2_allocation"]["decision_gate"]
     assert meta["layer_2_allocation"]["decision_gate_canonical"] == full_meta["layer_2_allocation"]["decision_gate_canonical"]
+    assert meta["layer_2_allocation"]["legacy_decision_gate"] == full_meta["layer_2_allocation"]["legacy_decision_gate"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
     assert meta["layer_4_scenarios"] == expected_compact_layer4
