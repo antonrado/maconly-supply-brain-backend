@@ -11246,6 +11246,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "assorti_bundle_types=0" in assorti_step
     assert "main_bundle_types=1" in assorti_step
     layer2_step = next((step for step in steps if "Layer 2 allocation" in step), "")
+    assert "assorti=4" in layer2_step
     assert f"method={LAYER2_ALLOCATION_METHOD_CANONICAL}" in layer2_step
     assert f"legacy_method={LAYER2_ALLOCATION_METHOD}" in layer2_step
     assert f"decision_gate={LAYER2_DECISION_GATE_CANONICAL}" in layer2_step
