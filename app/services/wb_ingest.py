@@ -1359,7 +1359,11 @@ def get_from_wb_readiness_summary(
             mapped_wb_skus_with_sales=mapped_wb_skus_with_sales,
             mapped_wb_skus_with_stock=mapped_wb_skus_with_stock,
         )
-        if blocker is None:
+        if blocker is None or blocker in {
+            "no_wb_sales_or_stock_data",
+            "no_wb_sales_data",
+            "no_wb_stock_data",
+        }:
             freshness_state = _build_from_wb_readiness_freshness_state(
                 db,
                 article_id=current_article_id,
@@ -1373,8 +1377,14 @@ def get_from_wb_readiness_summary(
             stock_oldest_age_days = freshness_state.get("stock_oldest_age_days")
             threshold_days = dict(freshness_state.get("threshold_days") or {})
             threshold_source = dict(freshness_state.get("threshold_source") or {})
-            blocker = str(freshness_state["blocker"]) if freshness_state.get("blocker") is not None else None
-            next_steps = list(freshness_state.get("next_steps") or [])
+            freshness_blocker = (
+                str(freshness_state["blocker"])
+                if freshness_state.get("blocker") is not None
+                else None
+            )
+            if freshness_blocker is not None:
+                blocker = freshness_blocker
+                next_steps = list(freshness_state.get("next_steps") or [])
             ready_for_from_wb = blocker is None
 
         if ready_for_from_wb:
