@@ -11490,6 +11490,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         int(bundle_type_id): daily_sales
         for bundle_type_id, daily_sales in full_meta["from_wb"]["daily_sales_by_bundle"].items()
     }
+    expected_runtime_wb_stock_by_bundle = {
+        int(bundle_type_id): bundle_stock
+        for bundle_type_id, bundle_stock in full_meta["from_wb"]["wb_stock_by_bundle"].items()
+    }
     assert f"observation_window_days={full_meta['from_wb']['observation_window_days']}" in wb_adapter_step
     assert f"freshness_mode={full_meta['from_wb']['freshness_mode']}" in wb_adapter_step
     assert f"bundle_type_ids={full_meta['from_wb']['bundle_type_ids']}" in wb_adapter_step
@@ -11502,6 +11506,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         else f"sales_window={full_meta['from_wb']['sales_window']['start_date']}..{full_meta['from_wb']['sales_window']['end_date']}"
     ) in wb_adapter_step
     assert f"daily_sales_by_bundle={expected_runtime_daily_sales_by_bundle}" in wb_adapter_step
+    assert f"wb_stock_by_bundle={expected_runtime_wb_stock_by_bundle}" in wb_adapter_step
     assert f"economic_observed_source={full_meta['from_wb']['economic_observed_prices']['source']}" in wb_adapter_step
     assert f"economic_observed_prices={full_meta['from_wb']['economic_observed_prices']['prices']}" in wb_adapter_step
     assert f"economic_observed_commission_source={full_meta['from_wb']['economic_observed_commission']['source']}" in wb_adapter_step
