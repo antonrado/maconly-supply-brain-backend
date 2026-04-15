@@ -11478,6 +11478,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"hold={full_meta['layer_2_allocation']['summary']['hold']}" in layer2_step
     assert f"near_tie={full_meta['layer_2_allocation']['decision_quality']['near_tie_count']}" in layer2_step
     assert f"tie_count={full_meta['layer_2_allocation']['decision_quality']['tie_count']}" in layer2_step
+    assert f"avg_profit_gap_until_eta={full_meta['layer_2_allocation']['decision_quality']['avg_profit_gap_until_eta']}" in layer2_step
     assert meta["layer_2_allocation"]["gmroi_usage"] == full_meta["layer_2_allocation"]["gmroi_usage"]
     assert meta["layer_2_allocation"]["objective_formula"] == full_meta["layer_2_allocation"]["objective_formula"]
     assert meta["layer_2_allocation"]["objective_parameters"] == full_meta["layer_2_allocation"]["objective_parameters"]
