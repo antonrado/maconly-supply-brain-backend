@@ -11474,6 +11474,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["shared_color_pool"] == full_meta["shared_color_pool"]
     assert meta["layer_2_allocation"]["summary"] == full_meta["layer_2_allocation"]["summary"]
     assert f"main={full_meta['layer_2_allocation']['summary']['main']}" in layer2_step
+    assert f"assorti={full_meta['layer_2_allocation']['summary']['assorti']}" in layer2_step
     assert f"hold={full_meta['layer_2_allocation']['summary']['hold']}" in layer2_step
     assert meta["layer_2_allocation"]["gmroi_usage"] == full_meta["layer_2_allocation"]["gmroi_usage"]
     assert meta["layer_2_allocation"]["objective_formula"] == full_meta["layer_2_allocation"]["objective_formula"]
