@@ -1195,6 +1195,10 @@ def _resolve_from_wb_readiness_structural_state(
         blocker = "missing_bundle_recipe_bundle_types"
     elif mapped_wb_skus_with_sales <= 0 and mapped_wb_skus_with_stock <= 0:
         blocker = "no_wb_sales_or_stock_data"
+    elif mapped_wb_skus_with_sales <= 0:
+        blocker = "no_wb_sales_data"
+    elif mapped_wb_skus_with_stock <= 0:
+        blocker = "no_wb_stock_data"
 
     return blocker, build_from_wb_readiness_next_steps(blocker)
 
