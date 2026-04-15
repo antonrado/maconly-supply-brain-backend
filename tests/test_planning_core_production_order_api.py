@@ -11449,6 +11449,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["capital_governance"] == full_meta["capital_governance"]
     assert meta["sources"] == full_meta["sources"]
     assert f"size_weights={full_meta['sources']['size_weights']}" in source_step
+    assert f"in_flight={full_meta['sources']['in_flight']}" in source_step
     assert meta["physical_scope"] == full_meta["physical_scope"]
     assert meta["arrival_projection"] == full_meta["arrival_projection"]
     assert meta["reorder_policy"] == full_meta["reorder_policy"]
