@@ -11487,6 +11487,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert from_wb_meta["snapshot"]["wb_stock_total"] == int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values()))
     assert from_wb_meta["snapshot"]["wb_stock_updated_bundle_count"] == len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"])
     assert f"observation_window_days={full_meta['from_wb']['observation_window_days']}" in wb_adapter_step
+    assert f"freshness_mode={full_meta['from_wb']['freshness_mode']}" in wb_adapter_step
     assert f"requested_as_of_date={'none' if full_meta['from_wb']['requested_as_of_date'] is None else full_meta['from_wb']['requested_as_of_date']}" in wb_adapter_step
     assert f"as_of_date={'none' if full_meta['from_wb']['as_of_date'] is None else full_meta['from_wb']['as_of_date']}" in wb_adapter_step
     assert f"as_of_source={full_meta['from_wb']['as_of_source']}" in wb_adapter_step
