@@ -11231,7 +11231,6 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
-    assert "wb_stock_scope=request_explicit_bundle_stock" in physical_scope_step
     assert "ready_bundle_source=request" in physical_scope_step
     assert "raw_single_source=stock_balance_by_sku_unit_recipe_projection" in physical_scope_step
     assert "nsc_assembled_bundle_inventory_state=not_persisted" in physical_scope_step
@@ -11447,6 +11446,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["capital_governance"] == full_meta["capital_governance"]
     assert meta["sources"] == full_meta["sources"]
     assert f"local_stock_scope={full_meta['physical_scope']['local_stock_scope']}" in physical_scope_step
+    assert f"wb_stock_scope={full_meta['physical_scope']['wb_stock_scope']}" in physical_scope_step
     assert f"size_weights={full_meta['sources']['size_weights']}" in source_step
     assert f"in_flight={full_meta['sources']['in_flight']}" in source_step
     assert f"bundle_stock={full_meta['sources']['bundle_stock']}" in source_step
