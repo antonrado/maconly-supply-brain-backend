@@ -14516,6 +14516,152 @@ def test_production_order_proposal_from_wb_warn_reports_sales_only_stale_metadat
     assert compact_from_wb_meta == expected_compact_from_wb
 
 
+def test_production_order_proposal_from_wb_warn_reports_stale_sales_and_stock_metadata(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    stale_sales_date = date(2020, 1, 1)
+    stale_stock_updated_at = datetime(2020, 1, 2, tzinfo=timezone.utc)
+    sales_window_start = stale_sales_date - timedelta(days=29)
+    today_utc = datetime.now(timezone.utc).date()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-WARN-STALE-BOTH",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-WARN-STALE-BOTH",
+            date=stale_sales_date,
+            sales_qty=30,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-WARN-STALE-BOTH",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=stale_stock_updated_at,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": stale_sales_date.isoformat(),
+        "freshness_mode": "warn",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    expected_sales_age_days = (today_utc - stale_sales_date).days
+    expected_stock_age_days = (today_utc - stale_stock_updated_at.date()).days
+    body = response.json()
+    wb_adapter_step = next(
+        (step for step in body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
+
+    assert f"requested_as_of_date={stale_sales_date.isoformat()}" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
+    assert f"as_of_date={stale_sales_date.isoformat()}" in wb_adapter_step
+    assert "as_of_source=request" in wb_adapter_step
+    assert f"sales_window={sales_window_start.isoformat()}..{stale_sales_date.isoformat()}" in wb_adapter_step
+    assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 1.0}}" in wb_adapter_step
+    assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 5}}" in wb_adapter_step
+    assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: '{stale_stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
+    assert "freshness_status=stale" in wb_adapter_step
+    assert f"freshness_sales_age_days={expected_sales_age_days}" in wb_adapter_step
+    assert f"freshness_stock_oldest_age_days={expected_stock_age_days}" in wb_adapter_step
+    assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
+    assert f"{seeded['bundle_type'].id}: {expected_stock_age_days}" in wb_adapter_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    bundle_key = str(seeded["bundle_type"].id)
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
+    assert from_wb_meta["freshness_mode"] == "warn"
+    assert from_wb_meta["requested_as_of_date"] == stale_sales_date.isoformat()
+    assert from_wb_meta["as_of_date"] == stale_sales_date.isoformat()
+    assert from_wb_meta["as_of_source"] == "request"
+    assert from_wb_meta["sales_window"] == {
+        "start_date": sales_window_start.isoformat(),
+        "end_date": stale_sales_date.isoformat(),
+    }
+    assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 1.0
+    assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 5
+    assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key].startswith(
+        stale_stock_updated_at.strftime("%Y-%m-%dT%H:%M:%S")
+    )
+    assert from_wb_meta["freshness"]["status"] == "stale"
+    assert from_wb_meta["freshness"]["sales_age_days"] == expected_sales_age_days
+    assert from_wb_meta["freshness"]["stock_oldest_age_days"] == expected_stock_age_days
+    assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] == expected_stock_age_days
+    expected_compact_from_wb = {
+        "observation_window_days": from_wb_meta["observation_window_days"],
+        "freshness_mode": from_wb_meta["freshness_mode"],
+        "requested_as_of_date": from_wb_meta["requested_as_of_date"],
+        "as_of_date": from_wb_meta["as_of_date"],
+        "as_of_source": from_wb_meta["as_of_source"],
+        "bundle_type_ids": from_wb_meta["bundle_type_ids"],
+        "sales_window": from_wb_meta["sales_window"],
+        "freshness": expected_compact_freshness,
+        "economic_observed_prices": {
+            "source": from_wb_meta["economic_observed_prices"]["source"],
+            "window": from_wb_meta["economic_observed_prices"]["window"],
+            "anomaly_max_deviation": from_wb_meta["economic_observed_prices"]["anomaly_max_deviation"],
+            "prices": from_wb_meta["economic_observed_prices"]["prices"],
+            "sample_counts": from_wb_meta["economic_observed_prices"]["sample_counts"],
+        },
+        "economic_observed_commission": {
+            "source": from_wb_meta["economic_observed_commission"]["source"],
+            "status": from_wb_meta["economic_observed_commission"]["status"],
+            "reason": from_wb_meta["economic_observed_commission"]["reason"],
+            "commission_percent": from_wb_meta["economic_observed_commission"]["commission_percent"],
+            "commission_percent_stats": from_wb_meta["economic_observed_commission"]["commission_percent_stats"],
+            "kgvp_supplier_percent_stats": from_wb_meta["economic_observed_commission"]["kgvp_supplier_percent_stats"],
+        },
+        "snapshot": {
+            "daily_sales_bundle_count": len(from_wb_meta["daily_sales_by_bundle"]),
+            "daily_sales_total": sum(from_wb_meta["daily_sales_by_bundle"].values()),
+            "wb_stock_bundle_count": len(from_wb_meta["wb_stock_by_bundle"]),
+            "wb_stock_total": int(sum(from_wb_meta["wb_stock_by_bundle"].values())),
+            "wb_stock_updated_bundle_count": len(from_wb_meta["wb_stock_updated_at_by_bundle"]),
+        },
+    }
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_from_wb_meta = compact_body["explanation"]["meta"]["from_wb"]
+    assert compact_from_wb_meta == expected_compact_from_wb
+
+
 def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     stock_updated_at = datetime(2026, 1, 7, tzinfo=timezone.utc)
