@@ -11475,6 +11475,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
     assert f"qty_before={full_meta['layer_3_purchase_shaping']['qty_before']}" in layer3_step
     assert f"qty_after_base={full_meta['layer_3_purchase_shaping']['qty_after_base']}" in layer3_step
+    assert f"qty_after={full_meta['layer_3_purchase_shaping']['qty_after']}" in layer3_step
     assert f"adjusted_lines={full_meta['layer_3_purchase_shaping']['adjusted_lines']}" in layer3_step
     assert f"calibration_delta_vs_base={full_meta['layer_3_purchase_shaping']['qty_delta_vs_base']}" in layer3_step
     assert meta["layer_4_scenarios"] == expected_compact_layer4
