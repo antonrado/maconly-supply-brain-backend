@@ -11485,6 +11485,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert from_wb_meta["snapshot"]["daily_sales_total"] == sum(full_meta["from_wb"]["daily_sales_by_bundle"].values())
     assert from_wb_meta["snapshot"]["wb_stock_bundle_count"] == len(full_meta["from_wb"]["wb_stock_by_bundle"])
     assert from_wb_meta["snapshot"]["wb_stock_total"] == int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values()))
+    assert from_wb_meta["snapshot"]["wb_stock_updated_bundle_count"] == len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"])
     assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
