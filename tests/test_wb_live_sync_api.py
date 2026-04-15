@@ -887,8 +887,8 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     body = response.json()
 
     assert body["total_articles_considered"] == 5
-    assert body["ready_articles"] == 3
-    assert body["not_ready_articles"] == 2
+    assert body["ready_articles"] == 1
+    assert body["not_ready_articles"] == 4
 
     items = {row["article_code"]: row for row in body["items"]}
 
@@ -909,23 +909,23 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     assert items["BLOCK-MISSING"]["missing_recipe_bundle_type_ids"] == [bt_alt.id]
     assert items["BLOCK-MISSING"]["next_steps"] == ["add_bundle_recipe_for_missing_bundle_type_ids"]
 
-    assert items["BLOCK-NO-SALES"]["ready_for_from_wb"] is True
-    assert items["BLOCK-NO-SALES"]["blocker"] is None
-    assert items["BLOCK-NO-SALES"]["freshness_status"] == "fresh"
+    assert items["BLOCK-NO-SALES"]["ready_for_from_wb"] is False
+    assert items["BLOCK-NO-SALES"]["blocker"] == "no_wb_sales_data"
+    assert items["BLOCK-NO-SALES"]["freshness_status"] is None
     assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_sales"] == 0
     assert items["BLOCK-NO-SALES"]["mapped_wb_skus_with_stock"] == 1
     assert items["BLOCK-NO-SALES"]["sales_age_days"] is None
-    assert items["BLOCK-NO-SALES"]["stock_oldest_age_days"] == 0
-    assert items["BLOCK-NO-SALES"]["next_steps"] == []
+    assert items["BLOCK-NO-SALES"]["stock_oldest_age_days"] is None
+    assert items["BLOCK-NO-SALES"]["next_steps"] == ["run_wb_sales_daily_sync_live"]
 
-    assert items["BLOCK-NO-STOCK"]["ready_for_from_wb"] is True
-    assert items["BLOCK-NO-STOCK"]["blocker"] is None
-    assert items["BLOCK-NO-STOCK"]["freshness_status"] == "fresh"
+    assert items["BLOCK-NO-STOCK"]["ready_for_from_wb"] is False
+    assert items["BLOCK-NO-STOCK"]["blocker"] == "no_wb_stock_data"
+    assert items["BLOCK-NO-STOCK"]["freshness_status"] is None
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_sales"] == 1
     assert items["BLOCK-NO-STOCK"]["mapped_wb_skus_with_stock"] == 0
-    assert items["BLOCK-NO-STOCK"]["sales_age_days"] == 0
+    assert items["BLOCK-NO-STOCK"]["sales_age_days"] is None
     assert items["BLOCK-NO-STOCK"]["stock_oldest_age_days"] is None
-    assert items["BLOCK-NO-STOCK"]["next_steps"] == []
+    assert items["BLOCK-NO-STOCK"]["next_steps"] == ["run_wb_stock_sync_live"]
 
 
 def test_wb_from_wb_readiness_reports_stale_freshness_blocker(client, db_session):

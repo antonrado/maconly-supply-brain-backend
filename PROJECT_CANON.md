@@ -142,6 +142,7 @@
     - `POST /api/v1/planning/core/production-order/proposal` — HTTP 200 и структурированный `ProductionOrderProposalResponse`.
     - `GET /api/v1/planning/core/production-order/settings/{article_id}` — чтение admin defaults для production order.
     - `PUT /api/v1/planning/core/production-order/settings/{article_id}` — атомарная замена admin defaults для production order.
+  - `/api/v1/wb/from-wb/readiness` теперь строже отражает availability-предпосылки: отсутствие только WB sales даёт блокер `no_wb_sales_data`, отсутствие только WB stock даёт `no_wb_stock_data`, а не готовность; при этом live `/api/v1/planning/core/production-order/proposal/from-wb` в `freshness_mode=warn` сохраняет текущую partial-data семантику.
 
 - **Explicitly NOT implemented yet**
   - Прямая online-интеграция WB API/МойСклад API в production-order proposal.
@@ -231,3 +232,4 @@
 | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
 | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
 | 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
+| 2026-04-15 | Hardened `/api/v1/wb/from-wb/readiness` to block sales-only-missing and stock-only-missing WB data with explicit blocker codes and next steps. | Согласовать availability/readiness контракт с уже существующей vocabulary блокеров и не выдавать частично пустой WB ingest как fully ready. |
