@@ -29,6 +29,10 @@ def _build_from_wb_freshness_failure_detail(
 
     if freshness_status == "no_data":
         next_steps = build_from_wb_readiness_next_steps("no_wb_sales_or_stock_data")
+    elif freshness_status == "missing_sales_data":
+        next_steps = build_from_wb_readiness_next_steps("no_wb_sales_data")
+    elif freshness_status == "missing_stock_data":
+        next_steps = build_from_wb_readiness_next_steps("no_wb_stock_data")
     elif stale_sales and stale_stock:
         next_steps = ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
     elif stale_sales:

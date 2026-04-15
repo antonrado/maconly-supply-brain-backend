@@ -143,6 +143,7 @@
     - `GET /api/v1/planning/core/production-order/settings/{article_id}` — чтение admin defaults для production order.
     - `PUT /api/v1/planning/core/production-order/settings/{article_id}` — атомарная замена admin defaults для production order.
   - `/api/v1/wb/from-wb/readiness` теперь строже отражает availability-предпосылки: отсутствие только WB sales даёт блокер `no_wb_sales_data`, отсутствие только WB stock даёт `no_wb_stock_data`, а не готовность; при этом live `/api/v1/planning/core/production-order/proposal/from-wb` в `freshness_mode=warn` сохраняет текущую partial-data семантику.
+  - Live `/api/v1/planning/core/production-order/proposal/from-wb` теперь тоже честнее маркирует partial-data freshness: warn-mode продолжает выполняться, но выставляет `missing_sales_data` / `missing_stock_data` в explainability/meta, а strict-mode детерминированно отклоняет такие случаи тем же freshness-failure contract'ом.
 
 - **Explicitly NOT implemented yet**
   - Прямая online-интеграция WB API/МойСклад API в production-order proposal.
@@ -232,4 +233,5 @@
 | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
 | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
 | 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
+| 2026-04-16 | Hardened live `/api/v1/planning/core/production-order/proposal/from-wb` freshness semantics so sales-only and stock-only WB data produce explicit partial-data statuses, and strict mode rejects them with structured remediation. | Согласовать strict runtime truth с уже ужесточённым readiness контрактом и убрать ложный `fresh` для частично пустого WB ingest. |
 | 2026-04-15 | Hardened `/api/v1/wb/from-wb/readiness` to block sales-only-missing and stock-only-missing WB data with explicit blocker codes and next steps. | Согласовать availability/readiness контракт с уже существующей vocabulary блокеров и не выдавать частично пустой WB ingest как fully ready. |

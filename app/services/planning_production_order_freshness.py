@@ -107,6 +107,10 @@ def build_from_wb_freshness_snapshot(
 
     if sales_age_days_value is None and stock_oldest_age_days_value is None:
         freshness_status = "no_data"
+    elif sales_age_days_value is None:
+        freshness_status = "missing_sales_data"
+    elif stock_oldest_age_days_value is None:
+        freshness_status = "missing_stock_data"
     elif stale_sales or stale_stock:
         freshness_status = "stale"
     else:
@@ -169,6 +173,10 @@ def build_from_wb_freshness_next_steps(
             "run_wb_sales_daily_sync_live",
             "run_wb_stock_sync_live",
         ]
+    if freshness_status == "missing_sales_data":
+        return ["run_wb_sales_daily_sync_live"]
+    if freshness_status == "missing_stock_data":
+        return ["run_wb_stock_sync_live"]
     if stale_sales and stale_stock:
         return [
             "run_wb_sales_daily_sync_live",
@@ -194,6 +202,10 @@ def build_from_wb_freshness_blocker(
 
     if freshness_status == "no_data":
         return "no_wb_sales_or_stock_data"
+    if freshness_status == "missing_sales_data":
+        return "no_wb_sales_data"
+    if freshness_status == "missing_stock_data":
+        return "no_wb_stock_data"
     if stale_sales and stale_stock:
         return "stale_wb_sales_and_stock_data"
     if stale_sales:
