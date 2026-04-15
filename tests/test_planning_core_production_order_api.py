@@ -11498,6 +11498,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         else f"sales_window={full_meta['from_wb']['sales_window']['start_date']}..{full_meta['from_wb']['sales_window']['end_date']}"
     ) in wb_adapter_step
     assert f"economic_observed_source={full_meta['from_wb']['economic_observed_prices']['source']}" in wb_adapter_step
+    assert f"economic_observed_prices={full_meta['from_wb']['economic_observed_prices']['prices']}" in wb_adapter_step
     assert f"economic_observed_commission_source={full_meta['from_wb']['economic_observed_commission']['source']}" in wb_adapter_step
     assert f"economic_observed_commission_status={full_meta['from_wb']['economic_observed_commission']['status']}" in wb_adapter_step
     assert f"economic_observed_commission={full_meta['from_wb']['economic_observed_commission']['commission_percent']}" in wb_adapter_step
