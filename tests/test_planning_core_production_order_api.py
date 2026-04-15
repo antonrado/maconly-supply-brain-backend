@@ -11231,7 +11231,6 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
-    assert "nsc_assembled_bundle_inventory_state=not_persisted" in physical_scope_step
     assert "status=shortage_before_arrival" in arrival_projection_step
     assert "projected_shortage_before_arrival=100" in arrival_projection_step
     assert "sku_count=4" in layer1_step
@@ -11447,6 +11446,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"wb_stock_scope={full_meta['physical_scope']['wb_stock_scope']}" in physical_scope_step
     assert f"ready_bundle_source={full_meta['physical_scope']['ready_bundle_source']}" in physical_scope_step
     assert f"raw_single_source={full_meta['physical_scope']['raw_single_source']}" in physical_scope_step
+    assert (
+        "nsc_assembled_bundle_inventory_state="
+        f"{full_meta['physical_scope']['nsc_assembled_bundle_inventory_state']}"
+    ) in physical_scope_step
     assert f"size_weights={full_meta['sources']['size_weights']}" in source_step
     assert f"in_flight={full_meta['sources']['in_flight']}" in source_step
     assert f"bundle_stock={full_meta['sources']['bundle_stock']}" in source_step
