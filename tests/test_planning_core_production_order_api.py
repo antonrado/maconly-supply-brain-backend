@@ -11456,6 +11456,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         "arrival_horizon_days="
         f"{full_meta['arrival_projection']['arrival_horizon_days']}"
     ) in arrival_projection_step
+    assert (
+        "demand_units_until_arrival="
+        f"{full_meta['arrival_projection']['demand_units_until_arrival']}"
+    ) in arrival_projection_step
     assert meta["reorder_policy"] == full_meta["reorder_policy"]
     assert meta["economic_buffer"] == full_meta["economic_buffer"]
     assert meta["in_flight_effective"] == full_meta["in_flight_effective"]
