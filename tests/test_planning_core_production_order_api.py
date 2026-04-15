@@ -11473,6 +11473,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert meta["layer_2_allocation"]["tie_break"] == full_meta["layer_2_allocation"]["tie_break"]
     assert meta["layer_2_allocation"]["decision_quality"] == full_meta["layer_2_allocation"]["decision_quality"]
     assert meta["layer_2_allocation"]["contract"] == full_meta["layer_2_allocation"]["contract"]
+    assert f"adjusted_lines={full_meta['layer_3_purchase_shaping']['adjusted_lines']}" in layer3_step
     assert meta["layer_4_scenarios"] == expected_compact_layer4
     assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
     assert from_wb_meta["observation_window_days"] == full_meta["from_wb"]["observation_window_days"]
