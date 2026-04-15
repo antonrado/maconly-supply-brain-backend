@@ -11498,6 +11498,10 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
         int(bundle_type_id): updated_at
         for bundle_type_id, updated_at in full_meta["from_wb"]["wb_stock_updated_at_by_bundle"].items()
     }
+    expected_runtime_freshness_stock_age_days_by_bundle = {
+        int(bundle_type_id): stock_age_days
+        for bundle_type_id, stock_age_days in full_meta["from_wb"]["freshness"]["stock_age_days_by_bundle"].items()
+    }
     assert f"observation_window_days={full_meta['from_wb']['observation_window_days']}" in wb_adapter_step
     assert f"freshness_mode={full_meta['from_wb']['freshness_mode']}" in wb_adapter_step
     assert f"bundle_type_ids={full_meta['from_wb']['bundle_type_ids']}" in wb_adapter_step
@@ -11520,6 +11524,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"freshness_status={full_meta['from_wb']['freshness']['status']}" in wb_adapter_step
     assert f"freshness_sales_age_days={'none' if full_meta['from_wb']['freshness']['sales_age_days'] is None else full_meta['from_wb']['freshness']['sales_age_days']}" in wb_adapter_step
     assert f"freshness_stock_oldest_age_days={'none' if full_meta['from_wb']['freshness']['stock_oldest_age_days'] is None else full_meta['from_wb']['freshness']['stock_oldest_age_days']}" in wb_adapter_step
+    assert f"freshness_stock_age_days_by_bundle={expected_runtime_freshness_stock_age_days_by_bundle}" in wb_adapter_step
     assert f"freshness_threshold_days=sales:{full_meta['from_wb']['freshness']['threshold_days']['sales']}|stock:{full_meta['from_wb']['freshness']['threshold_days']['stock']}" in wb_adapter_step
     assert f"freshness_threshold_source=sales:{full_meta['from_wb']['freshness']['threshold_source']['sales']}|stock:{full_meta['from_wb']['freshness']['threshold_source']['stock']}" in wb_adapter_step
     assert from_wb_meta["freshness"] == expected_compact_freshness
