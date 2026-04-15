@@ -11520,6 +11520,9 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     ) in layer3_step
     assert meta["layer_4_scenarios"] == expected_compact_layer4
     assert (
+        f"Conservative(capital={full_meta['layer_4_scenarios']['scenarios'][0]['total_capital_required']}"
+    ) in layer4_step
+    assert (
         f"Balanced(capital={full_meta['layer_4_scenarios']['scenarios'][1]['total_capital_required']}"
     ) in layer4_step
     assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
