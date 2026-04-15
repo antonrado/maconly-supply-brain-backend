@@ -11489,6 +11489,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"freshness_status={full_meta['from_wb']['freshness']['status']}" in wb_adapter_step
     assert f"freshness_sales_age_days={'none' if full_meta['from_wb']['freshness']['sales_age_days'] is None else full_meta['from_wb']['freshness']['sales_age_days']}" in wb_adapter_step
     assert f"freshness_stock_oldest_age_days={'none' if full_meta['from_wb']['freshness']['stock_oldest_age_days'] is None else full_meta['from_wb']['freshness']['stock_oldest_age_days']}" in wb_adapter_step
+    assert f"freshness_threshold_days=sales:{full_meta['from_wb']['freshness']['threshold_days']['sales']}|stock:{full_meta['from_wb']['freshness']['threshold_days']['stock']}" in wb_adapter_step
     assert f"freshness_threshold_source=sales:{full_meta['from_wb']['freshness']['threshold_source']['sales']}|stock:{full_meta['from_wb']['freshness']['threshold_source']['stock']}" in wb_adapter_step
     assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
