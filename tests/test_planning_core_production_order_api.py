@@ -11479,6 +11479,12 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"adjusted_lines={full_meta['layer_3_purchase_shaping']['adjusted_lines']}" in layer3_step
     assert f"calibration_delta_vs_base={full_meta['layer_3_purchase_shaping']['qty_delta_vs_base']}" in layer3_step
     assert f"contract_status={full_meta['layer_3_purchase_shaping']['contract']['status']}" in layer3_step
+    assert (
+        "decision_lines="
+        f"main:{full_meta['layer_3_purchase_shaping']['main_lines']}|"
+        f"assorti:{full_meta['layer_3_purchase_shaping']['assorti_lines']}|"
+        f"hold:{full_meta['layer_3_purchase_shaping']['hold_lines']}."
+    ) in layer3_step
     assert meta["layer_4_scenarios"] == expected_compact_layer4
     assert meta["layer_5_intervention"] == full_meta["layer_5_intervention"]
     assert from_wb_meta["observation_window_days"] == full_meta["from_wb"]["observation_window_days"]
