@@ -137,13 +137,15 @@
     - `production_order_in_flight_defaults`
     - миграция `0009_add_production_order_admin_settings.py`.
   - HTTP-эндпоинты в `app/api/v1/endpoints/planning_core.py` + роутинг в `app/api/v1/router.py`:
-    - `GET  /api/v1/planning/core/health` — HTTP 200 и `{ "status": "ok" }`.
+    - `GET /api/v1/planning/core/health` — HTTP 200 и `{ "status": "ok" }`.
     - `POST /api/v1/planning/core/proposal` — HTTP 200 и структурированный `PlanningProposal`.
     - `POST /api/v1/planning/core/production-order/proposal` — HTTP 200 и структурированный `ProductionOrderProposalResponse`.
     - `GET /api/v1/planning/core/production-order/settings/{article_id}` — чтение admin defaults для production order.
     - `PUT /api/v1/planning/core/production-order/settings/{article_id}` — атомарная замена admin defaults для production order.
   - `/api/v1/wb/from-wb/readiness` теперь строже отражает availability-предпосылки: отсутствие только WB sales даёт блокер `no_wb_sales_data`, отсутствие только WB stock даёт `no_wb_stock_data`, а не готовность; при этом live `/api/v1/planning/core/production-order/proposal/from-wb` в `freshness_mode=warn` сохраняет текущую partial-data семантику.
   - Live `/api/v1/planning/core/production-order/proposal/from-wb` теперь тоже честнее маркирует partial-data freshness: warn-mode продолжает выполняться, но выставляет `missing_sales_data` / `missing_stock_data` в explainability/meta, а strict-mode детерминированно отклоняет такие случаи тем же freshness-failure contract'ом.
+
+  - Follow-up hardening для mixed partial-data freshness тоже зафиксирован: если одна сторона WB-данных отсутствует, а другая уже stale, и readiness, и strict `proposal/from-wb` теперь возвращают combined remediation (`run_wb_sales_daily_sync_live` + `run_wb_stock_sync_live`), а не только sync отсутствующей стороны.
 
 - **Explicitly NOT implemented yet**
   - Прямая online-интеграция WB API/МойСклад API в production-order proposal.
@@ -233,5 +235,6 @@
 | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
 | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
 | 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
+| 2026-04-16 | Hardened mixed partial-data remediation for `/api/v1/wb/from-wb/readiness` and strict `/api/v1/planning/core/production-order/proposal/from-wb`: missing+stale WB states now emit combined sync next steps. | Довести availability/runtime truth до операторски честной remediation-модели и не подсказывать только одну sync-операцию, когда stale остаётся и на второй стороне. |
 | 2026-04-16 | Hardened live `/api/v1/planning/core/production-order/proposal/from-wb` freshness semantics so sales-only and stock-only WB data produce explicit partial-data statuses, and strict mode rejects them with structured remediation. | Согласовать strict runtime truth с уже ужесточённым readiness контрактом и убрать ложный `fresh` для частично пустого WB ingest. |
 | 2026-04-15 | Hardened `/api/v1/wb/from-wb/readiness` to block sales-only-missing and stock-only-missing WB data with explicit blocker codes and next steps. | Согласовать availability/readiness контракт с уже существующей vocabulary блокеров и не выдавать частично пустой WB ingest как fully ready. |

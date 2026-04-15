@@ -174,9 +174,15 @@ def build_from_wb_freshness_next_steps(
             "run_wb_stock_sync_live",
         ]
     if freshness_status == "missing_sales_data":
-        return ["run_wb_sales_daily_sync_live"]
+        next_steps = ["run_wb_sales_daily_sync_live"]
+        if stale_stock:
+            next_steps.append("run_wb_stock_sync_live")
+        return next_steps
     if freshness_status == "missing_stock_data":
-        return ["run_wb_stock_sync_live"]
+        next_steps = ["run_wb_stock_sync_live"]
+        if stale_sales:
+            next_steps.insert(0, "run_wb_sales_daily_sync_live")
+        return next_steps
     if stale_sales and stale_stock:
         return [
             "run_wb_sales_daily_sync_live",
