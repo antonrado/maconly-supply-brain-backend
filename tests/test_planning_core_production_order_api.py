@@ -13925,7 +13925,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 7}}" in wb_adapter_step
     assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: '{stock_updated_at.strftime('%Y-%m-%dT%H:%M:%S')}" in wb_adapter_step
-    assert "freshness_status=" in wb_adapter_step
+    assert "freshness_status=missing_sales_data" in wb_adapter_step
     assert "freshness_sales_age_days=none" in wb_adapter_step
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
@@ -13946,6 +13946,7 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert from_wb_meta["sales_window"] is None
     assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 0.0
     assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 7
+    assert from_wb_meta["freshness"]["status"] == "missing_sales_data"
     assert from_wb_meta["freshness"]["sales_age_days"] is None
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
@@ -14507,6 +14508,128 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+    }
+
+
+def test_production_order_proposal_from_wb_strict_rejects_missing_sales_data(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-STRICT-NOSALES",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-STRICT-NOSALES",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=7,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "freshness_mode": "strict",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+
+    assert response.json()["detail"] == {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": seeded["article"].id,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "missing_sales_data",
+        "sales_age_days": None,
+        "stock_oldest_age_days": 0,
+        "threshold_days": {"sales": 3, "stock": 2},
+        "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "stale_components": [],
+        "next_steps": ["run_wb_sales_daily_sync_live"],
+    }
+
+
+def test_production_order_proposal_from_wb_strict_rejects_missing_stock_data(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+    today_utc = datetime.now(timezone.utc).date()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-STRICT-NOSTOCK",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-STRICT-NOSTOCK",
+            date=today_utc,
+            sales_qty=10,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": today_utc.isoformat(),
+        "freshness_mode": "strict",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+
+    assert response.json()["detail"] == {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": seeded["article"].id,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "missing_stock_data",
+        "sales_age_days": 0,
+        "stock_oldest_age_days": None,
+        "threshold_days": {"sales": 3, "stock": 2},
+        "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "stale_components": [],
+        "next_steps": ["run_wb_stock_sync_live"],
     }
 
 
