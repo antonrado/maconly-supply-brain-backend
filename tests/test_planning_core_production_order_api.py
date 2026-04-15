@@ -11487,6 +11487,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert from_wb_meta["snapshot"]["wb_stock_total"] == int(sum(full_meta["from_wb"]["wb_stock_by_bundle"].values()))
     assert from_wb_meta["snapshot"]["wb_stock_updated_bundle_count"] == len(full_meta["from_wb"]["wb_stock_updated_at_by_bundle"])
     assert f"freshness_status={full_meta['from_wb']['freshness']['status']}" in wb_adapter_step
+    assert f"freshness_sales_age_days={'none' if full_meta['from_wb']['freshness']['sales_age_days'] is None else full_meta['from_wb']['freshness']['sales_age_days']}" in wb_adapter_step
     assert from_wb_meta["freshness"] == expected_compact_freshness
     assert from_wb_meta["economic_observed_prices"] == expected_compact_observed_prices
     assert from_wb_meta["economic_observed_commission"] == expected_compact_commission_meta
