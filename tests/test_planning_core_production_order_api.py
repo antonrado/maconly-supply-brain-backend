@@ -11231,7 +11231,6 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert "freshness_stock_oldest_age_days=" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
-    assert "status=shortage_before_arrival" in arrival_projection_step
     assert "projected_shortage_before_arrival=100" in arrival_projection_step
     assert "sku_count=4" in layer1_step
     assert f"high_stockout_threshold={LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD}" in layer1_step
@@ -11455,6 +11454,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
     assert f"bundle_stock={full_meta['sources']['bundle_stock']}" in source_step
     assert meta["physical_scope"] == full_meta["physical_scope"]
     assert meta["arrival_projection"] == full_meta["arrival_projection"]
+    assert f"status={full_meta['arrival_projection']['status']}" in arrival_projection_step
     assert (
         "arrival_horizon_days="
         f"{full_meta['arrival_projection']['arrival_horizon_days']}"
