@@ -4,6 +4,10 @@ from collections.abc import Callable
 from datetime import date, timedelta
 
 from app.schemas.planning_production_order import ProductionOrderExplanationBlock
+from app.services.planning_production_order_freshness import (
+    build_from_wb_freshness_blocker,
+    build_from_wb_freshness_next_steps,
+)
 
 EXPLAINABILITY_MODE_COMPACT = "compact"
 
@@ -793,6 +797,40 @@ def _apply_from_wb_explainability(
     freshness_sales_age_days_text: str,
     freshness_stock_oldest_age_days_text: str,
 ) -> ProductionOrderExplanationBlock:
+    freshness_meta: dict[str, object] = {
+        "status": freshness_status,
+        "sales_age_days": freshness_sales_age_days,
+        "stock_oldest_age_days": freshness_stock_oldest_age_days,
+        "stock_age_days_by_bundle": freshness_stock_age_days_by_bundle,
+        "threshold_days": {
+            "sales": sales_stale_after_days,
+            "stock": stock_stale_after_days,
+        },
+        "threshold_source": freshness_threshold_source,
+    }
+    freshness_actionability_text = ""
+    freshness_blocker = build_from_wb_freshness_blocker(
+        freshness_status=freshness_status,
+        sales_age_days=freshness_sales_age_days,
+        stock_oldest_age_days=freshness_stock_oldest_age_days,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+    )
+    freshness_next_steps = build_from_wb_freshness_next_steps(
+        freshness_status=freshness_status,
+        sales_age_days=freshness_sales_age_days,
+        stock_oldest_age_days=freshness_stock_oldest_age_days,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+    )
+    if freshness_blocker is not None or freshness_next_steps:
+        freshness_meta["blocker"] = freshness_blocker
+        freshness_meta["next_steps"] = freshness_next_steps
+        freshness_actionability_text = (
+            f", freshness_blocker={freshness_meta['blocker']}, "
+            f"freshness_next_steps={freshness_meta['next_steps']}"
+        )
+
     explanation.meta["from_wb"] = {
         "observation_window_days": observation_window_days,
         "freshness_mode": freshness_mode,
@@ -813,17 +851,7 @@ def _apply_from_wb_explainability(
         "wb_stock_updated_at_by_bundle": wb_stock_updated_at_by_bundle,
         "economic_observed_prices": observed_price_calibration,
         "economic_observed_commission": observed_commission_calibration,
-        "freshness": {
-            "status": freshness_status,
-            "sales_age_days": freshness_sales_age_days,
-            "stock_oldest_age_days": freshness_stock_oldest_age_days,
-            "stock_age_days_by_bundle": freshness_stock_age_days_by_bundle,
-            "threshold_days": {
-                "sales": sales_stale_after_days,
-                "stock": stock_stale_after_days,
-            },
-            "threshold_source": freshness_threshold_source,
-        },
+        "freshness": freshness_meta,
     }
 
     explanation.steps.insert(
@@ -856,7 +884,8 @@ def _apply_from_wb_explainability(
             "freshness_threshold_days="
             f"sales:{sales_stale_after_days}|stock:{stock_stale_after_days}, "
             "freshness_threshold_source="
-            f"sales:{freshness_threshold_source['sales']}|stock:{freshness_threshold_source['stock']}."
+            f"sales:{freshness_threshold_source['sales']}|stock:{freshness_threshold_source['stock']}"
+            f"{freshness_actionability_text}."
         ),
     )
     return explanation
@@ -1070,6 +1099,9 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
                 "threshold_days": freshness_raw.get("threshold_days"),
                 "threshold_source": freshness_raw.get("threshold_source"),
             }
+            if "blocker" in freshness_raw:
+                freshness_compact["blocker"] = freshness_raw.get("blocker")
+                freshness_compact["next_steps"] = freshness_raw.get("next_steps")
         if isinstance(economic_observed_raw, dict):
             economic_observed_compact = {
                 "source": economic_observed_raw.get("source"),
