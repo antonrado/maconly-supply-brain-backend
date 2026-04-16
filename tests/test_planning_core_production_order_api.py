@@ -15758,6 +15758,107 @@ def test_production_order_proposal_from_wb_uses_mixed_freshness_threshold_source
     assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == expected_compact_freshness
 
 
+def test_production_order_proposal_from_wb_uses_mirrored_mixed_freshness_threshold_sources(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-MIXED-THRESHOLDS-2",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-MIXED-THRESHOLDS-2",
+            date=datetime(2020, 1, 1, tzinfo=timezone.utc).date(),
+            sales_qty=10,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-MIXED-THRESHOLDS-2",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 3650,
+            "freshness_stock_stale_after_days": 1,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2020-01-01",
+        "freshness_mode": "strict",
+        "freshness_stock_stale_after_days": 3650,
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    wb_adapter_step = next(
+        (step for step in body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
+    assert "freshness_mode=strict" in wb_adapter_step
+    assert "freshness_status=fresh" in wb_adapter_step
+    assert "freshness_threshold_days=sales:3650|stock:3650" in wb_adapter_step
+    assert "freshness_threshold_source=sales:admin_defaults|stock:request" in wb_adapter_step
+
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
+    assert from_wb_meta["freshness_mode"] == "strict"
+    assert from_wb_meta["freshness"]["status"] == "fresh"
+    assert from_wb_meta["freshness"]["threshold_days"] == {
+        "sales": 3650,
+        "stock": 3650,
+    }
+    assert from_wb_meta["freshness"]["threshold_source"] == {
+        "sales": "admin_defaults",
+        "stock": "request",
+    }
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == expected_compact_freshness
+
+
 def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(client, db_session):
     article = Article(code="PO-NO-BT", name="PO-NO-BT")
     db_session.add(article)
