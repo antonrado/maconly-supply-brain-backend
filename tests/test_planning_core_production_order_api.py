@@ -14156,8 +14156,13 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
         "",
     )
 
+    assert "requested_as_of_date=none" in wb_adapter_step
+    assert "freshness_mode=warn" in wb_adapter_step
     assert "as_of_date=none" in wb_adapter_step
     assert "as_of_source=none" in wb_adapter_step
+    assert "sales_window=none" in wb_adapter_step
+    assert f"daily_sales_by_bundle={{{seeded['bundle_type'].id}: 0.0}}" in wb_adapter_step
+    assert f"wb_stock_by_bundle={{{seeded['bundle_type'].id}: 0}}" in wb_adapter_step
     assert "wb_stock_updated_at_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
     assert "freshness_status=no_data" in wb_adapter_step
@@ -14165,6 +14170,8 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
     assert "freshness_stock_oldest_age_days=none" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
+    assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
+    assert "freshness_threshold_source=sales:global_default|stock:global_default" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
@@ -14176,14 +14183,22 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
         "threshold_source": from_wb_meta["freshness"]["threshold_source"],
     }
     assert from_wb_meta["freshness_mode"] == "warn"
+    assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
     assert from_wb_meta["as_of_source"] == "none"
     assert from_wb_meta["sales_window"] is None
+    assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 0.0
+    assert from_wb_meta["wb_stock_by_bundle"][bundle_key] == 0
     assert from_wb_meta["wb_stock_updated_at_by_bundle"][bundle_key] is None
     assert from_wb_meta["freshness"]["status"] == "no_data"
     assert from_wb_meta["freshness"]["sales_age_days"] is None
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] is None
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] is None
+    assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3, "stock": 2}
+    assert from_wb_meta["freshness"]["threshold_source"] == {
+        "sales": "global_default",
+        "stock": "global_default",
+    }
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
