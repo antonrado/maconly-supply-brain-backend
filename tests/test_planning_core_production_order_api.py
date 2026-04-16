@@ -15391,11 +15391,26 @@ def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaul
     assert "freshness_threshold_source=sales:admin_defaults|stock:admin_defaults" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    expected_compact_freshness = {
+        "status": from_wb_meta["freshness"]["status"],
+        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
+        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
+        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
+        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
+    }
     assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3650, "stock": 3650}
     assert from_wb_meta["freshness"]["threshold_source"] == {
         "sales": "admin_defaults",
         "stock": "admin_defaults",
     }
+
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
+
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == expected_compact_freshness
 
 
 def test_production_order_proposal_from_wb_strict_with_custom_thresholds_allows_old_data(client, db_session):
