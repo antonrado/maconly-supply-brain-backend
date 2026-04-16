@@ -1644,6 +1644,89 @@ def test_wb_from_wb_readiness_request_sales_threshold_overrides_admin_defaults_t
     assert item["next_steps"] == ["run_wb_sales_daily_sync_live"]
 
 
+def test_wb_from_wb_readiness_request_stock_threshold_overrides_admin_defaults_to_stale_stock_blocker(client, db_session):
+    article_stale = Article(code="STALE-MIXED-SOURCE-STOCK-FAIL-1", name="Stale mixed source stock fail")
+    bundle_type = BundleType(code="BT-STALE-MIXED-SOURCE-STOCK-FAIL", name="Stale mixed source stock fail bundle", is_assorti=False)
+    color = Color(inner_code="CLR-STALE-MIXED-SOURCE-STOCK-FAIL", pantone_code=None, description=None)
+    today_utc = datetime.now(timezone.utc).date()
+
+    db_session.add_all([article_stale, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article_stale.id,
+            wb_sku="WB-STALE-MIXED-SOURCE-STOCK-FAIL-1",
+            bundle_type_id=bundle_type.id,
+        )
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_stale.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-STALE-MIXED-SOURCE-STOCK-FAIL-1",
+            date=date(2020, 1, 1),
+            sales_qty=3,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-STALE-MIXED-SOURCE-STOCK-FAIL-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.flush()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{article_stale.id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 3650,
+            "freshness_stock_stale_after_days": 3650,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    response = client.post(
+        "/api/v1/wb/from-wb/readiness",
+        json={
+            "article_id": article_stale.id,
+            "limit": 10,
+            "freshness_stock_stale_after_days": 1,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "STALE-MIXED-SOURCE-STOCK-FAIL-1"
+    assert item["ready_for_from_wb"] is False
+    assert item["freshness_status"] == "stale"
+    assert item["blocker"] == "stale_wb_stock_data"
+    assert item["sales_age_days"] == (today_utc - date(2020, 1, 1)).days
+    assert item["stock_oldest_age_days"] == (today_utc - date(2020, 1, 2)).days
+    assert item["threshold_days"] == {"sales": 3650, "stock": 1}
+    assert item["threshold_source"] == {"sales": "admin_defaults", "stock": "request"}
+    assert item["next_steps"] == ["run_wb_stock_sync_live"]
+
+
 def test_wb_from_wb_readiness_uses_mixed_freshness_threshold_sources(client, db_session):
     article_stale = Article(code="STALE-MIXED-SOURCE-1", name="Stale mixed source")
     bundle_type = BundleType(code="BT-STALE-MIXED-SOURCE", name="Stale mixed source bundle", is_assorti=False)
