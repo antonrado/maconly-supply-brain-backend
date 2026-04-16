@@ -1844,6 +1844,20 @@ def _business_projection(body: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _build_expected_compact_freshness(freshness_meta: dict[str, object]) -> dict[str, object]:
+    expected_compact_freshness = {
+        "status": freshness_meta["status"],
+        "sales_age_days": freshness_meta["sales_age_days"],
+        "stock_oldest_age_days": freshness_meta["stock_oldest_age_days"],
+        "threshold_days": freshness_meta["threshold_days"],
+        "threshold_source": freshness_meta["threshold_source"],
+    }
+    if "blocker" in freshness_meta:
+        expected_compact_freshness["blocker"] = freshness_meta["blocker"]
+        expected_compact_freshness["next_steps"] = freshness_meta["next_steps"]
+    return expected_compact_freshness
+
+
 def test_production_order_proposal_happy_path(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     payload = _build_payload(
@@ -2925,13 +2939,7 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     }
 
     from_wb_meta = meta["from_wb"]
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     economic_observed_prices = from_wb_meta.get("economic_observed_prices")
     expected_compact_observed_prices = {}
     if isinstance(economic_observed_prices, dict):
@@ -10708,13 +10716,7 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
         "as_of_source": full_from_wb["as_of_source"],
         "bundle_type_ids": full_from_wb["bundle_type_ids"],
         "sales_window": full_from_wb["sales_window"],
-        "freshness": {
-            "status": full_from_wb["freshness"]["status"],
-            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
-            "threshold_days": full_from_wb["freshness"]["threshold_days"],
-            "threshold_source": full_from_wb["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(full_from_wb["freshness"]),
         "economic_observed_prices": {
             "source": full_from_wb["economic_observed_prices"]["source"],
             "window": full_from_wb["economic_observed_prices"]["window"],
@@ -10830,13 +10832,7 @@ def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(
         "as_of_source": full_from_wb["as_of_source"],
         "bundle_type_ids": full_from_wb["bundle_type_ids"],
         "sales_window": full_from_wb["sales_window"],
-        "freshness": {
-            "status": full_from_wb["freshness"]["status"],
-            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
-            "threshold_days": full_from_wb["freshness"]["threshold_days"],
-            "threshold_source": full_from_wb["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(full_from_wb["freshness"]),
         "economic_observed_prices": {
             "source": full_from_wb["economic_observed_prices"]["source"],
             "window": full_from_wb["economic_observed_prices"]["window"],
@@ -10945,13 +10941,7 @@ def test_production_order_proposal_from_wb_request_price_override_has_precedence
         "as_of_source": full_from_wb["as_of_source"],
         "bundle_type_ids": full_from_wb["bundle_type_ids"],
         "sales_window": full_from_wb["sales_window"],
-        "freshness": {
-            "status": full_from_wb["freshness"]["status"],
-            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
-            "threshold_days": full_from_wb["freshness"]["threshold_days"],
-            "threshold_source": full_from_wb["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(full_from_wb["freshness"]),
         "economic_observed_prices": {
             "source": full_from_wb["economic_observed_prices"]["source"],
             "window": full_from_wb["economic_observed_prices"]["window"],
@@ -11106,13 +11096,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
         "as_of_source": full_from_wb["as_of_source"],
         "bundle_type_ids": full_from_wb["bundle_type_ids"],
         "sales_window": full_from_wb["sales_window"],
-        "freshness": {
-            "status": full_from_wb["freshness"]["status"],
-            "sales_age_days": full_from_wb["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": full_from_wb["freshness"]["stock_oldest_age_days"],
-            "threshold_days": full_from_wb["freshness"]["threshold_days"],
-            "threshold_source": full_from_wb["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(full_from_wb["freshness"]),
         "economic_observed_prices": {
             "source": full_from_wb["economic_observed_prices"]["source"],
             "window": full_from_wb["economic_observed_prices"]["window"],
@@ -11413,13 +11397,7 @@ def test_production_order_proposal_from_wb_compact_explainability_mode(client, d
             for full_scenario in full_meta["layer_4_scenarios"]["scenarios"]
         ],
     }
-    expected_compact_freshness = {
-        "status": full_meta["from_wb"]["freshness"]["status"],
-        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
-        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
-        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(full_meta["from_wb"]["freshness"])
     expected_compact_observed_prices = {
         "source": full_meta["from_wb"]["economic_observed_prices"]["source"],
         "window": full_meta["from_wb"]["economic_observed_prices"]["window"],
@@ -11765,13 +11743,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     }
     assert compact_layer4 == expected_compact_layer4
 
-    expected_compact_freshness = {
-        "status": full_meta["from_wb"]["freshness"]["status"],
-        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
-        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
-        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(full_meta["from_wb"]["freshness"])
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
         "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
@@ -13696,13 +13668,7 @@ def test_production_order_proposal_from_wb_compact_mode_preserves_deterministic_
     }
     assert compact_layer4 == expected_compact_layer4
 
-    expected_compact_freshness = {
-        "status": full_meta["from_wb"]["freshness"]["status"],
-        "sales_age_days": full_meta["from_wb"]["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": full_meta["from_wb"]["freshness"]["stock_oldest_age_days"],
-        "threshold_days": full_meta["from_wb"]["freshness"]["threshold_days"],
-        "threshold_source": full_meta["from_wb"]["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(full_meta["from_wb"]["freshness"])
     expected_compact_commission_meta = {
         "source": full_meta["from_wb"]["economic_observed_commission"]["source"],
         "status": full_meta["from_wb"]["economic_observed_commission"]["status"],
@@ -13831,13 +13797,7 @@ def test_production_order_proposal_from_wb_uses_latest_sales_as_of_when_missing(
         "as_of_source": from_wb_meta["as_of_source"],
         "bundle_type_ids": from_wb_meta["bundle_type_ids"],
         "sales_window": from_wb_meta["sales_window"],
-        "freshness": {
-            "status": from_wb_meta["freshness"]["status"],
-            "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-            "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-            "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(from_wb_meta["freshness"]),
         "economic_observed_prices": {
             "source": from_wb_meta["economic_observed_prices"]["source"],
             "window": from_wb_meta["economic_observed_prices"]["window"],
@@ -13933,16 +13893,12 @@ def test_production_order_proposal_from_wb_without_stock_uses_latest_sales_as_of
     assert "freshness_stock_oldest_age_days=none" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
+    assert "freshness_blocker=no_wb_stock_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] == today_utc.isoformat()
@@ -13958,6 +13914,10 @@ def test_production_order_proposal_from_wb_without_stock_uses_latest_sales_as_of
     assert from_wb_meta["freshness"]["sales_age_days"] == 0
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] is None
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] is None
+    assert from_wb_meta["freshness"]["blocker"] == "no_wb_stock_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14065,16 +14025,12 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
     assert f"{seeded['bundle_type'].id}: {expected_stock_age_days}" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "freshness_threshold_source=sales:global_default|stock:global_default" in wb_adapter_step
+    assert "freshness_blocker=no_wb_sales_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_sales_daily_sync_live', 'run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
@@ -14094,6 +14050,11 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
         "sales": "global_default",
         "stock": "global_default",
     }
+    assert from_wb_meta["freshness"]["blocker"] == "no_wb_sales_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_sales_daily_sync_live",
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14189,16 +14150,12 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
     assert "freshness_threshold_days=sales:3|stock:2" in wb_adapter_step
     assert "freshness_threshold_source=sales:global_default|stock:global_default" in wb_adapter_step
+    assert "freshness_blocker=no_wb_sales_or_stock_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_sales_daily_sync_live', 'run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
@@ -14216,6 +14173,11 @@ def test_production_order_proposal_from_wb_freshness_no_data_when_no_sales_and_n
         "sales": "global_default",
         "stock": "global_default",
     }
+    assert from_wb_meta["freshness"]["blocker"] == "no_wb_sales_or_stock_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_sales_daily_sync_live",
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14323,16 +14285,12 @@ def test_production_order_proposal_from_wb_freshness_no_data_uses_admin_defaults
     assert f"{seeded['bundle_type'].id}: None" in wb_adapter_step
     assert "freshness_threshold_days=sales:3650|stock:3650" in wb_adapter_step
     assert "freshness_threshold_source=sales:admin_defaults|stock:admin_defaults" in wb_adapter_step
+    assert "freshness_blocker=no_wb_sales_or_stock_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_sales_daily_sync_live', 'run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] is None
     assert from_wb_meta["as_of_date"] is None
@@ -14350,6 +14308,11 @@ def test_production_order_proposal_from_wb_freshness_no_data_uses_admin_defaults
         "sales": "admin_defaults",
         "stock": "admin_defaults",
     }
+    assert from_wb_meta["freshness"]["blocker"] == "no_wb_sales_or_stock_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_sales_daily_sync_live",
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14467,16 +14430,12 @@ def test_production_order_proposal_from_wb_warn_reports_stock_only_stale_metadat
     assert f"freshness_stock_oldest_age_days={expected_stock_age_days}" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: {expected_stock_age_days}" in wb_adapter_step
+    assert "freshness_blocker=stale_wb_stock_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == today_utc.isoformat()
     assert from_wb_meta["as_of_date"] == today_utc.isoformat()
@@ -14494,6 +14453,10 @@ def test_production_order_proposal_from_wb_warn_reports_stock_only_stale_metadat
     assert from_wb_meta["freshness"]["sales_age_days"] == 0
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] == expected_stock_age_days
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] == expected_stock_age_days
+    assert from_wb_meta["freshness"]["blocker"] == "stale_wb_stock_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14612,16 +14575,12 @@ def test_production_order_proposal_from_wb_warn_reports_sales_only_stale_metadat
     assert "freshness_stock_oldest_age_days=0" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: 0" in wb_adapter_step
+    assert "freshness_blocker=stale_wb_sales_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_sales_daily_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == stale_sales_date.isoformat()
     assert from_wb_meta["as_of_date"] == stale_sales_date.isoformat()
@@ -14639,6 +14598,10 @@ def test_production_order_proposal_from_wb_warn_reports_sales_only_stale_metadat
     assert from_wb_meta["freshness"]["sales_age_days"] == expected_sales_age_days
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] == 0
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] == 0
+    assert from_wb_meta["freshness"]["blocker"] == "stale_wb_sales_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_sales_daily_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14758,16 +14721,12 @@ def test_production_order_proposal_from_wb_warn_reports_stale_sales_and_stock_me
     assert f"freshness_stock_oldest_age_days={expected_stock_age_days}" in wb_adapter_step
     assert "freshness_stock_age_days_by_bundle={" in wb_adapter_step
     assert f"{seeded['bundle_type'].id}: {expected_stock_age_days}" in wb_adapter_step
+    assert "freshness_blocker=stale_wb_sales_and_stock_data" in wb_adapter_step
+    assert "freshness_next_steps=['run_wb_sales_daily_sync_live', 'run_wb_stock_sync_live']" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
     bundle_key = str(seeded["bundle_type"].id)
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "warn"
     assert from_wb_meta["requested_as_of_date"] == stale_sales_date.isoformat()
     assert from_wb_meta["as_of_date"] == stale_sales_date.isoformat()
@@ -14785,6 +14744,11 @@ def test_production_order_proposal_from_wb_warn_reports_stale_sales_and_stock_me
     assert from_wb_meta["freshness"]["sales_age_days"] == expected_sales_age_days
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] == expected_stock_age_days
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] == expected_stock_age_days
+    assert from_wb_meta["freshness"]["blocker"] == "stale_wb_sales_and_stock_data"
+    assert from_wb_meta["freshness"]["next_steps"] == [
+        "run_wb_sales_daily_sync_live",
+        "run_wb_stock_sync_live",
+    ]
     expected_compact_from_wb = {
         "observation_window_days": from_wb_meta["observation_window_days"],
         "freshness_mode": from_wb_meta["freshness_mode"],
@@ -14914,13 +14878,7 @@ def test_production_order_proposal_from_wb_clamps_future_as_of_date(client, db_s
         "as_of_source": from_wb_meta["as_of_source"],
         "bundle_type_ids": from_wb_meta["bundle_type_ids"],
         "sales_window": from_wb_meta["sales_window"],
-        "freshness": {
-            "status": from_wb_meta["freshness"]["status"],
-            "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-            "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-            "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(from_wb_meta["freshness"]),
         "economic_observed_prices": {
             "source": from_wb_meta["economic_observed_prices"]["source"],
             "window": from_wb_meta["economic_observed_prices"]["window"],
@@ -15075,13 +15033,7 @@ def test_production_order_proposal_from_wb_via_import_endpoints(client, db_sessi
         "as_of_source": from_wb_meta["as_of_source"],
         "bundle_type_ids": from_wb_meta["bundle_type_ids"],
         "sales_window": from_wb_meta["sales_window"],
-        "freshness": {
-            "status": from_wb_meta["freshness"]["status"],
-            "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-            "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-            "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-            "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-        },
+        "freshness": _build_expected_compact_freshness(from_wb_meta["freshness"]),
         "economic_observed_prices": {
             "source": from_wb_meta["economic_observed_prices"]["source"],
             "window": from_wb_meta["economic_observed_prices"]["window"],
@@ -15770,13 +15722,7 @@ def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaul
     assert "freshness_threshold_source=sales:admin_defaults|stock:admin_defaults" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness"]["threshold_days"] == {"sales": 3650, "stock": 3650}
     assert from_wb_meta["freshness"]["threshold_source"] == {
         "sales": "admin_defaults",
@@ -15950,13 +15896,7 @@ def test_production_order_proposal_from_wb_strict_with_custom_thresholds_allows_
     assert "freshness_threshold_source=sales:request|stock:request" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "strict"
     assert from_wb_meta["freshness"]["status"] == "fresh"
     assert from_wb_meta["freshness"]["threshold_days"] == {
@@ -16446,13 +16386,7 @@ def test_production_order_proposal_from_wb_uses_mixed_freshness_threshold_source
     assert "freshness_threshold_source=sales:request|stock:admin_defaults" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "strict"
     assert from_wb_meta["freshness"]["status"] == "fresh"
     assert from_wb_meta["freshness"]["threshold_days"] == {
@@ -16547,13 +16481,7 @@ def test_production_order_proposal_from_wb_uses_mirrored_mixed_freshness_thresho
     assert "freshness_threshold_source=sales:admin_defaults|stock:request" in wb_adapter_step
 
     from_wb_meta = body["explanation"]["meta"]["from_wb"]
-    expected_compact_freshness = {
-        "status": from_wb_meta["freshness"]["status"],
-        "sales_age_days": from_wb_meta["freshness"]["sales_age_days"],
-        "stock_oldest_age_days": from_wb_meta["freshness"]["stock_oldest_age_days"],
-        "threshold_days": from_wb_meta["freshness"]["threshold_days"],
-        "threshold_source": from_wb_meta["freshness"]["threshold_source"],
-    }
+    expected_compact_freshness = _build_expected_compact_freshness(from_wb_meta["freshness"])
     assert from_wb_meta["freshness_mode"] == "strict"
     assert from_wb_meta["freshness"]["status"] == "fresh"
     assert from_wb_meta["freshness"]["threshold_days"] == {
