@@ -15413,6 +15413,89 @@ def test_production_order_proposal_from_wb_uses_admin_freshness_threshold_defaul
     assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == expected_compact_freshness
 
 
+def test_production_order_proposal_from_wb_strict_admin_defaults_can_force_stale_failure(client, db_session):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-BT1-STRICT-ADMIN-BLOCKER",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-BT1-STRICT-ADMIN-BLOCKER",
+            date=datetime(2020, 1, 1, tzinfo=timezone.utc).date(),
+            sales_qty=10,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-BT1-STRICT-ADMIN-BLOCKER",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{seeded['article'].id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 1,
+            "freshness_stock_stale_after_days": 1,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2020-01-01",
+        "freshness_mode": "strict",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+    today_utc = datetime.now(timezone.utc).date()
+
+    assert response.json()["detail"] == {
+        "code": "wb_data_freshness_failed",
+        "message": "WB data freshness check failed",
+        "article_id": seeded["article"].id,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "stale",
+        "sales_age_days": (today_utc - datetime(2020, 1, 1, tzinfo=timezone.utc).date()).days,
+        "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
+        "threshold_days": {"sales": 1, "stock": 1},
+        "threshold_source": {"sales": "admin_defaults", "stock": "admin_defaults"},
+        "stale_components": ["sales", "stock"],
+        "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+    }
+
+
 def test_production_order_proposal_from_wb_strict_with_custom_thresholds_allows_old_data(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
 
