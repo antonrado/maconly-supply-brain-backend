@@ -1395,6 +1395,71 @@ def test_wb_from_wb_readiness_uses_admin_freshness_threshold_defaults(client, db
     assert item["next_steps"] == []
 
 
+def test_wb_from_wb_readiness_uses_admin_freshness_threshold_defaults_for_no_data(client, db_session):
+    article_no_data = Article(code="NODATA-ADMIN-DEFAULTS-1", name="No data admin defaults")
+    bundle_type = BundleType(code="BT-NODATA-ADMIN-DEFAULTS", name="No data admin defaults bundle", is_assorti=False)
+    color = Color(inner_code="CLR-NODATA-ADMIN-DEFAULTS", pantone_code=None, description=None)
+
+    db_session.add_all([article_no_data, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article_no_data.id,
+            wb_sku="WB-NODATA-ADMIN-DEFAULTS-1",
+            bundle_type_id=bundle_type.id,
+        )
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article_no_data.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    db_session.flush()
+
+    settings_response = client.put(
+        f"/api/v1/planning/core/production-order/settings/{article_no_data.id}",
+        json={
+            "size_weights": [],
+            "elastic_bindings": [],
+            "in_flight_supply_defaults": [],
+            "freshness_sales_stale_after_days": 3650,
+            "freshness_stock_stale_after_days": 3650,
+        },
+    )
+    assert settings_response.status_code == 200, settings_response.text
+
+    response = client.post(
+        "/api/v1/wb/from-wb/readiness",
+        json={
+            "article_id": article_no_data.id,
+            "limit": 10,
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "NODATA-ADMIN-DEFAULTS-1"
+    assert item["ready_for_from_wb"] is False
+    assert item["mapped_wb_skus_with_sales"] == 0
+    assert item["mapped_wb_skus_with_stock"] == 0
+    assert item["freshness_status"] == "no_data"
+    assert item["blocker"] == "no_wb_sales_or_stock_data"
+    assert item["sales_age_days"] is None
+    assert item["stock_oldest_age_days"] is None
+    assert item["threshold_days"] == {"sales": 3650, "stock": 3650}
+    assert item["threshold_source"] == {"sales": "admin_defaults", "stock": "admin_defaults"}
+    assert item["next_steps"] == ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"]
+
+
 def test_wb_from_wb_readiness_admin_defaults_can_force_stale_blocker(client, db_session):
     article_stale = Article(code="STALE-ADMIN-BLOCKER-1", name="Stale admin blocker")
     bundle_type = BundleType(code="BT-STALE-ADMIN-BLOCKER", name="Stale admin blocker bundle", is_assorti=False)
