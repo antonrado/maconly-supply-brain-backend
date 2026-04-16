@@ -15137,6 +15137,7 @@ def test_production_order_proposal_direct_request_overrides_wb_import_state(clie
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15188,6 +15189,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15251,6 +15253,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data_with_admin_def
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3650, "stock": 3650},
         "threshold_source": {"sales": "admin_defaults", "stock": "admin_defaults"},
+        "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15311,6 +15314,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_data(cli
         "stock_oldest_age_days": 0,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "no_wb_sales_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live"],
     }
@@ -15372,6 +15376,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_with_sta
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15446,6 +15451,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3650, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "request"},
+        "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15508,6 +15514,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_data(cli
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "no_wb_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_stock_sync_live"],
     }
@@ -15571,6 +15578,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_with_sta
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15647,6 +15655,7 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 1, "stock": 3650},
         "threshold_source": {"sales": "request", "stock": "admin_defaults"},
+        "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15816,6 +15825,7 @@ def test_production_order_proposal_from_wb_strict_admin_defaults_can_force_stale
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "admin_defaults"},
+        "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -15997,6 +16007,7 @@ def test_production_order_proposal_from_wb_strict_request_thresholds_override_ad
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 1},
         "threshold_source": {"sales": "request", "stock": "request"},
+        "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
     }
@@ -16081,6 +16092,7 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 3650},
         "threshold_source": {"sales": "request", "stock": "admin_defaults"},
+        "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live"],
     }
@@ -16165,6 +16177,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3650, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "request"},
+        "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_stock_sync_live"],
     }
@@ -16236,6 +16249,7 @@ def test_production_order_proposal_from_wb_strict_rejects_sales_only_stale_data(
         "stock_oldest_age_days": 0,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live"],
     }
@@ -16307,6 +16321,7 @@ def test_production_order_proposal_from_wb_strict_rejects_stock_only_stale_data(
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_stock_sync_live"],
     }
