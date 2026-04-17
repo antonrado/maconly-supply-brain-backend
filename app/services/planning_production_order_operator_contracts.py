@@ -4,7 +4,10 @@ from app.services.planning_production_order_article import _build_article_not_fo
 from app.services.planning_production_order_economics import (
     CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
 )
-from app.services.planning_production_order_freshness import build_from_wb_freshness_next_steps
+from app.services.planning_production_order_freshness import (
+    build_from_wb_freshness_blocker,
+    build_from_wb_freshness_next_steps,
+)
 from app.services.wb_ingest import build_from_wb_readiness_next_steps
 
 CAPITAL_GOVERNANCE_MODE_STRICT = "strict"
@@ -29,6 +32,13 @@ def _build_from_wb_freshness_failure_detail(
     stale_stock = stock_oldest_age_days is not None and stock_oldest_age_days > stock_stale_after_days
 
     next_steps = build_from_wb_freshness_next_steps(
+        freshness_status=freshness_status,
+        sales_age_days=sales_age_days,
+        stock_oldest_age_days=stock_oldest_age_days,
+        sales_stale_after_days=sales_stale_after_days,
+        stock_stale_after_days=stock_stale_after_days,
+    )
+    blocker = build_from_wb_freshness_blocker(
         freshness_status=freshness_status,
         sales_age_days=sales_age_days,
         stock_oldest_age_days=stock_oldest_age_days,
@@ -60,6 +70,7 @@ def _build_from_wb_freshness_failure_detail(
             "stock": int(stock_stale_after_days),
         },
         "threshold_source": dict(threshold_source),
+        "blocker": blocker,
         "stale_components": stale_components,
         "next_steps": next_steps,
     }
