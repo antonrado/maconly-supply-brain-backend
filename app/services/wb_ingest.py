@@ -15,6 +15,7 @@ from app.models.models import (
     ArticlePlanningSettings,
     ArticleWbMapping,
     BundleRecipe,
+    SkuUnit,
     WbIntegrationAccount,
     WbSalesDaily,
     WbStock,
@@ -847,76 +848,82 @@ def discover_article_mapping_from_wb_api(
     )
 
     aggregates = _collect_supplier_article_aggregates(rows)
-
-    unique_supplier_articles = len(aggregates)
-    if unique_supplier_articles == 0:
-        return WbLiveMappingDiscoverSummary(
-            account_id=account.id,
-            fetched_rows=len(rows),
-            pages_requested=max_pages,
-            pages_with_data=pages_with_data,
-            date_from_effective=date_from_effective,
-            next_cursor=next_cursor,
-            unique_supplier_articles=0,
-            matched_supplier_articles=0,
-            unmatched_supplier_articles=0,
-            ambiguous_supplier_articles=0,
-            items=[],
-        )
-
-    exact_by_code, normalized_by_code = _build_article_match_index(
-        db=db,
-        exact_article_codes=set(aggregates.keys()),
+    sorted_codes = sorted(
+        aggregates.keys(),
+        key=lambda code: (-int(aggregates[code]["rows"]), code),
     )
+    selected_codes = sorted_codes[:limit]
+    candidate_supplier_articles = len(selected_codes)
 
-    matched_supplier_articles = 0
-    unmatched_supplier_articles = 0
-    ambiguous_supplier_articles = 0
-    raw_items: list[WbLiveMappingDiscoverItem] = []
+    existing_by_code: dict[str, Article] = {}
+    if selected_codes:
+        existing_rows = db.query(Article).filter(Article.code.in_(selected_codes)).all()
+        existing_by_code = {str(row.code): row for row in existing_rows}
 
-    for supplier_article, bucket in aggregates.items():
-        match_source, article_id, article_code = _resolve_article_match(
-            supplier_article=supplier_article,
-            exact_by_code=exact_by_code,
-            normalized_by_code=normalized_by_code,
-        )
+    existing_articles = 0
+    inserted_articles = 0
+    skipped_invalid = 0
+    items: list[WbLiveArticleBootstrapItem] = []
 
-        if match_source in ("exact", "normalized"):
-            matched_supplier_articles += 1
-        elif match_source == "ambiguous_normalized":
-            ambiguous_supplier_articles += 1
-        else:
-            unmatched_supplier_articles += 1
+    for supplier_article in selected_codes:
+        bucket = aggregates[supplier_article]
+        row_count = int(bucket["rows"])
 
-        wb_skus_obj = bucket.get("wb_skus")
-        unique_wb_skus = len(wb_skus_obj) if isinstance(wb_skus_obj, set) else 0
+        if len(supplier_article) > 50:
+            skipped_invalid += 1
+            items.append(
+                WbLiveArticleBootstrapItem(
+                    supplier_article=supplier_article,
+                    rows=row_count,
+                    status="invalid_too_long",
+                    article_id=None,
+                )
+            )
+            continue
 
-        raw_items.append(
-            WbLiveMappingDiscoverItem(
+        existing = existing_by_code.get(supplier_article)
+        if existing is not None:
+            existing_articles += 1
+            items.append(
+                WbLiveArticleBootstrapItem(
+                    supplier_article=supplier_article,
+                    rows=row_count,
+                    status="existing",
+                    article_id=int(existing.id),
+                )
+            )
+            continue
+
+        new_article = Article(code=supplier_article, name=supplier_article)
+        db.add(new_article)
+        db.flush()
+        existing_by_code[supplier_article] = new_article
+        inserted_articles += 1
+
+        items.append(
+            WbLiveArticleBootstrapItem(
                 supplier_article=supplier_article,
-                rows=int(bucket["rows"]),
-                unique_wb_skus=unique_wb_skus,
-                match_source=match_source,
-                matched_article_id=article_id,
-                matched_article_code=article_code,
+                rows=row_count,
+                status="inserted",
+                article_id=int(new_article.id),
             )
         )
 
-    sorted_items = sorted(raw_items, key=lambda item: (-item.rows, item.supplier_article))
-    limited_items = sorted_items[:limit]
+    db.commit()
 
-    return WbLiveMappingDiscoverSummary(
+    return WbLiveArticleBootstrapSummary(
         account_id=account.id,
         fetched_rows=len(rows),
         pages_requested=max_pages,
         pages_with_data=pages_with_data,
         date_from_effective=date_from_effective,
         next_cursor=next_cursor,
-        unique_supplier_articles=unique_supplier_articles,
-        matched_supplier_articles=matched_supplier_articles,
-        unmatched_supplier_articles=unmatched_supplier_articles,
-        ambiguous_supplier_articles=ambiguous_supplier_articles,
-        items=limited_items,
+        candidate_supplier_articles=candidate_supplier_articles,
+        existing_articles=existing_articles,
+        inserted_articles=inserted_articles,
+        skipped_invalid=skipped_invalid,
+        dry_run=False,
+        items=items,
     )
 
 
@@ -1034,7 +1041,7 @@ def bootstrap_articles_from_wb_api(
 
 
 def build_from_wb_readiness_next_steps(blocker: str | None) -> list[str]:
-    if blocker == "no_wb_mapping":
+    if blocker in {"no_wb_mapping", "missing_wb_mapping_for_requested_bundle_types"}:
         return [
             "run_wb_article_mapping_discover_live",
             "run_wb_article_bootstrap_live_if_article_missing",
@@ -1051,6 +1058,10 @@ def build_from_wb_readiness_next_steps(blocker: str | None) -> list[str]:
     if blocker == "missing_bundle_recipe_bundle_types":
         return [
             "add_bundle_recipe_for_missing_bundle_type_ids",
+        ]
+    if blocker == "no_sku_units_for_recipe_colors":
+        return [
+            "create_sku_units_for_recipe_colors",
         ]
     if blocker == "no_wb_sales_or_stock_data":
         return [
@@ -1176,6 +1187,45 @@ def _build_from_wb_readiness_freshness_state(
             stock_stale_after_days=stock_stale_after_days,
         ),
     }
+
+
+def _has_from_wb_readiness_sku_scope(
+    db: Session,
+    *,
+    article_id: int,
+    mapped_bundle_type_ids: list[int],
+) -> bool:
+    if not mapped_bundle_type_ids:
+        return False
+
+    recipe_color_rows = (
+        db.query(BundleRecipe.color_id)
+        .filter(
+            BundleRecipe.article_id == article_id,
+            BundleRecipe.bundle_type_id.in_(mapped_bundle_type_ids),
+        )
+        .distinct()
+        .all()
+    )
+    recipe_color_ids = sorted(
+        {
+            int(row.color_id)
+            for row in recipe_color_rows
+            if row.color_id is not None
+        }
+    )
+    if not recipe_color_ids:
+        return False
+
+    return (
+        db.query(SkuUnit.id)
+        .filter(
+            SkuUnit.article_id == article_id,
+            SkuUnit.color_id.in_(recipe_color_ids),
+        )
+        .first()
+        is not None
+    )
 
 
 def _resolve_from_wb_readiness_structural_state(
@@ -1386,6 +1436,14 @@ def get_from_wb_readiness_summary(
                 blocker = freshness_blocker
                 next_steps = list(freshness_state.get("next_steps") or [])
             ready_for_from_wb = blocker is None
+        if ready_for_from_wb and not _has_from_wb_readiness_sku_scope(
+            db=db,
+            article_id=current_article_id,
+            mapped_bundle_type_ids=mapped_bundle_types,
+        ):
+            blocker = "no_sku_units_for_recipe_colors"
+            next_steps = build_from_wb_readiness_next_steps(blocker)
+            ready_for_from_wb = False
 
         if ready_for_from_wb:
             ready_articles += 1

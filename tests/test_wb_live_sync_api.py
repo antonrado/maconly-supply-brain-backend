@@ -14,6 +14,8 @@ from app.models.models import (
     BundleRecipe,
     BundleType,
     Color,
+    Size,
+    SkuUnit,
     WbIntegrationAccount,
     WbSalesDaily,
     WbStock,
@@ -33,6 +35,33 @@ def client(db_session):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+def _seed_readiness_sku_scope(db_session, *, article_id: int, color_ids: list[int]) -> None:
+    size = Size(label=f"RD-SIZE-{article_id}", sort_order=1)
+    db_session.add(size)
+    db_session.flush()
+    db_session.add_all(
+        [
+            SkuUnit(article_id=article_id, color_id=int(color_id), size_id=size.id)
+            for color_id in sorted(set(color_ids))
+        ]
+    )
+    db_session.flush()
+
+
+def test_build_from_wb_readiness_next_steps_supports_canonical_missing_requested_mapping_blocker():
+    assert wb_ingest.build_from_wb_readiness_next_steps("missing_wb_mapping_for_requested_bundle_types") == [
+        "run_wb_article_mapping_discover_live",
+        "run_wb_article_bootstrap_live_if_article_missing",
+        "run_wb_article_mapping_sync_live",
+    ]
+
+
+def test_build_from_wb_readiness_next_steps_supports_canonical_no_sku_units_blocker():
+    assert wb_ingest.build_from_wb_readiness_next_steps("no_sku_units_for_recipe_colors") == [
+        "create_sku_units_for_recipe_colors",
+    ]
 
 
 def test_wb_live_sales_sync_requires_active_account(client):
@@ -843,6 +872,7 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
             ),
         ]
     )
+    _seed_readiness_sku_scope(db_session, article_id=article_ready.id, color_ids=[color_a.id])
     seed_created_at = datetime.now(timezone.utc)
     db_session.add(
         WbSalesDaily(
@@ -930,6 +960,70 @@ def test_wb_from_wb_readiness_reports_blockers_and_ready(client, db_session):
     assert items["BLOCK-NO-STOCK"]["threshold_days"] == {"sales": 3, "stock": 2}
     assert items["BLOCK-NO-STOCK"]["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
     assert items["BLOCK-NO-STOCK"]["next_steps"] == ["run_wb_stock_sync_live"]
+
+
+def test_wb_from_wb_readiness_reports_no_sku_scope_blocker(client, db_session):
+    article = Article(code="BLOCK-NO-SKU", name="No SKU scope")
+    bundle_type = BundleType(code="BT-NO-SKU", name="No SKU scope bundle", is_assorti=False)
+    color = Color(inner_code="CLR-NO-SKU", pantone_code=None, description=None)
+
+    db_session.add_all([article, bundle_type, color])
+    db_session.flush()
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article.id,
+            wb_sku="WB-NO-SKU-1",
+            bundle_type_id=bundle_type.id,
+        )
+    )
+    db_session.add(
+        BundleRecipe(
+            article_id=article.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+    seed_created_at = datetime.now(timezone.utc)
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-NO-SKU-1",
+            date=seed_created_at.date(),
+            sales_qty=5,
+            revenue=None,
+            created_at=seed_created_at,
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-NO-SKU-1",
+            warehouse_id=1,
+            warehouse_name="WB",
+            stock_qty=7,
+            updated_at=seed_created_at,
+        )
+    )
+    db_session.flush()
+
+    response = client.post("/api/v1/wb/from-wb/readiness", json={"article_id": article.id, "limit": 10})
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["total_articles_considered"] == 1
+    assert body["ready_articles"] == 0
+    assert body["not_ready_articles"] == 1
+
+    item = body["items"][0]
+    assert item["article_code"] == "BLOCK-NO-SKU"
+    assert item["ready_for_from_wb"] is False
+    assert item["freshness_status"] == "fresh"
+    assert item["blocker"] == "no_sku_units_for_recipe_colors"
+    assert item["sales_age_days"] == 0
+    assert item["stock_oldest_age_days"] == 0
+    assert item["threshold_days"] == {"sales": 3, "stock": 2}
+    assert item["threshold_source"] == {"sales": "global_default", "stock": "global_default"}
+    assert item["next_steps"] == ["create_sku_units_for_recipe_colors"]
 
 
 def test_wb_from_wb_readiness_reports_missing_sales_with_stale_stock_blocker(client, db_session):
@@ -1270,6 +1364,7 @@ def test_wb_from_wb_readiness_request_thresholds_override_stale_blocker(client, 
             position=1,
         )
     )
+    _seed_readiness_sku_scope(db_session, article_id=article_stale.id, color_ids=[color.id])
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-STALE-OVERRIDE-1",
@@ -1339,6 +1434,7 @@ def test_wb_from_wb_readiness_uses_admin_freshness_threshold_defaults(client, db
             position=1,
         )
     )
+    _seed_readiness_sku_scope(db_session, article_id=article_stale.id, color_ids=[color.id])
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-STALE-ADMIN-DEFAULTS-1",
@@ -1964,6 +2060,7 @@ def test_wb_from_wb_readiness_uses_mixed_freshness_threshold_sources(client, db_
             position=1,
         )
     )
+    _seed_readiness_sku_scope(db_session, article_id=article_stale.id, color_ids=[color.id])
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-STALE-MIXED-SOURCE-1",
@@ -2044,6 +2141,7 @@ def test_wb_from_wb_readiness_uses_mirrored_mixed_freshness_threshold_sources(cl
             position=1,
         )
     )
+    _seed_readiness_sku_scope(db_session, article_id=article_stale.id, color_ids=[color.id])
     db_session.add(
         WbSalesDaily(
             wb_sku="WB-STALE-MIXED-SOURCE-2",
