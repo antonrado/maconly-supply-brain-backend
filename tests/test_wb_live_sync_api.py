@@ -2233,7 +2233,18 @@ def test_wb_live_commission_sync_summarizes_subjects(client, db_session, monkeyp
     assert body["avg_kgvp_supplier_percent"] == 25.75
     assert body["min_kgvp_supplier_percent"] == 21.5
     assert body["max_kgvp_supplier_percent"] == 30.0
-    assert [row["subject_name"] for row in body["subjects"]] == ["B", "A"]
+    assert body["subjects"] == [
+        {
+            "subject_id": 11,
+            "subject_name": "B",
+            "kgvp_supplier_percent": 30.0,
+        },
+        {
+            "subject_id": 10,
+            "subject_name": "A",
+            "kgvp_supplier_percent": 21.5,
+        },
+    ]
 
 
 def test_wb_live_supplies_sync_counts_statuses(client, db_session, monkeypatch):
