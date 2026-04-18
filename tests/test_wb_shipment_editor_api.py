@@ -24,6 +24,18 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _parse_json_datetime(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    return _normalize_datetime(datetime.fromisoformat(value))
+
+
 def _create_shipment_with_items(
     db_session,
     *,
@@ -92,12 +104,24 @@ def test_shipment_aggregates_happy_path(client, db_session):
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
+    assert set(body.keys()) == {
+        "shipment_id",
+        "status",
+        "created_at",
+        "updated_at",
+        "total_items",
+        "total_final_qty",
+        "red_risk_count",
+        "yellow_risk_count",
+    }
     assert body["shipment_id"] == shipment.id
     assert body["status"] == shipment.status
     assert body["total_items"] == len(items)
     assert body["total_final_qty"] == sum(i.final_qty for i in items)
     assert body["red_risk_count"] == 1
     assert body["yellow_risk_count"] == 1
+    assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment.created_at)
+    assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment.updated_at)
 
 
 def test_shipment_aggregates_not_found(client):
