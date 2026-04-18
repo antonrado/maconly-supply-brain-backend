@@ -150,21 +150,26 @@ def test_shipment_item_summary_happy_path(client, db_session):
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    assert body["item_id"] == item.id
-    assert body["shipment_id"] == shipment.id
-    assert body["article_id"] == item.article_id
-    assert body["recommended_qty"] == item.recommended_qty
-    assert body["final_qty"] == item.final_qty
-    assert body["nsk_stock_available"] == item.nsk_stock_available
-    assert body["oos_risk_before"] == item.oos_risk_before
-    assert body["oos_risk_after"] == item.oos_risk_after
-    assert body["limited_by_nsk_stock"] == item.limited_by_nsk_stock
-    assert body["limited_by_max_coverage"] == item.limited_by_max_coverage
-    assert body["ignored_due_to_zero_sales"] == item.ignored_due_to_zero_sales
-    assert body["below_min_coverage_threshold"] == item.below_min_coverage_threshold
-    assert body["article_total_deficit"] == item.article_total_deficit
-    assert body["article_total_recommended"] == item.article_total_recommended
-    assert body["explanation"] == item.explanation
+    assert body == {
+        "item_id": item.id,
+        "shipment_id": shipment.id,
+        "article_id": item.article_id,
+        "color_id": item.color_id,
+        "size_id": item.size_id,
+        "wb_sku": item.wb_sku,
+        "recommended_qty": item.recommended_qty,
+        "final_qty": item.final_qty,
+        "nsk_stock_available": item.nsk_stock_available,
+        "oos_risk_before": item.oos_risk_before,
+        "oos_risk_after": item.oos_risk_after,
+        "limited_by_nsk_stock": item.limited_by_nsk_stock,
+        "limited_by_max_coverage": item.limited_by_max_coverage,
+        "ignored_due_to_zero_sales": item.ignored_due_to_zero_sales,
+        "below_min_coverage_threshold": item.below_min_coverage_threshold,
+        "article_total_deficit": item.article_total_deficit,
+        "article_total_recommended": item.article_total_recommended,
+        "explanation": item.explanation,
+    }
 
 
 def test_shipment_item_summary_item_not_in_shipment(client, db_session):
