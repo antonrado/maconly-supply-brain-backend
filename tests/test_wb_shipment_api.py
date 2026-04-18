@@ -261,21 +261,113 @@ def test_get_shipment_by_id(client, db_session):
         comment="Test get",
         created_at=now,
         updated_at=now,
-        strategy="normal",
-        zero_sales_policy="ignore",
-        target_coverage_days=30,
-        min_coverage_days=7,
-        max_coverage_days_after=60,
-        max_replenishment_per_article=None,
+        strategy="aggressive",
+        zero_sales_policy="keep",
+        target_coverage_days=45,
+        min_coverage_days=10,
+        max_coverage_days_after=90,
+        max_replenishment_per_article=123,
     )
     db_session.add(shipment)
+    db_session.flush()
+
+    item = WbShipmentItem(
+        shipment_id=shipment.id,
+        article_id=101,
+        color_id=202,
+        size_id=303,
+        wb_sku="WB-SKU-GET-1",
+        recommended_qty=12,
+        final_qty=10,
+        nsk_stock_available=50,
+        oos_risk_before="red",
+        oos_risk_after="yellow",
+        limited_by_nsk_stock=True,
+        limited_by_max_coverage=False,
+        ignored_due_to_zero_sales=False,
+        below_min_coverage_threshold=True,
+        article_total_deficit=18,
+        article_total_recommended=12,
+        explanation="Manual shipment item note",
+    )
+    db_session.add(item)
     db_session.commit()
 
     resp_ok = client.get(f"/api/v1/wb/manager/shipment/{shipment.id}")
     assert resp_ok.status_code == 200
     body = resp_ok.json()
+    assert set(body.keys()) == {
+        "id",
+        "status",
+        "target_date",
+        "wb_arrival_date",
+        "comment",
+        "strategy",
+        "zero_sales_policy",
+        "target_coverage_days",
+        "min_coverage_days",
+        "max_coverage_days_after",
+        "max_replenishment_per_article",
+        "created_at",
+        "updated_at",
+        "items",
+    }
     assert body["id"] == shipment.id
+    assert body["status"] == "draft"
+    assert body["target_date"] == "2025-01-01"
+    assert body["wb_arrival_date"] == "2025-01-01"
     assert body["comment"] == "Test get"
+    assert body["strategy"] == "aggressive"
+    assert body["zero_sales_policy"] == "keep"
+    assert body["target_coverage_days"] == 45
+    assert body["min_coverage_days"] == 10
+    assert body["max_coverage_days_after"] == 90
+    assert body["max_replenishment_per_article"] == 123
+    assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment.created_at)
+    assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment.updated_at)
+
+    assert len(body["items"]) == 1
+    payload_item = body["items"][0]
+    assert set(payload_item.keys()) == {
+        "id",
+        "shipment_id",
+        "article_id",
+        "color_id",
+        "size_id",
+        "wb_sku",
+        "recommended_qty",
+        "final_qty",
+        "nsk_stock_available",
+        "oos_risk_before",
+        "oos_risk_after",
+        "limited_by_nsk_stock",
+        "limited_by_max_coverage",
+        "ignored_due_to_zero_sales",
+        "below_min_coverage_threshold",
+        "article_total_deficit",
+        "article_total_recommended",
+        "explanation",
+    }
+    assert payload_item == {
+        "id": item.id,
+        "shipment_id": shipment.id,
+        "article_id": 101,
+        "color_id": 202,
+        "size_id": 303,
+        "wb_sku": "WB-SKU-GET-1",
+        "recommended_qty": 12,
+        "final_qty": 10,
+        "nsk_stock_available": 50,
+        "oos_risk_before": "red",
+        "oos_risk_after": "yellow",
+        "limited_by_nsk_stock": True,
+        "limited_by_max_coverage": False,
+        "ignored_due_to_zero_sales": False,
+        "below_min_coverage_threshold": True,
+        "article_total_deficit": 18,
+        "article_total_recommended": 12,
+        "explanation": "Manual shipment item note",
+    }
 
     resp_404 = client.get("/api/v1/wb/manager/shipment/999999")
     assert resp_404.status_code == 404
