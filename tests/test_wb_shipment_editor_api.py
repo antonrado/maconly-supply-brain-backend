@@ -328,6 +328,8 @@ def test_patch_shipment_item_final_qty_valid_change(client, db_session):
     db_session.add(item)
     db_session.commit()
 
+    old_updated_at = _normalize_datetime(shipment.updated_at)
+
     resp = client.patch(
         f"/api/v1/wb/manager/shipment/{shipment.id}/items/{item.id}",
         json={"final_qty": 50},
@@ -335,5 +337,88 @@ def test_patch_shipment_item_final_qty_valid_change(client, db_session):
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    patched_item = next(i for i in body["items"] if i["id"] == item.id)
-    assert patched_item["final_qty"] == 50
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment.id)
+        .first()
+    )
+    assert shipment_db is not None
+    assert set(body.keys()) == {
+        "id",
+        "status",
+        "target_date",
+        "wb_arrival_date",
+        "comment",
+        "strategy",
+        "zero_sales_policy",
+        "target_coverage_days",
+        "min_coverage_days",
+        "max_coverage_days_after",
+        "max_replenishment_per_article",
+        "created_at",
+        "updated_at",
+        "items",
+    }
+    assert body["id"] == shipment_db.id
+    assert body["status"] == shipment_db.status
+    assert body["target_date"] == shipment_db.target_date.isoformat()
+    assert body["wb_arrival_date"] == shipment_db.wb_arrival_date.isoformat()
+    assert body["comment"] == shipment_db.comment
+    assert body["strategy"] == shipment_db.strategy
+    assert body["zero_sales_policy"] == shipment_db.zero_sales_policy
+    assert body["target_coverage_days"] == shipment_db.target_coverage_days
+    assert body["min_coverage_days"] == shipment_db.min_coverage_days
+    assert body["max_coverage_days_after"] == shipment_db.max_coverage_days_after
+    assert body["max_replenishment_per_article"] == shipment_db.max_replenishment_per_article
+    assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment_db.created_at)
+    assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment_db.updated_at)
+    assert _parse_json_datetime(body["updated_at"]) != old_updated_at
+
+    db_item = (
+        db_session.query(WbShipmentItem)
+        .filter(WbShipmentItem.id == item.id)
+        .first()
+    )
+    assert db_item is not None
+    assert len(body["items"]) == 1
+    payload_item = body["items"][0]
+    assert set(payload_item.keys()) == {
+        "id",
+        "shipment_id",
+        "article_id",
+        "color_id",
+        "size_id",
+        "wb_sku",
+        "recommended_qty",
+        "final_qty",
+        "nsk_stock_available",
+        "oos_risk_before",
+        "oos_risk_after",
+        "limited_by_nsk_stock",
+        "limited_by_max_coverage",
+        "ignored_due_to_zero_sales",
+        "below_min_coverage_threshold",
+        "article_total_deficit",
+        "article_total_recommended",
+        "explanation",
+    }
+    assert payload_item == {
+        "id": db_item.id,
+        "shipment_id": shipment_db.id,
+        "article_id": db_item.article_id,
+        "color_id": db_item.color_id,
+        "size_id": db_item.size_id,
+        "wb_sku": db_item.wb_sku,
+        "recommended_qty": db_item.recommended_qty,
+        "final_qty": db_item.final_qty,
+        "nsk_stock_available": db_item.nsk_stock_available,
+        "oos_risk_before": db_item.oos_risk_before,
+        "oos_risk_after": db_item.oos_risk_after,
+        "limited_by_nsk_stock": db_item.limited_by_nsk_stock,
+        "limited_by_max_coverage": db_item.limited_by_max_coverage,
+        "ignored_due_to_zero_sales": db_item.ignored_due_to_zero_sales,
+        "below_min_coverage_threshold": db_item.below_min_coverage_threshold,
+        "article_total_deficit": db_item.article_total_deficit,
+        "article_total_recommended": db_item.article_total_recommended,
+        "explanation": db_item.explanation,
+    }
