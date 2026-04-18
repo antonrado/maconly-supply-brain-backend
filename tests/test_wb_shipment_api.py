@@ -644,13 +644,62 @@ def test_shipment_status_transitions_and_final_states(client, db_session):
     db_session.add(shipment)
     db_session.commit()
 
+    def _assert_shipment_payload(body, shipment_db, *, expected_status, previous_updated_at):
+        assert set(body.keys()) == {
+            "id",
+            "status",
+            "target_date",
+            "wb_arrival_date",
+            "comment",
+            "strategy",
+            "zero_sales_policy",
+            "target_coverage_days",
+            "min_coverage_days",
+            "max_coverage_days_after",
+            "max_replenishment_per_article",
+            "created_at",
+            "updated_at",
+            "items",
+        }
+        assert body["id"] == shipment_db.id
+        assert body["status"] == expected_status
+        assert body["status"] == shipment_db.status
+        assert body["target_date"] == shipment_db.target_date.isoformat()
+        assert body["wb_arrival_date"] == shipment_db.wb_arrival_date.isoformat()
+        assert body["comment"] == shipment_db.comment
+        assert body["strategy"] == shipment_db.strategy
+        assert body["zero_sales_policy"] == shipment_db.zero_sales_policy
+        assert body["target_coverage_days"] == shipment_db.target_coverage_days
+        assert body["min_coverage_days"] == shipment_db.min_coverage_days
+        assert body["max_coverage_days_after"] == shipment_db.max_coverage_days_after
+        assert body["max_replenishment_per_article"] == shipment_db.max_replenishment_per_article
+        assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment_db.created_at)
+        assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment_db.updated_at)
+        assert _parse_json_datetime(body["updated_at"]) != previous_updated_at
+        assert body["items"] == []
+
+    old_updated_at = _normalize_datetime(shipment.updated_at)
+
     # draft -> approved
     resp = client.patch(
         f"/api/v1/wb/manager/shipment/{shipment.id}",
         json={"status": "approved"},
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "approved"
+    body_approved = resp.json()
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment.id)
+        .first()
+    )
+    assert shipment_db is not None
+    _assert_shipment_payload(
+        body_approved,
+        shipment_db,
+        expected_status="approved",
+        previous_updated_at=old_updated_at,
+    )
+    approved_updated_at = _parse_json_datetime(body_approved["updated_at"])
 
     # approved -> shipped
     resp_shipped = client.patch(
@@ -658,7 +707,19 @@ def test_shipment_status_transitions_and_final_states(client, db_session):
         json={"status": "shipped"},
     )
     assert resp_shipped.status_code == 200
-    assert resp_shipped.json()["status"] == "shipped"
+    body_shipped = resp_shipped.json()
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment.id)
+        .first()
+    )
+    assert shipment_db is not None
+    _assert_shipment_payload(
+        body_shipped,
+        shipment_db,
+        expected_status="shipped",
+        previous_updated_at=approved_updated_at,
+    )
 
     # shipped -> any other should fail
     for target in ["draft", "approved", "cancelled"]:
