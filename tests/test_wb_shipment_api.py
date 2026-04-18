@@ -311,11 +311,98 @@ def test_shipment_list_filters_by_status_and_article(client, db_session):
     resp_all = client.get("/api/v1/wb/manager/shipment/")
     assert resp_all.status_code == 200
     body_all = resp_all.json()
-    assert {s["status"] for s in body_all} == {"draft", "approved"}
+    body_all_map = {payload["id"]: payload for payload in body_all}
+    assert set(body_all_map.keys()) == {s1.id, s2.id}
+
+    items_db = (
+        db_session.query(WbShipmentItem)
+        .filter(WbShipmentItem.shipment_id.in_([s1.id, s2.id]))
+        .all()
+    )
+    items_by_shipment = {item.shipment_id: item for item in items_db}
+    assert set(items_by_shipment.keys()) == {s1.id, s2.id}
+
+    shipments_by_id = {s1.id: s1, s2.id: s2}
+    for shipment_id, shipment in shipments_by_id.items():
+        payload = body_all_map[shipment_id]
+        assert set(payload.keys()) == {
+            "id",
+            "status",
+            "target_date",
+            "wb_arrival_date",
+            "comment",
+            "strategy",
+            "zero_sales_policy",
+            "target_coverage_days",
+            "min_coverage_days",
+            "max_coverage_days_after",
+            "max_replenishment_per_article",
+            "created_at",
+            "updated_at",
+            "items",
+        }
+        assert payload["id"] == shipment.id
+        assert payload["status"] == shipment.status
+        assert payload["target_date"] == shipment.target_date.isoformat()
+        assert payload["wb_arrival_date"] == shipment.wb_arrival_date.isoformat()
+        assert payload["comment"] == shipment.comment
+        assert payload["strategy"] == shipment.strategy
+        assert payload["zero_sales_policy"] == shipment.zero_sales_policy
+        assert payload["target_coverage_days"] == shipment.target_coverage_days
+        assert payload["min_coverage_days"] == shipment.min_coverage_days
+        assert payload["max_coverage_days_after"] == shipment.max_coverage_days_after
+        assert payload["max_replenishment_per_article"] == shipment.max_replenishment_per_article
+        assert _parse_json_datetime(payload["created_at"]) == _normalize_datetime(shipment.created_at)
+        assert _parse_json_datetime(payload["updated_at"]) == _normalize_datetime(shipment.updated_at)
+
+        db_item = items_by_shipment[shipment_id]
+        assert len(payload["items"]) == 1
+        payload_item = payload["items"][0]
+        assert set(payload_item.keys()) == {
+            "id",
+            "shipment_id",
+            "article_id",
+            "color_id",
+            "size_id",
+            "wb_sku",
+            "recommended_qty",
+            "final_qty",
+            "nsk_stock_available",
+            "oos_risk_before",
+            "oos_risk_after",
+            "limited_by_nsk_stock",
+            "limited_by_max_coverage",
+            "ignored_due_to_zero_sales",
+            "below_min_coverage_threshold",
+            "article_total_deficit",
+            "article_total_recommended",
+            "explanation",
+        }
+        assert payload_item == {
+            "id": db_item.id,
+            "shipment_id": shipment.id,
+            "article_id": db_item.article_id,
+            "color_id": db_item.color_id,
+            "size_id": db_item.size_id,
+            "wb_sku": db_item.wb_sku,
+            "recommended_qty": db_item.recommended_qty,
+            "final_qty": db_item.final_qty,
+            "nsk_stock_available": db_item.nsk_stock_available,
+            "oos_risk_before": db_item.oos_risk_before,
+            "oos_risk_after": db_item.oos_risk_after,
+            "limited_by_nsk_stock": db_item.limited_by_nsk_stock,
+            "limited_by_max_coverage": db_item.limited_by_max_coverage,
+            "ignored_due_to_zero_sales": db_item.ignored_due_to_zero_sales,
+            "below_min_coverage_threshold": db_item.below_min_coverage_threshold,
+            "article_total_deficit": db_item.article_total_deficit,
+            "article_total_recommended": db_item.article_total_recommended,
+            "explanation": db_item.explanation,
+        }
 
     # By status
     resp_draft = client.get("/api/v1/wb/manager/shipment/", params={"status": "draft"})
-    assert {s["status"] for s in resp_draft.json()} == {"draft"}
+    assert resp_draft.status_code == 200
+    assert resp_draft.json() == [body_all_map[s1.id]]
 
     # By article_id
     resp_article1 = client.get(
@@ -324,16 +411,16 @@ def test_shipment_list_filters_by_status_and_article(client, db_session):
     )
     assert resp_article1.status_code == 200
     body_a1 = resp_article1.json()
-    assert body_a1
-    assert {s["id"] for s in body_a1} == {s1.id}
+    assert body_a1 == [body_all_map[s1.id]]
 
     # By date range
     resp_date = client.get(
         "/api/v1/wb/manager/shipment/",
         params={"date_from": "2025-01-02", "date_to": "2025-01-02"},
     )
+    assert resp_date.status_code == 200
     body_date = resp_date.json()
-    assert {s["id"] for s in body_date} == {s2.id}
+    assert body_date == [body_all_map[s2.id]]
 
 
 def test_get_shipment_by_id(client, db_session):
