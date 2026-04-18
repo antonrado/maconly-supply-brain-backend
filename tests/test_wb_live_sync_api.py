@@ -182,6 +182,8 @@ def test_wb_live_sales_sync_ingests_daily_rows(client, db_session, monkeypatch):
     assert body["updated"] == 0
     assert body["pages_requested"] == 5
     assert body["pages_with_data"] == 1
+    assert body["date_from_effective"] == "2026-02-01T00:00:00Z"
+    assert body["next_cursor"] == "2026-02-01T12:00:00"
 
     assert len(calls) == 2
     assert calls[0]["path"] == wb_ingest.WB_REPORTS_SALES_PATH
