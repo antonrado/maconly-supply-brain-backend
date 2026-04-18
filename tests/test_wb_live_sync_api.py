@@ -464,16 +464,32 @@ def test_wb_live_article_mapping_discover_returns_match_hints(client, db_session
     assert body["ambiguous_supplier_articles"] == 0
 
     items = {row["supplier_article"]: row for row in body["items"]}
-    assert items["MC-010"]["rows"] == 2
-    assert items["MC-010"]["unique_wb_skus"] == 2
-    assert items["MC-010"]["match_source"] == "exact"
-    assert items["MC-010"]["matched_article_id"] == article_exact.id
-
-    assert items["zx77"]["match_source"] == "normalized"
-    assert items["zx77"]["matched_article_id"] == article_norm.id
-
-    assert items["UNMATCHED"]["match_source"] == "none"
-    assert items["UNMATCHED"]["matched_article_id"] is None
+    assert items == {
+        "MC-010": {
+            "supplier_article": "MC-010",
+            "rows": 2,
+            "unique_wb_skus": 2,
+            "match_source": "exact",
+            "matched_article_id": article_exact.id,
+            "matched_article_code": article_exact.code,
+        },
+        "zx77": {
+            "supplier_article": "zx77",
+            "rows": 1,
+            "unique_wb_skus": 1,
+            "match_source": "normalized",
+            "matched_article_id": article_norm.id,
+            "matched_article_code": article_norm.code,
+        },
+        "UNMATCHED": {
+            "supplier_article": "UNMATCHED",
+            "rows": 1,
+            "unique_wb_skus": 1,
+            "match_source": "none",
+            "matched_article_id": None,
+            "matched_article_code": None,
+        },
+    }
 
 
 def test_wb_live_article_bootstrap_dry_run_reports_changes(client, db_session, monkeypatch):
