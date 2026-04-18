@@ -792,7 +792,26 @@ def test_shipment_headers_basic_aggregates(client, db_session):
 	body = resp.json()
 	assert len(body) == 1
 	h = body[0]
+	assert set(h.keys()) == {
+		"id",
+		"status",
+		"target_date",
+		"wb_arrival_date",
+		"comment",
+		"created_at",
+		"updated_at",
+		"total_final_qty",
+		"total_items",
+		"red_risk_count",
+		"yellow_risk_count",
+	}
 	assert h["id"] == shipment.id
+	assert h["status"] == shipment.status
+	assert h["target_date"] == "2025-01-01"
+	assert h["wb_arrival_date"] == "2025-01-02"
+	assert h["comment"] == "Header test"
+	assert _parse_json_datetime(h["created_at"]) == _normalize_datetime(shipment.created_at)
+	assert _parse_json_datetime(h["updated_at"]) == _normalize_datetime(shipment.updated_at)
 	assert h["total_items"] == 3
 	assert h["total_final_qty"] == 10 + 20 + 30
 	assert h["red_risk_count"] == 1
