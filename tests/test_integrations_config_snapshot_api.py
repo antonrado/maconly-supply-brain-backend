@@ -57,34 +57,30 @@ def test_integrations_config_snapshot_multiple_accounts(client, db_session):
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    assert "wb_accounts" in body
-    assert "moysklad_accounts" in body
-
-    wb_accounts = body["wb_accounts"]
-    ms_accounts = body["moysklad_accounts"]
-
-    # All accounts should be present (active and inactive)
-    wb_by_id = {row["id"]: row for row in wb_accounts}
-    ms_by_id = {row["id"]: row for row in ms_accounts}
-
-    assert {wb1.id, wb2.id} == set(wb_by_id.keys())
-    assert {ms1.id} == set(ms_by_id.keys())
-
-    wb1_json = wb_by_id[wb1.id]
-    wb2_json = wb_by_id[wb2.id]
-    ms1_json = ms_by_id[ms1.id]
-
-    assert wb1_json["name"] == wb1.name
-    assert wb1_json["supplier_id"] == wb1.supplier_id
-    assert wb1_json["is_active"] is True
-
-    assert wb2_json["name"] == wb2.name
-    assert wb2_json["supplier_id"] is None
-    assert wb2_json["is_active"] is False
-
-    assert ms1_json["name"] == ms1.name
-    assert ms1_json["account_id"] == ms1.account_id
-    assert ms1_json["is_active"] is True
+    assert body == {
+        "wb_accounts": [
+            {
+                "id": wb1.id,
+                "name": wb1.name,
+                "supplier_id": wb1.supplier_id,
+                "is_active": True,
+            },
+            {
+                "id": wb2.id,
+                "name": wb2.name,
+                "supplier_id": None,
+                "is_active": False,
+            },
+        ],
+        "moysklad_accounts": [
+            {
+                "id": ms1.id,
+                "name": ms1.name,
+                "account_id": ms1.account_id,
+                "is_active": True,
+            }
+        ],
+    }
 
 
 def test_integrations_config_snapshot_does_not_expose_tokens(client, db_session):
