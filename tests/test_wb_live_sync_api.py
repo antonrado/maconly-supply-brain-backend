@@ -546,6 +546,11 @@ def test_wb_live_article_bootstrap_dry_run_reports_changes(client, db_session, m
         return pages.pop(0)
 
     monkeypatch.setattr(wb_ingest, "_wb_get_json_rows", fake_wb_get_json_rows)
+    monkeypatch.setattr(
+        wb_ingest,
+        "_utcnow",
+        lambda: datetime(2026, 3, 7, tzinfo=timezone.utc),
+    )
 
     response = client.post(
         "/api/v1/wb/article/bootstrap-live",
@@ -559,6 +564,12 @@ def test_wb_live_article_bootstrap_dry_run_reports_changes(client, db_session, m
     assert response.status_code == 200, response.text
     body = response.json()
 
+    assert body["account_id"] == account.id
+    assert body["fetched_rows"] == 3
+    assert body["pages_requested"] == 3
+    assert body["pages_with_data"] == 1
+    assert body["date_from_effective"] == "2026-02-05T00:00:00Z"
+    assert body["next_cursor"] == "2026-02-05T10:00:00"
     assert body["candidate_supplier_articles"] == 3
     assert body["existing_articles"] == 1
     assert body["inserted_articles"] == 0
