@@ -67,28 +67,36 @@ def test_capture_monitoring_snapshot_persists_record(client, db_session, monkeyp
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    assert isinstance(body["id"], int) and body["id"] > 0
-
-    assert body["wb_accounts_total"] == snapshot.integrations.wb_accounts_total
-    assert body["wb_accounts_active"] == snapshot.integrations.wb_accounts_active
-    assert body["ms_accounts_total"] == snapshot.integrations.ms_accounts_total
-    assert body["ms_accounts_active"] == snapshot.integrations.ms_accounts_active
-
-    assert body["risk_critical"] == snapshot.risks.critical
-    assert body["risk_warning"] == snapshot.risks.warning
-    assert body["risk_ok"] == snapshot.risks.ok
-    assert body["risk_overstock"] == snapshot.risks.overstock
-    assert body["risk_no_data"] == snapshot.risks.no_data
-
-    assert body["articles_with_orders"] == snapshot.orders.articles_with_orders
-    assert body["total_final_order_qty"] == snapshot.orders.total_final_order_qty
-
     # Check that record is actually in DB
     records = db_session.query(MonitoringSnapshotRecord).all()
     assert len(records) == 1
     rec = records[0]
+    assert body == {
+        "id": rec.id,
+        "created_at": _expected_utc_json_timestamp(rec.created_at),
+        "wb_accounts_total": snapshot.integrations.wb_accounts_total,
+        "wb_accounts_active": snapshot.integrations.wb_accounts_active,
+        "ms_accounts_total": snapshot.integrations.ms_accounts_total,
+        "ms_accounts_active": snapshot.integrations.ms_accounts_active,
+        "risk_critical": snapshot.risks.critical,
+        "risk_warning": snapshot.risks.warning,
+        "risk_ok": snapshot.risks.ok,
+        "risk_overstock": snapshot.risks.overstock,
+        "risk_no_data": snapshot.risks.no_data,
+        "articles_with_orders": snapshot.orders.articles_with_orders,
+        "total_final_order_qty": snapshot.orders.total_final_order_qty,
+    }
+
     assert rec.wb_accounts_total == snapshot.integrations.wb_accounts_total
+    assert rec.wb_accounts_active == snapshot.integrations.wb_accounts_active
+    assert rec.ms_accounts_total == snapshot.integrations.ms_accounts_total
+    assert rec.ms_accounts_active == snapshot.integrations.ms_accounts_active
     assert rec.risk_critical == snapshot.risks.critical
+    assert rec.risk_warning == snapshot.risks.warning
+    assert rec.risk_ok == snapshot.risks.ok
+    assert rec.risk_overstock == snapshot.risks.overstock
+    assert rec.risk_no_data == snapshot.risks.no_data
+    assert rec.articles_with_orders == snapshot.orders.articles_with_orders
     assert rec.total_final_order_qty == snapshot.orders.total_final_order_qty
 
 
