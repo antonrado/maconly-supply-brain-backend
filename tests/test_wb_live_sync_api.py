@@ -246,7 +246,10 @@ def test_wb_live_stock_sync_aggregates_warehouses(client, db_session, monkeypatc
     assert body["fetched_rows"] == 2
     assert body["inserted"] == 1
     assert body["updated"] == 0
+    assert body["pages_requested"] == 3
     assert body["pages_with_data"] == 1
+    assert body["date_from_effective"] == "2026-02-01T00:00:00Z"
+    assert body["next_cursor"] == "2026-02-03T10:00:00"
 
     rows = db_session.query(WbStock).all()
     assert len(rows) == 1
