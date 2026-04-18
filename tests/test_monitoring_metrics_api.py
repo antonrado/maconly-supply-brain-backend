@@ -42,6 +42,17 @@ def test_monitoring_metrics_basic_happy_path(client):
     assert rc["supports_timeseries"] is True
     assert rc["used_in_status"] is True
 
+    wb_active = next(item for item in items if item["metric"] == "wb_accounts_active")
+    assert wb_active == {
+        "metric": "wb_accounts_active",
+        "category": "integrations",
+        "label": "Active WB accounts",
+        "description": "Number of active Wildberries integration accounts configured in the system.",
+        "supports_alerts": True,
+        "supports_timeseries": True,
+        "used_in_status": True,
+    }
+
 
 def test_monitoring_metrics_consistency_with_supported_timeseries_metrics(client):
     resp = client.get("/api/v1/planning/monitoring/metrics")
