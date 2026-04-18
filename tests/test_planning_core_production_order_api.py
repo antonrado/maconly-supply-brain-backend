@@ -16727,6 +16727,80 @@ def test_production_order_proposal_from_wb_rejects_without_bundle_recipe_with_st
     }
 
 
+def test_production_order_proposal_from_wb_strict_prefers_bundle_recipe_blocker_over_freshness_failure(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-NO-RECIPE-STRICT",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-NO-RECIPE-STRICT",
+            date=datetime(2020, 1, 1, tzinfo=timezone.utc).date(),
+            sales_qty=5,
+            revenue=None,
+            created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-NO-RECIPE-STRICT",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=5,
+            updated_at=datetime(2020, 1, 2, tzinfo=timezone.utc),
+        )
+    )
+    db_session.flush()
+    (
+        db_session.query(BundleRecipe)
+        .filter(
+            BundleRecipe.article_id == seeded["article"].id,
+            BundleRecipe.bundle_type_id == seeded["bundle_type"].id,
+        )
+        .delete(synchronize_session=False)
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": seeded["article"].id,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "as_of_date": "2020-01-01",
+            "freshness_mode": "strict",
+            "bundle_type_ids": [seeded["bundle_type"].id],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_bundle_recipe",
+        "message": "No bundle recipe defined for the requested bundle types",
+        "article_id": seeded["article"].id,
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [seeded["bundle_type"].id],
+        "missing_bundle_type_ids": [seeded["bundle_type"].id],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_bundle_recipe",
+        "next_steps": ["create_bundle_recipe_for_mapped_bundle_types"],
+    }
+
+
 def test_production_order_proposal_from_wb_normalizes_subset_recipe_miss_to_partial_missing_blocker(
     client,
     db_session,
