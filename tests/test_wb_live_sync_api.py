@@ -2286,4 +2286,26 @@ def test_wb_live_supplies_sync_counts_statuses(client, db_session, monkeypatch):
     assert body["fetched_rows"] == 3
     assert body["status_counts"] == {"5": 2, "3": 1}
     assert len(body["supplies"]) == 3
-    assert body["supplies"][0]["supply_id"] == 1001
+    assert body["supplies"] == [
+        {
+            "supply_id": 1001,
+            "status_id": 5,
+            "create_date": "2026-02-26T00:00:00+03:00",
+            "supply_date": "2026-02-26T00:00:00+03:00",
+            "updated_date": "2026-02-26T01:00:00+03:00",
+        },
+        {
+            "supply_id": 1002,
+            "status_id": 3,
+            "create_date": "2026-02-25T00:00:00+03:00",
+            "supply_date": "2026-02-25T00:00:00+03:00",
+            "updated_date": "2026-02-25T02:00:00+03:00",
+        },
+        {
+            "supply_id": 1003,
+            "status_id": 5,
+            "create_date": "2026-02-24T00:00:00+03:00",
+            "supply_date": "2026-02-24T00:00:00+03:00",
+            "updated_date": "2026-02-24T01:00:00+03:00",
+        },
+    ]
