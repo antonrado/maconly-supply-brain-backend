@@ -15137,6 +15137,7 @@ def test_production_order_proposal_direct_request_overrides_wb_import_state(clie
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15189,6 +15190,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15253,6 +15255,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data_with_admin_def
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3650, "stock": 3650},
         "threshold_source": {"sales": "admin_defaults", "stock": "admin_defaults"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15314,6 +15317,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_data(cli
         "stock_oldest_age_days": 0,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": [],
         "next_steps": ["run_wb_sales_daily_sync_live"],
@@ -15376,6 +15380,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_with_sta
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15451,6 +15456,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3650, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "request"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15514,6 +15520,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_data(cli
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_stock_sync_live"],
@@ -15578,6 +15585,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_with_sta
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15655,6 +15663,7 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
         "stock_oldest_age_days": None,
         "threshold_days": {"sales": 1, "stock": 3650},
         "threshold_source": {"sales": "request", "stock": "admin_defaults"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -15825,6 +15834,7 @@ def test_production_order_proposal_from_wb_strict_admin_defaults_can_force_stale
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "admin_defaults"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -16007,6 +16017,7 @@ def test_production_order_proposal_from_wb_strict_request_thresholds_override_ad
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 1},
         "threshold_source": {"sales": "request", "stock": "request"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
@@ -16092,6 +16103,7 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 1, "stock": 3650},
         "threshold_source": {"sales": "request", "stock": "admin_defaults"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live"],
@@ -16177,6 +16189,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3650, "stock": 1},
         "threshold_source": {"sales": "admin_defaults", "stock": "request"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_stock_sync_live"],
@@ -16249,6 +16262,7 @@ def test_production_order_proposal_from_wb_strict_rejects_sales_only_stale_data(
         "stock_oldest_age_days": 0,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live"],
@@ -16321,6 +16335,7 @@ def test_production_order_proposal_from_wb_strict_rejects_stock_only_stale_data(
         "stock_oldest_age_days": (today_utc - datetime(2020, 1, 2, tzinfo=timezone.utc).date()).days,
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
         "next_steps": ["run_wb_stock_sync_live"],
@@ -16554,11 +16569,64 @@ def test_production_order_proposal_from_wb_rejects_article_without_bundle_types(
         },
         "requested_bundle_type_ids": [],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_wb_mapping",
         "next_steps": [
             "run_wb_article_mapping_discover_live",
             "run_wb_article_bootstrap_live_if_article_missing",
             "run_wb_article_mapping_sync_live",
         ],
+    }
+
+
+def test_production_order_proposal_from_wb_rejects_article_with_mapping_but_without_bundle_type_ids(
+    client,
+    db_session,
+):
+    article = Article(code="PO-NO-BT-IN-MAPPING", name="PO-NO-BT-IN-MAPPING")
+    db_session.add(article)
+    db_session.flush()
+    db_session.add(
+        GlobalPlanningSettings(
+            default_target_coverage_days=60,
+            default_lead_time_days=70,
+            default_service_level_percent=90,
+            default_fabric_min_batch_qty=7000,
+            default_elastic_min_batch_qty=3000,
+        )
+    )
+    db_session.add(
+        ArticleWbMapping(
+            article_id=article.id,
+            wb_sku="WB-PO-NO-BT-IN-MAPPING",
+            bundle_type_id=None,
+        )
+    )
+    db_session.commit()
+
+    payload = {
+        "article_id": article.id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "in_flight_supply": [],
+        "size_weights": {},
+        "bundle_type_ids": [],
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "no_wb_mapped_bundle_types",
+        "message": "No WB-mapped bundle types found for the article",
+        "article_id": article.id,
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_bundle_type_in_mapping",
+        "next_steps": ["set_bundle_type_id_on_article_wb_mapping"],
     }
 
 
@@ -16588,6 +16656,7 @@ def test_production_order_proposal_from_wb_rejects_unmapped_requested_bundle_typ
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "missing_bundle_type_ids": [seeded["bundle_type"].id],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "missing_wb_mapping_for_requested_bundle_types",
         "next_steps": [
             "run_wb_article_mapping_discover_live",
             "run_wb_article_bootstrap_live_if_article_missing",
@@ -16637,14 +16706,72 @@ def test_production_order_proposal_from_wb_rejects_without_bundle_recipe_with_st
         "code": "no_bundle_recipe",
         "message": "No bundle recipe defined for the requested bundle types",
         "article_id": seeded["article"].id,
-        "field": "bundle_daily_sales.bundle_type_id",
+        "field": "bundle_type_ids",
         "field_metadata": {
-            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "description": "List of bundle type IDs",
             "type": "list[int]",
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "missing_bundle_type_ids": [seeded["bundle_type"].id],
-        "next_steps": ["create_bundle_recipe_for_requested_bundle_type_ids"],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_bundle_recipe",
+        "next_steps": ["create_bundle_recipe_for_mapped_bundle_types"],
+    }
+
+
+def test_production_order_proposal_from_wb_normalizes_subset_recipe_miss_to_partial_missing_blocker(
+    client,
+    db_session,
+):
+    seeded = _seed_article_bundle_base(db_session)
+    second_bundle_type = BundleType(code="PO-WB-BT-STRUCT-3", name="PO-WB-BT-STRUCT-3")
+    db_session.add(second_bundle_type)
+    db_session.flush()
+
+    db_session.add_all(
+        [
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-SUBSET-RECIPE-1",
+                bundle_type_id=seeded["bundle_type"].id,
+                size_id=seeded["size_s"].id,
+            ),
+            ArticleWbMapping(
+                article_id=seeded["article"].id,
+                wb_sku="WB-PO-SUBSET-RECIPE-2",
+                bundle_type_id=second_bundle_type.id,
+                size_id=seeded["size_s"].id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/planning/core/production-order/proposal/from-wb",
+        json={
+            "article_id": seeded["article"].id,
+            "planning_horizon_days": 90,
+            "observation_window_days": 30,
+            "bundle_type_ids": [second_bundle_type.id],
+            "in_flight_supply": [],
+            "size_weights": {},
+        },
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == {
+        "code": "missing_bundle_recipe_bundle_types",
+        "message": "Bundle recipe is missing for some requested bundle types",
+        "article_id": seeded["article"].id,
+        "field": "bundle_type_ids",
+        "field_metadata": {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        },
+        "requested_bundle_type_ids": [second_bundle_type.id],
+        "missing_bundle_type_ids": [second_bundle_type.id],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "missing_bundle_recipe_bundle_types",
+        "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
     }
 
 
@@ -16691,13 +16818,15 @@ def test_production_order_proposal_from_wb_rejects_with_partial_missing_bundle_r
         "code": "missing_bundle_recipe_bundle_types",
         "message": "Bundle recipe is missing for some requested bundle types",
         "article_id": seeded["article"].id,
-        "field": "bundle_daily_sales.bundle_type_id",
+        "field": "bundle_type_ids",
         "field_metadata": {
-            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "description": "List of bundle type IDs",
             "type": "list[int]",
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
         "missing_bundle_type_ids": [second_bundle_type.id],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "missing_bundle_recipe_bundle_types",
         "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
     }
 
@@ -16750,13 +16879,15 @@ def test_production_order_proposal_from_wb_rejects_without_sku_scope_with_struct
         "code": "no_sku_units_for_recipe_colors",
         "message": "No SKU units found for article and recipe colors",
         "article_id": seeded["article"].id,
-        "field": "bundle_daily_sales.bundle_type_id",
+        "field": "bundle_type_ids",
         "field_metadata": {
-            "description": "Requested bundle type IDs from bundle_daily_sales input",
+            "description": "List of bundle type IDs",
             "type": "list[int]",
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "recipe_color_ids": [seeded["color_1"].id, seeded["color_2"].id],
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_sku_units_for_recipe_colors",
         "next_steps": ["create_sku_units_for_recipe_colors"],
     }
 
@@ -16793,6 +16924,7 @@ def test_production_order_proposal_rejects_without_bundle_recipe_with_structured
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "missing_bundle_type_ids": [seeded["bundle_type"].id],
+        "blocker": "no_bundle_recipe",
         "next_steps": ["create_bundle_recipe_for_requested_bundle_type_ids"],
     }
 
@@ -16828,6 +16960,7 @@ def test_production_order_proposal_rejects_with_partial_missing_bundle_recipe_wi
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id, second_bundle_type.id],
         "missing_bundle_type_ids": [second_bundle_type.id],
+        "blocker": "missing_bundle_recipe_bundle_types",
         "next_steps": ["add_bundle_recipe_for_missing_bundle_type_ids"],
     }
 
@@ -16870,6 +17003,7 @@ def test_production_order_proposal_rejects_without_sku_scope_with_structured_det
         },
         "requested_bundle_type_ids": [seeded["bundle_type"].id],
         "recipe_color_ids": [seeded["color_1"].id, seeded["color_2"].id],
+        "blocker": "no_sku_units_for_recipe_colors",
         "next_steps": ["create_sku_units_for_recipe_colors"],
     }
 

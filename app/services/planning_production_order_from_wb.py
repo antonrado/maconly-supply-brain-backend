@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import (
     ArticleWbMapping,
+    BundleRecipe,
     BundleType,
     WbIntegrationAccount,
     WbSalesDaily,
@@ -38,6 +39,7 @@ from app.services.planning_production_order_operator_contracts import (
     _build_from_wb_missing_requested_bundle_type_detail,
     _build_from_wb_no_mapping_detail,
 )
+from app.services.wb_ingest import build_from_wb_readiness_next_steps
 
 FROM_WB_TARIFFS_COMMISSION_SOURCE = "from_wb_tariffs_commission"
 FROM_WB_PRICE_ANOMALY_MAX_DEVIATION = 0.30
@@ -46,9 +48,49 @@ FROM_WB_TARIFFS_COMMISSION_PATH = "/api/v1/tariffs/commission"
 FROM_WB_TARIFFS_HTTP_TIMEOUT_SECONDS = 20.0
 
 
+def _translate_from_wb_internal_bundle_type_detail(
+    detail: object,
+    *,
+    recipe_bundle_type_ids: list[int],
+) -> object:
+    if not isinstance(detail, dict):
+        return detail
+
+    translated = dict(detail)
+    translated_any = False
+
+    if detail.get("field") == "bundle_daily_sales.bundle_type_id":
+        translated["field"] = "bundle_type_ids"
+        translated["field_metadata"] = {
+            "description": "List of bundle type IDs",
+            "type": "list[int]",
+        }
+        translated_any = True
+
+    blocker = str(detail["blocker"]) if detail.get("blocker") is not None else None
+    if blocker == "no_bundle_recipe" and recipe_bundle_type_ids:
+        blocker = "missing_bundle_recipe_bundle_types"
+        translated["code"] = blocker
+        translated["message"] = "Bundle recipe is missing for some requested bundle types"
+        translated["blocker"] = blocker
+        translated_any = True
+
+    if blocker in {
+        "no_bundle_recipe",
+        "missing_bundle_recipe_bundle_types",
+        "no_sku_units_for_recipe_colors",
+    }:
+        translated["readiness_endpoint"] = "/api/v1/wb/from-wb/readiness"
+        translated["next_steps"] = build_from_wb_readiness_next_steps(blocker)
+        translated_any = True
+
+    return translated if translated_any else detail
+
+
 @dataclass(frozen=True)
 class _FromWbPreflightContext:
     bundle_type_ids: list[int]
+    recipe_bundle_type_ids: list[int]
     daily_sales_by_bundle: dict[int, float]
     effective_as_of_date: date | None
     observed_price_calibration: dict[str, object]
@@ -111,13 +153,25 @@ def _build_from_wb_preflight_context(
         requested_bundle_type_ids=request.bundle_type_ids,
     )
     if not bundle_type_ids:
+        blocker = "no_wb_mapping"
+        if not request.bundle_type_ids and _has_wb_mapping_rows_for_article(
+            db=db,
+            article_id=request.article_id,
+        ):
+            blocker = "no_bundle_type_in_mapping"
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_build_from_wb_no_mapping_detail(
                 article_id=request.article_id,
                 requested_bundle_type_ids=request.bundle_type_ids,
+                blocker=blocker,
             ),
         )
+
+    recipe_bundle_type_ids = _get_recipe_bundle_type_ids(
+        db=db,
+        article_id=request.article_id,
+    )
 
     daily_sales_by_bundle, effective_as_of_date = _load_wb_bundle_daily_sales(
         db=db,
@@ -194,6 +248,7 @@ def _build_from_wb_preflight_context(
 
     return _FromWbPreflightContext(
         bundle_type_ids=bundle_type_ids,
+        recipe_bundle_type_ids=recipe_bundle_type_ids,
         daily_sales_by_bundle=daily_sales_by_bundle,
         effective_as_of_date=effective_as_of_date,
         observed_price_calibration=observed_price_calibration,
@@ -233,15 +288,28 @@ def _build_production_order_proposal_from_wb_response(
         request=request,
         build_from_wb_freshness_failure_detail=build_from_wb_freshness_failure_detail,
     )
-    response = build_production_order_proposal(
-        db=db,
-        request=preflight_context.proposal_request,
-        runtime_economic_overrides=preflight_context.runtime_overrides_payload,
-        runtime_economic_source=FROM_WB_OBSERVED_ECONOMIC_SOURCE,
-        runtime_economic_source_overrides=preflight_context.runtime_source_overrides_payload,
-        shared_color_pool_observation_window_days=request.observation_window_days,
-        shared_color_pool_as_of_date=preflight_context.effective_as_of_date,
-    )
+    try:
+        response = build_production_order_proposal(
+            db=db,
+            request=preflight_context.proposal_request,
+            runtime_economic_overrides=preflight_context.runtime_overrides_payload,
+            runtime_economic_source=FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+            runtime_economic_source_overrides=preflight_context.runtime_source_overrides_payload,
+            shared_color_pool_observation_window_days=request.observation_window_days,
+            shared_color_pool_as_of_date=preflight_context.effective_as_of_date,
+        )
+    except HTTPException as exc:
+        translated_detail = _translate_from_wb_internal_bundle_type_detail(
+            exc.detail,
+            recipe_bundle_type_ids=preflight_context.recipe_bundle_type_ids,
+        )
+        if translated_detail != exc.detail:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=translated_detail,
+                headers=exc.headers,
+            ) from exc
+        raise
     response.explanation = finalize_from_wb_explainability(
         explanation=response.explanation,
         explainability_mode=request.explainability_mode,
@@ -389,6 +457,36 @@ def _get_wb_mapped_bundle_type_ids(
 
     rows = query.distinct().all()
     return {int(row.bundle_type_id) for row in rows}
+
+
+def _has_wb_mapping_rows_for_article(
+    *,
+    db: Session,
+    article_id: int,
+) -> bool:
+    return (
+        db.query(ArticleWbMapping.article_id)
+        .filter(ArticleWbMapping.article_id == article_id)
+        .first()
+        is not None
+    )
+
+
+def _get_recipe_bundle_type_ids(
+    *,
+    db: Session,
+    article_id: int,
+) -> list[int]:
+    rows = (
+        db.query(BundleRecipe.bundle_type_id)
+        .filter(
+            BundleRecipe.article_id == article_id,
+            BundleRecipe.bundle_type_id.is_not(None),
+        )
+        .distinct()
+        .all()
+    )
+    return sorted(int(row.bundle_type_id) for row in rows)
 
 
 def _resolve_bundle_type_ids_for_from_wb(

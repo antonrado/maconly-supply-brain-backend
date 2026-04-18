@@ -70,6 +70,7 @@ def _build_from_wb_freshness_failure_detail(
             "stock": int(stock_stale_after_days),
         },
         "threshold_source": dict(threshold_source),
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": blocker,
         "stale_components": stale_components,
         "next_steps": next_steps,
@@ -80,6 +81,7 @@ def _build_from_wb_no_mapping_detail(
     *,
     article_id: int,
     requested_bundle_type_ids: list[int] | None,
+    blocker: str = "no_wb_mapping",
 ) -> dict[str, object]:
     return {
         "code": "no_wb_mapped_bundle_types",
@@ -92,7 +94,8 @@ def _build_from_wb_no_mapping_detail(
         },
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in (requested_bundle_type_ids or [])],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
-        "next_steps": build_from_wb_readiness_next_steps("no_wb_mapping"),
+        "blocker": blocker,
+        "next_steps": build_from_wb_readiness_next_steps(blocker),
     }
 
 
@@ -114,7 +117,8 @@ def _build_from_wb_missing_requested_bundle_type_detail(
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
         "missing_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in missing_bundle_type_ids],
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
-        "next_steps": build_from_wb_readiness_next_steps("no_wb_mapping"),
+        "blocker": "missing_wb_mapping_for_requested_bundle_types",
+        "next_steps": build_from_wb_readiness_next_steps("missing_wb_mapping_for_requested_bundle_types"),
     }
 
 
@@ -148,6 +152,7 @@ def _build_direct_missing_bundle_recipe_detail(
         },
         "requested_bundle_type_ids": requested,
         "missing_bundle_type_ids": all_missing,
+        "blocker": code,
         "next_steps": next_steps,
     }
 
@@ -169,7 +174,8 @@ def _build_direct_missing_sku_scope_detail(
         },
         "requested_bundle_type_ids": [int(bundle_type_id) for bundle_type_id in requested_bundle_type_ids],
         "recipe_color_ids": [int(color_id) for color_id in recipe_color_ids],
-        "next_steps": ["create_sku_units_for_recipe_colors"],
+        "blocker": "no_sku_units_for_recipe_colors",
+        "next_steps": build_from_wb_readiness_next_steps("no_sku_units_for_recipe_colors"),
     }
 
 
