@@ -1853,7 +1853,9 @@ def _build_expected_compact_freshness(freshness_meta: dict[str, object]) -> dict
         "threshold_source": freshness_meta["threshold_source"],
     }
     if "blocker" in freshness_meta:
+        expected_compact_freshness["readiness_endpoint"] = freshness_meta["readiness_endpoint"]
         expected_compact_freshness["blocker"] = freshness_meta["blocker"]
+        expected_compact_freshness["stale_components"] = freshness_meta["stale_components"]
         expected_compact_freshness["next_steps"] = freshness_meta["next_steps"]
     return expected_compact_freshness
 
@@ -13914,7 +13916,9 @@ def test_production_order_proposal_from_wb_without_stock_uses_latest_sales_as_of
     assert from_wb_meta["freshness"]["sales_age_days"] == 0
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] is None
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] is None
+    assert from_wb_meta["freshness"]["readiness_endpoint"] == "/api/v1/wb/from-wb/readiness"
     assert from_wb_meta["freshness"]["blocker"] == "no_wb_stock_data"
+    assert from_wb_meta["freshness"]["stale_components"] == []
     assert from_wb_meta["freshness"]["next_steps"] == [
         "run_wb_stock_sync_live",
     ]
@@ -14050,7 +14054,9 @@ def test_production_order_proposal_from_wb_without_sales_uses_none_as_of(client,
         "sales": "global_default",
         "stock": "global_default",
     }
+    assert from_wb_meta["freshness"]["readiness_endpoint"] == "/api/v1/wb/from-wb/readiness"
     assert from_wb_meta["freshness"]["blocker"] == "no_wb_sales_data"
+    assert from_wb_meta["freshness"]["stale_components"] == ["stock"]
     assert from_wb_meta["freshness"]["next_steps"] == [
         "run_wb_sales_daily_sync_live",
         "run_wb_stock_sync_live",
@@ -14744,7 +14750,9 @@ def test_production_order_proposal_from_wb_warn_reports_stale_sales_and_stock_me
     assert from_wb_meta["freshness"]["sales_age_days"] == expected_sales_age_days
     assert from_wb_meta["freshness"]["stock_oldest_age_days"] == expected_stock_age_days
     assert from_wb_meta["freshness"]["stock_age_days_by_bundle"][bundle_key] == expected_stock_age_days
+    assert from_wb_meta["freshness"]["readiness_endpoint"] == "/api/v1/wb/from-wb/readiness"
     assert from_wb_meta["freshness"]["blocker"] == "stale_wb_sales_and_stock_data"
+    assert from_wb_meta["freshness"]["stale_components"] == ["sales", "stock"]
     assert from_wb_meta["freshness"]["next_steps"] == [
         "run_wb_sales_daily_sync_live",
         "run_wb_stock_sync_live",

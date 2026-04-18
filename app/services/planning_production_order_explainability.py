@@ -808,6 +808,18 @@ def _apply_from_wb_explainability(
         },
         "threshold_source": freshness_threshold_source,
     }
+    stale_sales = (
+        freshness_sales_age_days is not None and freshness_sales_age_days > sales_stale_after_days
+    )
+    stale_stock = (
+        freshness_stock_oldest_age_days is not None
+        and freshness_stock_oldest_age_days > stock_stale_after_days
+    )
+    stale_components: list[str] = []
+    if stale_sales:
+        stale_components.append("sales")
+    if stale_stock:
+        stale_components.append("stock")
     freshness_actionability_text = ""
     freshness_blocker = build_from_wb_freshness_blocker(
         freshness_status=freshness_status,
@@ -824,7 +836,9 @@ def _apply_from_wb_explainability(
         stock_stale_after_days=stock_stale_after_days,
     )
     if freshness_blocker is not None or freshness_next_steps:
+        freshness_meta["readiness_endpoint"] = "/api/v1/wb/from-wb/readiness"
         freshness_meta["blocker"] = freshness_blocker
+        freshness_meta["stale_components"] = stale_components
         freshness_meta["next_steps"] = freshness_next_steps
         freshness_actionability_text = (
             f", freshness_blocker={freshness_meta['blocker']}, "
@@ -1100,7 +1114,9 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
                 "threshold_source": freshness_raw.get("threshold_source"),
             }
             if "blocker" in freshness_raw:
+                freshness_compact["readiness_endpoint"] = freshness_raw.get("readiness_endpoint")
                 freshness_compact["blocker"] = freshness_raw.get("blocker")
+                freshness_compact["stale_components"] = freshness_raw.get("stale_components")
                 freshness_compact["next_steps"] = freshness_raw.get("next_steps")
         if isinstance(economic_observed_raw, dict):
             economic_observed_compact = {
