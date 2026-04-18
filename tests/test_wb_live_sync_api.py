@@ -176,14 +176,16 @@ def test_wb_live_sales_sync_ingests_daily_rows(client, db_session, monkeypatch):
     assert response.status_code == 200, response.text
     body = response.json()
 
-    assert body["account_id"] == account.id
-    assert body["fetched_rows"] == 3
-    assert body["inserted"] == 1
-    assert body["updated"] == 0
-    assert body["pages_requested"] == 5
-    assert body["pages_with_data"] == 1
-    assert body["date_from_effective"] == "2026-02-01T00:00:00Z"
-    assert body["next_cursor"] == "2026-02-01T12:00:00"
+    assert body == {
+        "account_id": account.id,
+        "fetched_rows": 3,
+        "inserted": 1,
+        "updated": 0,
+        "pages_requested": 5,
+        "pages_with_data": 1,
+        "date_from_effective": "2026-02-01T00:00:00Z",
+        "next_cursor": "2026-02-01T12:00:00",
+    }
 
     assert len(calls) == 2
     assert calls[0]["path"] == wb_ingest.WB_REPORTS_SALES_PATH
