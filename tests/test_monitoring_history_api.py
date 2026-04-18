@@ -26,6 +26,12 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+def _expected_utc_json_timestamp(value: datetime) -> str:
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.isoformat(timespec="seconds")
+
+
 def test_capture_monitoring_snapshot_persists_record(client, db_session, monkeypatch):
     snapshot = MonitoringSnapshot(
         integrations=IntegrationStatus(
@@ -149,9 +155,38 @@ def test_get_monitoring_history_with_limit_and_ordering(client, db_session):
     items = body["items"]
     assert len(items) == 2
 
-    # Should be ordered by created_at DESC, so rec3 then rec2
-    assert items[0]["risk_critical"] == 3
-    assert items[1]["risk_critical"] == 2
+    assert items == [
+        {
+            "id": rec3.id,
+            "created_at": _expected_utc_json_timestamp(rec3.created_at),
+            "wb_accounts_total": 2,
+            "wb_accounts_active": 2,
+            "ms_accounts_total": 1,
+            "ms_accounts_active": 1,
+            "risk_critical": 3,
+            "risk_warning": 0,
+            "risk_ok": 0,
+            "risk_overstock": 0,
+            "risk_no_data": 0,
+            "articles_with_orders": 2,
+            "total_final_order_qty": 30,
+        },
+        {
+            "id": rec2.id,
+            "created_at": _expected_utc_json_timestamp(rec2.created_at),
+            "wb_accounts_total": 1,
+            "wb_accounts_active": 1,
+            "ms_accounts_total": 1,
+            "ms_accounts_active": 1,
+            "risk_critical": 2,
+            "risk_warning": 0,
+            "risk_ok": 0,
+            "risk_overstock": 0,
+            "risk_no_data": 0,
+            "articles_with_orders": 1,
+            "total_final_order_qty": 20,
+        },
+    ]
 
 
 def test_get_monitoring_history_limit_validation(client, db_session):  # noqa: ARG001
