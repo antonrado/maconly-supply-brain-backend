@@ -38,6 +38,18 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _parse_json_datetime(value: str) -> datetime:
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+    return _normalize_datetime(datetime.fromisoformat(value))
+
+
 def _setup_article_for_replenishment(db_session, code: str):
     article = create_article(db_session, code=code)
     color = create_color(db_session, inner_code=f"C-{code}")
@@ -1049,20 +1061,25 @@ def test_shipment_preset_no_history(client, db_session):
 	assert resp.status_code == 200, resp.text
 	body = resp.json()
 
-	assert body["target_date"] == target_date
-	assert body["suggested_wb_arrival_date"] == "2025-02-08"
-
-	assert body["suggested_strategy"] == "normal"
-	assert body["suggested_zero_sales_policy"] == "ignore"
-	assert body["suggested_target_coverage_days"] == 30
-	assert body["suggested_min_coverage_days"] == 7
-	assert body["suggested_max_coverage_days_after"] == 60
-	assert body["suggested_max_replenishment_per_article"] is None
-
-	assert body["recent_shipments"] == []
-	assert body["avg_total_final_qty_last3"] is None
-	assert body["last_shipment_total_final_qty"] is None
-	assert "No non-cancelled WB shipments found" in body["explanation"]
+	assert body == {
+		"target_date": target_date,
+		"suggested_wb_arrival_date": "2025-02-08",
+		"suggested_strategy": "normal",
+		"suggested_zero_sales_policy": "ignore",
+		"suggested_target_coverage_days": 30,
+		"suggested_min_coverage_days": 7,
+		"suggested_max_coverage_days_after": 60,
+		"suggested_max_replenishment_per_article": None,
+		"recent_shipments": [],
+		"avg_total_final_qty_last3": None,
+		"last_shipment_total_final_qty": None,
+		"default_comment_template": "WB shipment for coverage ~30 days (ETA 2025-02-08)",
+		"explanation": (
+			"No non-cancelled WB shipments found. Used global defaults: "
+			"strategy=normal, zero_sales_policy=ignore, target_coverage_days=30, "
+			"min_coverage_days=7, max_coverage_days_after=60, transit_days=7."
+		),
+	}
 
 
 def test_shipment_preset_with_history(client, db_session):
@@ -1114,7 +1131,7 @@ def test_shipment_preset_with_history(client, db_session):
 		db_session.add(item)
 		return shipment
 
-	_make_shipment(
+	older = _make_shipment(
 		status="approved",
 		target=date(2025, 1, 1),
 		arrival=date(2025, 1, 8),
@@ -1137,6 +1154,23 @@ def test_shipment_preset_with_history(client, db_session):
 	assert resp.status_code == 200, resp.text
 	body = resp.json()
 
+	assert set(body.keys()) == {
+		"target_date",
+		"suggested_wb_arrival_date",
+		"suggested_strategy",
+		"suggested_zero_sales_policy",
+		"suggested_target_coverage_days",
+		"suggested_min_coverage_days",
+		"suggested_max_coverage_days_after",
+		"suggested_max_replenishment_per_article",
+		"recent_shipments",
+		"avg_total_final_qty_last3",
+		"last_shipment_total_final_qty",
+		"default_comment_template",
+		"explanation",
+	}
+
+	assert body["target_date"] == "2025-02-01"
 	assert body["suggested_strategy"] == "aggressive"
 	assert body["suggested_zero_sales_policy"] == "keep"
 	assert body["suggested_target_coverage_days"] == 45
@@ -1145,14 +1179,46 @@ def test_shipment_preset_with_history(client, db_session):
 	assert body["suggested_max_replenishment_per_article"] == 123
 
 	assert body["suggested_wb_arrival_date"] == "2025-02-08"
+	assert body["avg_total_final_qty_last3"] == 150.0
+	assert body["last_shipment_total_final_qty"] == 200
+	assert body["default_comment_template"] == "WB shipment for coverage ~45 days (ETA 2025-02-08)"
+	assert body["explanation"] == (
+		f"Defaults derived from last non-cancelled shipment #{latest.id} "
+		f"(created_at={latest.created_at.isoformat()}). "
+		"transit_days≈7, "
+		"strategy=aggressive, "
+		"zero_sales_policy=keep, "
+		"target_coverage_days=45, "
+		"min_coverage_days=10, "
+		"max_coverage_days_after=90."
+	)
 
 	recent = body["recent_shipments"]
-	assert recent
-	assert recent[0]["id"] == latest.id
-	assert recent[0]["total_final_qty"] == 200
-	assert recent[0]["total_items"] == 1
+	assert len(recent) == 2
 
-	assert body["last_shipment_total_final_qty"] == 200
+	expected_recent = [
+		(latest, "shipped", "2025-01-02", "2025-01-09", 200, 1),
+		(older, "approved", "2025-01-01", "2025-01-08", 100, 1),
+	]
+	for payload_item, (shipment_obj, status_value, target_value, arrival_value, total_final_qty, total_items) in zip(recent, expected_recent):
+		assert set(payload_item.keys()) == {
+			"id",
+			"status",
+			"target_date",
+			"wb_arrival_date",
+			"created_at",
+			"updated_at",
+			"total_final_qty",
+			"total_items",
+		}
+		assert payload_item["id"] == shipment_obj.id
+		assert payload_item["status"] == status_value
+		assert payload_item["target_date"] == target_value
+		assert payload_item["wb_arrival_date"] == arrival_value
+		assert payload_item["total_final_qty"] == total_final_qty
+		assert payload_item["total_items"] == total_items
+		assert _parse_json_datetime(payload_item["created_at"]) == _normalize_datetime(shipment_obj.created_at)
+		assert _parse_json_datetime(payload_item["updated_at"]) == _normalize_datetime(shipment_obj.updated_at)
 
 
 def test_shipment_preset_required_param(client):
