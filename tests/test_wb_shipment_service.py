@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -45,8 +45,6 @@ def _setup_article_for_replenishment(db_session: Session):
     )
 
     # Add NSK stock so that replenishment can happen
-    from datetime import datetime, timezone
-
     wh = Warehouse(code="NSK-SHIP", name="NSK-SHIP", type="internal")
     db_session.add(wh)
     db_session.flush()
@@ -80,7 +78,7 @@ def test_create_wb_shipment_from_proposal_copies_replenishment_items(db_session)
         replenishment_strategy="normal",
         zero_sales_policy="ignore",
         max_coverage_days_after=60,
-        max_replenishment_per_article=None,
+        max_replenishment_per_article=77,
         article_ids=None,
         explanation=True,
         comment="Test shipment from proposal",
@@ -112,6 +110,12 @@ def test_create_wb_shipment_from_proposal_copies_replenishment_items(db_session)
     assert shipment.target_coverage_days == payload.target_coverage_days
     assert shipment.min_coverage_days == payload.min_coverage_days
     assert shipment.max_coverage_days_after == payload.max_coverage_days_after
+    assert shipment.max_replenishment_per_article == payload.max_replenishment_per_article
+    assert shipment.created_at is not None
+    assert shipment.updated_at is not None
+    assert isinstance(shipment.created_at, datetime)
+    assert isinstance(shipment.updated_at, datetime)
+    assert shipment.created_at == shipment.updated_at
 
     items_db = (
         db_session.query(WbShipmentItem)
@@ -142,6 +146,12 @@ def test_create_wb_shipment_from_proposal_copies_replenishment_items(db_session)
 
     for key, exp in exp_map.items():
         db_it = db_map[key]
+        assert db_it.id is not None
+        assert db_it.shipment_id == shipment.id
+        assert db_it.article_id == exp.article_id
+        assert db_it.color_id == exp.color_id
+        assert db_it.size_id == exp.size_id
+        assert db_it.wb_sku == exp.wb_sku
         assert db_it.recommended_qty == exp.recommended_qty
         assert db_it.final_qty == exp.recommended_qty
         assert db_it.nsk_stock_available == exp.nsk_stock_available
