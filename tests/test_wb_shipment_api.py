@@ -944,7 +944,7 @@ def test_shipment_item_editing_respects_status(client, db_session):
     shipment_id = shipment["id"]
     assert shipment["items"], "Expected items in created shipment"
     item_id = shipment["items"][0]["id"]
-    old_updated_at = shipment["updated_at"]
+    old_updated_at = _parse_json_datetime(shipment["updated_at"])
 
     patch_payload = {"final_qty": 50, "explanation": "Manual adjustment"}
 
@@ -955,10 +955,99 @@ def test_shipment_item_editing_respects_status(client, db_session):
     )
     assert resp_patch.status_code == 200
     shipment_after = resp_patch.json()
-    patched_item = next(i for i in shipment_after["items"] if i["id"] == item_id)
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment_id)
+        .first()
+    )
+    assert shipment_db is not None
+    assert set(shipment_after.keys()) == {
+        "id",
+        "status",
+        "target_date",
+        "wb_arrival_date",
+        "comment",
+        "strategy",
+        "zero_sales_policy",
+        "target_coverage_days",
+        "min_coverage_days",
+        "max_coverage_days_after",
+        "max_replenishment_per_article",
+        "created_at",
+        "updated_at",
+        "items",
+    }
+    assert shipment_after["id"] == shipment_db.id
+    assert shipment_after["status"] == shipment_db.status
+    assert shipment_after["target_date"] == shipment_db.target_date.isoformat()
+    assert shipment_after["wb_arrival_date"] == shipment_db.wb_arrival_date.isoformat()
+    assert shipment_after["comment"] == shipment_db.comment
+    assert shipment_after["strategy"] == shipment_db.strategy
+    assert shipment_after["zero_sales_policy"] == shipment_db.zero_sales_policy
+    assert shipment_after["target_coverage_days"] == shipment_db.target_coverage_days
+    assert shipment_after["min_coverage_days"] == shipment_db.min_coverage_days
+    assert shipment_after["max_coverage_days_after"] == shipment_db.max_coverage_days_after
+    assert shipment_after["max_replenishment_per_article"] == shipment_db.max_replenishment_per_article
+    assert _parse_json_datetime(shipment_after["created_at"]) == _normalize_datetime(shipment_db.created_at)
+    assert _parse_json_datetime(shipment_after["updated_at"]) == _normalize_datetime(shipment_db.updated_at)
+    assert _parse_json_datetime(shipment_after["updated_at"]) != old_updated_at
+
+    items_db = (
+        db_session.query(WbShipmentItem)
+        .filter(WbShipmentItem.shipment_id == shipment_id)
+        .all()
+    )
+    assert len(shipment_after["items"]) == len(items_db)
+    payload_map = {item["id"]: item for item in shipment_after["items"]}
+    db_map = {item.id: item for item in items_db}
+    assert set(payload_map.keys()) == set(db_map.keys())
+
+    for payload_item_id, payload_item in payload_map.items():
+        db_item = db_map[payload_item_id]
+        assert set(payload_item.keys()) == {
+            "id",
+            "shipment_id",
+            "article_id",
+            "color_id",
+            "size_id",
+            "wb_sku",
+            "recommended_qty",
+            "final_qty",
+            "nsk_stock_available",
+            "oos_risk_before",
+            "oos_risk_after",
+            "limited_by_nsk_stock",
+            "limited_by_max_coverage",
+            "ignored_due_to_zero_sales",
+            "below_min_coverage_threshold",
+            "article_total_deficit",
+            "article_total_recommended",
+            "explanation",
+        }
+        assert payload_item == {
+            "id": db_item.id,
+            "shipment_id": shipment_db.id,
+            "article_id": db_item.article_id,
+            "color_id": db_item.color_id,
+            "size_id": db_item.size_id,
+            "wb_sku": db_item.wb_sku,
+            "recommended_qty": db_item.recommended_qty,
+            "final_qty": db_item.final_qty,
+            "nsk_stock_available": db_item.nsk_stock_available,
+            "oos_risk_before": db_item.oos_risk_before,
+            "oos_risk_after": db_item.oos_risk_after,
+            "limited_by_nsk_stock": db_item.limited_by_nsk_stock,
+            "limited_by_max_coverage": db_item.limited_by_max_coverage,
+            "ignored_due_to_zero_sales": db_item.ignored_due_to_zero_sales,
+            "below_min_coverage_threshold": db_item.below_min_coverage_threshold,
+            "article_total_deficit": db_item.article_total_deficit,
+            "article_total_recommended": db_item.article_total_recommended,
+            "explanation": db_item.explanation,
+        }
+
+    patched_item = payload_map[item_id]
     assert patched_item["final_qty"] == 50
     assert patched_item["explanation"] == "Manual adjustment"
-    assert shipment_after["updated_at"] != old_updated_at
 
     # 404 for non-existing shipment
     resp_order_404 = client.patch(
