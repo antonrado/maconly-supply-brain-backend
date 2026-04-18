@@ -158,22 +158,34 @@ def test_monitoring_dashboard_with_history_and_rules(client, db_session, monkeyp
         fake_build_monitoring_snapshot,
     )
 
-    resp = client.get("/api/v1/planning/monitoring/dashboard")
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
+    resp_dashboard = client.get("/api/v1/planning/monitoring/dashboard")
+    assert resp_dashboard.status_code == 200, resp_dashboard.text
+    body = resp_dashboard.json()
 
-    snap = body["snapshot"]
-    assert snap["risks"]["critical"] == 999
+    resp_snapshot = client.get("/api/v1/planning/monitoring/snapshot")
+    assert resp_snapshot.status_code == 200, resp_snapshot.text
 
-    history_items = body["history"]["items"]
-    assert len(history_items) == 2
+    resp_history = client.get("/api/v1/planning/monitoring/history")
+    assert resp_history.status_code == 200, resp_history.text
 
-    rules_items = body["rules"]["items"]
-    assert len(rules_items) == 2
-    rule_ids = {r["id"] for r in rules_items}
-    assert rule_ids == {rule1.id, rule2.id}
+    resp_alerts = client.get("/api/v1/planning/monitoring/alerts")
+    assert resp_alerts.status_code == 200, resp_alerts.text
 
-    assert isinstance(body["alerts"]["items"], list)
+    resp_rules = client.get("/api/v1/planning/monitoring/alert-rules")
+    assert resp_rules.status_code == 200, resp_rules.text
+
+    resp_status = client.get("/api/v1/planning/monitoring/status")
+    assert resp_status.status_code == 200, resp_status.text
+
+    assert body["snapshot"] == resp_snapshot.json()
+    assert body["history"] == resp_history.json()
+    assert body["alerts"] == resp_alerts.json()
+    assert body["rules"] == resp_rules.json()
+    assert body["status"] == {
+        "overall_status": resp_status.json()["overall_status"],
+        "critical_alerts": resp_status.json()["critical_alerts"],
+        "warning_alerts": resp_status.json()["warning_alerts"],
+    }
 
 
 def test_monitoring_dashboard_alerts_triggered(client, db_session, monkeypatch):
