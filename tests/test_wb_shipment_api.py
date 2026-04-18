@@ -714,7 +714,7 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
     db_session.commit()
 
     resp_before = client.get(f"/api/v1/wb/manager/shipment/{shipment.id}")
-    old_updated_at = resp_before.json()["updated_at"]
+    old_updated_at = _parse_json_datetime(resp_before.json()["updated_at"])
 
     # Valid comment update
     resp = client.patch(
@@ -723,8 +723,44 @@ def test_shipment_status_invalid_and_comment_updates_timestamp(client, db_sessio
     )
     assert resp.status_code == 200
     body = resp.json()
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment.id)
+        .first()
+    )
+    assert shipment_db is not None
+    assert set(body.keys()) == {
+        "id",
+        "status",
+        "target_date",
+        "wb_arrival_date",
+        "comment",
+        "strategy",
+        "zero_sales_policy",
+        "target_coverage_days",
+        "min_coverage_days",
+        "max_coverage_days_after",
+        "max_replenishment_per_article",
+        "created_at",
+        "updated_at",
+        "items",
+    }
+    assert body["id"] == shipment_db.id
+    assert body["status"] == shipment_db.status
+    assert body["target_date"] == shipment_db.target_date.isoformat()
+    assert body["wb_arrival_date"] == shipment_db.wb_arrival_date.isoformat()
     assert body["comment"] == "Updated by test"
-    assert body["updated_at"] != old_updated_at
+    assert body["comment"] == shipment_db.comment
+    assert body["strategy"] == shipment_db.strategy
+    assert body["zero_sales_policy"] == shipment_db.zero_sales_policy
+    assert body["target_coverage_days"] == shipment_db.target_coverage_days
+    assert body["min_coverage_days"] == shipment_db.min_coverage_days
+    assert body["max_coverage_days_after"] == shipment_db.max_coverage_days_after
+    assert body["max_replenishment_per_article"] == shipment_db.max_replenishment_per_article
+    assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment_db.created_at)
+    assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment_db.updated_at)
+    assert _parse_json_datetime(body["updated_at"]) != old_updated_at
+    assert body["items"] == []
 
     # Invalid status value
     resp_bad = client.patch(
