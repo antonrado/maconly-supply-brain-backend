@@ -36,6 +36,7 @@ from app.services.planning_production_order_freshness import (
     build_from_wb_freshness_snapshot,
 )
 from app.services.planning_production_order_operator_contracts import (
+    _build_direct_missing_bundle_recipe_detail,
     _build_from_wb_missing_requested_bundle_type_detail,
     _build_from_wb_no_mapping_detail,
 )
@@ -85,6 +86,33 @@ def _translate_from_wb_internal_bundle_type_detail(
         translated_any = True
 
     return translated if translated_any else detail
+
+
+def _raise_from_wb_missing_bundle_recipe_failure_if_needed(
+    *,
+    article_id: int,
+    bundle_type_ids: list[int],
+    recipe_bundle_type_ids: list[int],
+) -> None:
+    missing_bundle_type_ids = [
+        bundle_type_id
+        for bundle_type_id in bundle_type_ids
+        if bundle_type_id not in recipe_bundle_type_ids
+    ]
+    if not missing_bundle_type_ids:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=_translate_from_wb_internal_bundle_type_detail(
+            _build_direct_missing_bundle_recipe_detail(
+                article_id=article_id,
+                requested_bundle_type_ids=bundle_type_ids,
+                missing_bundle_type_ids=missing_bundle_type_ids,
+            ),
+            recipe_bundle_type_ids=recipe_bundle_type_ids,
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -171,6 +199,11 @@ def _build_from_wb_preflight_context(
     recipe_bundle_type_ids = _get_recipe_bundle_type_ids(
         db=db,
         article_id=request.article_id,
+    )
+    _raise_from_wb_missing_bundle_recipe_failure_if_needed(
+        article_id=request.article_id,
+        bundle_type_ids=bundle_type_ids,
+        recipe_bundle_type_ids=recipe_bundle_type_ids,
     )
 
     daily_sales_by_bundle, effective_as_of_date = _load_wb_bundle_daily_sales(
