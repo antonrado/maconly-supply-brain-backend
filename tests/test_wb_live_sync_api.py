@@ -315,7 +315,10 @@ def test_wb_live_article_mapping_sync_matches_article_codes(client, db_session, 
     assert body["ambiguous_normalized_pairs"] == 0
     assert body["inserted"] == 1
     assert body["updated"] == 0
+    assert body["pages_requested"] == 5
     assert body["pages_with_data"] == 1
+    assert body["date_from_effective"] == "2026-02-01T00:00:00Z"
+    assert body["next_cursor"] == "2026-02-03T10:00:00"
 
     rows = db_session.query(ArticleWbMapping).all()
     assert len(rows) == 1
