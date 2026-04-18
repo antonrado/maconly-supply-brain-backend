@@ -853,76 +853,58 @@ def discover_article_mapping_from_wb_api(
         key=lambda code: (-int(aggregates[code]["rows"]), code),
     )
     selected_codes = sorted_codes[:limit]
-    candidate_supplier_articles = len(selected_codes)
+    unique_supplier_articles = len(selected_codes)
 
-    existing_by_code: dict[str, Article] = {}
-    if selected_codes:
-        existing_rows = db.query(Article).filter(Article.code.in_(selected_codes)).all()
-        existing_by_code = {str(row.code): row for row in existing_rows}
+    exact_by_code, normalized_by_code = _build_article_match_index(
+        db=db,
+        exact_article_codes=set(selected_codes),
+    )
 
-    existing_articles = 0
-    inserted_articles = 0
-    skipped_invalid = 0
-    items: list[WbLiveArticleBootstrapItem] = []
+    matched_supplier_articles = 0
+    unmatched_supplier_articles = 0
+    ambiguous_supplier_articles = 0
+    items: list[WbLiveMappingDiscoverItem] = []
 
     for supplier_article in selected_codes:
         bucket = aggregates[supplier_article]
         row_count = int(bucket["rows"])
+        wb_skus = bucket.get("wb_skus")
+        unique_wb_skus = len(wb_skus) if isinstance(wb_skus, set) else 0
+        match_source, matched_article_id, matched_article_code = _resolve_article_match(
+            supplier_article=supplier_article,
+            exact_by_code=exact_by_code,
+            normalized_by_code=normalized_by_code,
+        )
 
-        if len(supplier_article) > 50:
-            skipped_invalid += 1
-            items.append(
-                WbLiveArticleBootstrapItem(
-                    supplier_article=supplier_article,
-                    rows=row_count,
-                    status="invalid_too_long",
-                    article_id=None,
-                )
-            )
-            continue
-
-        existing = existing_by_code.get(supplier_article)
-        if existing is not None:
-            existing_articles += 1
-            items.append(
-                WbLiveArticleBootstrapItem(
-                    supplier_article=supplier_article,
-                    rows=row_count,
-                    status="existing",
-                    article_id=int(existing.id),
-                )
-            )
-            continue
-
-        new_article = Article(code=supplier_article, name=supplier_article)
-        db.add(new_article)
-        db.flush()
-        existing_by_code[supplier_article] = new_article
-        inserted_articles += 1
+        if match_source in {"exact", "normalized"}:
+            matched_supplier_articles += 1
+        elif match_source == "ambiguous_normalized":
+            ambiguous_supplier_articles += 1
+        else:
+            unmatched_supplier_articles += 1
 
         items.append(
-            WbLiveArticleBootstrapItem(
+            WbLiveMappingDiscoverItem(
                 supplier_article=supplier_article,
                 rows=row_count,
-                status="inserted",
-                article_id=int(new_article.id),
+                unique_wb_skus=unique_wb_skus,
+                match_source=match_source,
+                matched_article_id=matched_article_id,
+                matched_article_code=matched_article_code,
             )
         )
 
-    db.commit()
-
-    return WbLiveArticleBootstrapSummary(
+    return WbLiveMappingDiscoverSummary(
         account_id=account.id,
         fetched_rows=len(rows),
         pages_requested=max_pages,
         pages_with_data=pages_with_data,
         date_from_effective=date_from_effective,
         next_cursor=next_cursor,
-        candidate_supplier_articles=candidate_supplier_articles,
-        existing_articles=existing_articles,
-        inserted_articles=inserted_articles,
-        skipped_invalid=skipped_invalid,
-        dry_run=False,
+        unique_supplier_articles=unique_supplier_articles,
+        matched_supplier_articles=matched_supplier_articles,
+        unmatched_supplier_articles=unmatched_supplier_articles,
+        ambiguous_supplier_articles=ambiguous_supplier_articles,
         items=items,
     )
 
