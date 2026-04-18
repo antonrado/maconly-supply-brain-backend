@@ -109,6 +109,7 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
         "replenishment_strategy": "normal",
         "zero_sales_policy": "ignore",
         "max_coverage_days_after": 60,
+        "max_replenishment_per_article": 77,
         "comment": "Test shipment from proposal",
     }
 
@@ -119,15 +120,46 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
     assert resp.status_code == 201, resp.text
     body = resp.json()
 
+    assert set(body.keys()) == {
+        "id",
+        "status",
+        "target_date",
+        "wb_arrival_date",
+        "comment",
+        "strategy",
+        "zero_sales_policy",
+        "target_coverage_days",
+        "min_coverage_days",
+        "max_coverage_days_after",
+        "max_replenishment_per_article",
+        "created_at",
+        "updated_at",
+        "items",
+    }
     assert body["status"] == "draft"
     assert body["target_date"] == target_date.isoformat()
     assert body["wb_arrival_date"] == target_date.isoformat()
     assert body["comment"] == "Test shipment from proposal"
+    assert body["strategy"] == "normal"
+    assert body["zero_sales_policy"] == "ignore"
+    assert body["target_coverage_days"] == 30
+    assert body["min_coverage_days"] == 7
+    assert body["max_coverage_days_after"] == 60
+    assert body["max_replenishment_per_article"] == 77
     assert body["items"]
 
     shipment_id = body["id"]
+    shipment_db = (
+        db_session.query(WbShipment)
+        .filter(WbShipment.id == shipment_id)
+        .first()
+    )
+    assert shipment_db is not None
+    assert _parse_json_datetime(body["created_at"]) == _normalize_datetime(shipment_db.created_at)
+    assert _parse_json_datetime(body["updated_at"]) == _normalize_datetime(shipment_db.updated_at)
+
     items = body["items"]
-    assert items[0]["final_qty"] == items[0]["recommended_qty"]
+    assert {item["article_id"] for item in items} == {article.id}
 
     items_db = (
         db_session.query(WbShipmentItem)
@@ -135,6 +167,58 @@ def test_create_shipment_from_proposal_endpoint(client, db_session):
         .all()
     )
     assert len(items_db) == len(items)
+
+    payload_map = {
+        (item["article_id"], item["color_id"], item["size_id"]): item
+        for item in items
+    }
+    db_map = {
+        (item.article_id, item.color_id, item.size_id): item
+        for item in items_db
+    }
+    assert set(payload_map.keys()) == set(db_map.keys())
+
+    for key, payload_item in payload_map.items():
+        db_item = db_map[key]
+        assert set(payload_item.keys()) == {
+            "id",
+            "shipment_id",
+            "article_id",
+            "color_id",
+            "size_id",
+            "wb_sku",
+            "recommended_qty",
+            "final_qty",
+            "nsk_stock_available",
+            "oos_risk_before",
+            "oos_risk_after",
+            "limited_by_nsk_stock",
+            "limited_by_max_coverage",
+            "ignored_due_to_zero_sales",
+            "below_min_coverage_threshold",
+            "article_total_deficit",
+            "article_total_recommended",
+            "explanation",
+        }
+        assert payload_item["id"] == db_item.id
+        assert payload_item["shipment_id"] == shipment_id
+        assert payload_item["article_id"] == db_item.article_id
+        assert payload_item["color_id"] == db_item.color_id
+        assert payload_item["size_id"] == db_item.size_id
+        assert payload_item["wb_sku"] == db_item.wb_sku
+        assert payload_item["recommended_qty"] == db_item.recommended_qty
+        assert payload_item["final_qty"] == db_item.final_qty
+        assert payload_item["final_qty"] == payload_item["recommended_qty"]
+        assert payload_item["nsk_stock_available"] == db_item.nsk_stock_available
+        assert payload_item["oos_risk_before"] == db_item.oos_risk_before
+        assert payload_item["oos_risk_after"] == db_item.oos_risk_after
+        assert payload_item["limited_by_nsk_stock"] == db_item.limited_by_nsk_stock
+        assert payload_item["limited_by_max_coverage"] == db_item.limited_by_max_coverage
+        assert payload_item["ignored_due_to_zero_sales"] == db_item.ignored_due_to_zero_sales
+        assert payload_item["below_min_coverage_threshold"] == db_item.below_min_coverage_threshold
+        assert payload_item["article_total_deficit"] == db_item.article_total_deficit
+        assert payload_item["article_total_recommended"] == db_item.article_total_recommended
+        assert payload_item["explanation"] == db_item.explanation
 
 
 def test_create_shipment_from_proposal_invalid_dates(client):
