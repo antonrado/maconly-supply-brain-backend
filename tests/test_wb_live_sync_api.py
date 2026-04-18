@@ -452,6 +452,11 @@ def test_wb_live_article_mapping_discover_returns_match_hints(client, db_session
         return pages.pop(0)
 
     monkeypatch.setattr(wb_ingest, "_wb_get_json_rows", fake_wb_get_json_rows)
+    monkeypatch.setattr(
+        wb_ingest,
+        "_utcnow",
+        lambda: datetime(2026, 3, 6, tzinfo=timezone.utc),
+    )
 
     response = client.post(
         "/api/v1/wb/article-mapping/discover-live",
@@ -470,6 +475,10 @@ def test_wb_live_article_mapping_discover_returns_match_hints(client, db_session
     assert body["matched_supplier_articles"] == 2
     assert body["unmatched_supplier_articles"] == 1
     assert body["ambiguous_supplier_articles"] == 0
+    assert body["pages_requested"] == 2
+    assert body["pages_with_data"] == 1
+    assert body["date_from_effective"] == "2026-02-04T00:00:00Z"
+    assert body["next_cursor"] == "2026-02-04T10:00:00"
 
     items = {row["supplier_article"]: row for row in body["items"]}
     assert items == {
