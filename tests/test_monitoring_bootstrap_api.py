@@ -78,10 +78,16 @@ def test_monitoring_bootstrap_consistency_with_metrics_and_layout(client):
     assert resp_layout.status_code == 200, resp_layout.text
     layout_body = resp_layout.json()
 
+    # /monitoring/status
+    resp_status = client.get("/api/v1/planning/monitoring/status")
+    assert resp_status.status_code == 200, resp_status.text
+    status_body = resp_status.json()
+
     # Metrics: set of metric names must match exactly
     metrics_from_bootstrap = {m["metric"] for m in bootstrap["metrics"]["items"]}
     metrics_from_api = {m["metric"] for m in metrics_body["items"]}
     assert metrics_from_bootstrap == metrics_from_api
+    assert bootstrap["metrics"] == metrics_body
 
     # Layout: section IDs and tile IDs should match between bootstrap and /layout
     def _collect_ids(layout_json):
@@ -98,6 +104,11 @@ def test_monitoring_bootstrap_consistency_with_metrics_and_layout(client):
 
     assert sections_bootstrap == sections_layout
     assert tiles_bootstrap == tiles_layout
+    assert bootstrap["layout"] == layout_body
+    assert set(bootstrap["status"].keys()) == set(status_body.keys())
+    assert bootstrap["status"]["overall_status"] == status_body["overall_status"]
+    assert bootstrap["status"]["critical_alerts"] == status_body["critical_alerts"]
+    assert bootstrap["status"]["warning_alerts"] == status_body["warning_alerts"]
 
 
 def test_monitoring_bootstrap_signatures_use_db():
