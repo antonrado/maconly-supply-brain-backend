@@ -533,9 +533,26 @@ def test_wb_live_article_bootstrap_dry_run_reports_changes(client, db_session, m
     assert body["dry_run"] is True
 
     items = {row["supplier_article"]: row for row in body["items"]}
-    assert items["EXIST-1"]["status"] == "existing"
-    assert items["NEW-1"]["status"] == "would_insert"
-    assert items[too_long_code]["status"] == "invalid_too_long"
+    assert items == {
+        "EXIST-1": {
+            "supplier_article": "EXIST-1",
+            "rows": 1,
+            "status": "existing",
+            "article_id": existing_article.id,
+        },
+        "NEW-1": {
+            "supplier_article": "NEW-1",
+            "rows": 1,
+            "status": "would_insert",
+            "article_id": None,
+        },
+        too_long_code: {
+            "supplier_article": too_long_code,
+            "rows": 1,
+            "status": "invalid_too_long",
+            "article_id": None,
+        },
+    }
 
     assert db_session.query(Article).filter(Article.code == "NEW-1").count() == 0
 
@@ -596,10 +613,23 @@ def test_wb_live_article_bootstrap_inserts_articles(client, db_session, monkeypa
 
     created = db_session.query(Article).filter(Article.code.in_(["NEW-10", "NEW-20"])).all()
     assert len(created) == 2
+    created_by_code = {row.code: row.id for row in created}
 
-    statuses = {row["supplier_article"]: row["status"] for row in body["items"]}
-    assert statuses["NEW-10"] == "inserted"
-    assert statuses["NEW-20"] == "inserted"
+    items = {row["supplier_article"]: row for row in body["items"]}
+    assert items == {
+        "NEW-10": {
+            "supplier_article": "NEW-10",
+            "rows": 2,
+            "status": "inserted",
+            "article_id": created_by_code["NEW-10"],
+        },
+        "NEW-20": {
+            "supplier_article": "NEW-20",
+            "rows": 1,
+            "status": "inserted",
+            "article_id": created_by_code["NEW-20"],
+        },
+    }
 
 
 def test_wb_get_json_rows_retries_429_and_then_succeeds(monkeypatch):
