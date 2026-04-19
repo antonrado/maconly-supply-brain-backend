@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.models.models import BundleRecipe, BundleType, PurchaseOrder, PurchaseOrderItem
 from app.services.order_proposal import generate_order_proposal
-from app.services.purchase_order import create_purchase_order_from_proposal
+from app.services.purchase_order import (
+    _map_target_date_to_planning_horizon_days,
+    create_purchase_order_from_proposal,
+)
 from tests.test_utils import (
     add_wb_sales,
     add_wb_stock,
@@ -246,6 +249,51 @@ def test_create_purchase_order_from_proposal_uses_canonical_from_wb_adapter(
     assert items[0].quantity == 12
     assert po.comment == "canonical adapter"
     assert po.target_date == target_date
+
+
+def test_create_purchase_order_from_proposal_canonical_adapter_clamps_past_target_date(
+    db_session,
+    monkeypatch,
+):
+    target_date = date.today() - timedelta(days=10)
+    captured_request = {}
+
+    def fake_build_production_order_proposal_from_wb(*, db, request):
+        captured_request["request"] = request
+        return SimpleNamespace(recommendation=None)
+
+    monkeypatch.setattr(
+        "app.services.purchase_order.build_production_order_proposal_from_wb",
+        fake_build_production_order_proposal_from_wb,
+    )
+
+    po = create_purchase_order_from_proposal(
+        db=db_session,
+        target_date=target_date,
+        article_id=77,
+        explanation=True,
+        comment="canonical adapter clamped",
+    )
+
+    request = captured_request["request"]
+    assert request.article_id == 77
+    assert request.planning_horizon_days == 1
+    assert request.explainability_mode == "full"
+
+    items = (
+        db_session.query(PurchaseOrderItem)
+        .filter(PurchaseOrderItem.purchase_order_id == po.id)
+        .all()
+    )
+    assert items == []
+    assert po.comment == "canonical adapter clamped"
+    assert po.target_date == target_date
+
+
+def test_map_target_date_to_planning_horizon_days_caps_far_future_dates():
+    assert _map_target_date_to_planning_horizon_days(
+        date.today() + timedelta(days=500)
+    ) == 365
 
 
 def test_create_purchase_order_from_proposal_canonical_branch_real_integration(
