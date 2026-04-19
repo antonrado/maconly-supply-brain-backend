@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.db import get_db
-from app.models.models import PurchaseOrder, PurchaseOrderItem
+from app.models.models import BundleRecipe, BundleType, PurchaseOrder, PurchaseOrderItem
 from tests.test_utils import (
     add_wb_sales,
     add_wb_stock,
@@ -62,6 +62,69 @@ def _setup_article_with_non_zero_proposal(db_session):
     return article, target_date
 
 
+def _setup_article_with_canonical_from_wb_inputs(db_session, target_date: date):
+    article = create_article(db_session, code="PO-api-canonical")
+    size = create_size(db_session, label="PO-api-canonical-size", sort_order=1)
+    color = create_color(db_session, inner_code="PO-api-canonical-color")
+    create_sku(db_session, article, color, size)
+
+    bundle_type = BundleType(code="PO-api-bundle", name="PO-api-bundle")
+    db_session.add(bundle_type)
+    db_session.flush()
+    db_session.add(
+        BundleRecipe(
+            article_id=article.id,
+            bundle_type_id=bundle_type.id,
+            color_id=color.id,
+            position=1,
+        )
+    )
+
+    create_global_planning_settings(
+        db_session,
+        default_fabric_min_batch_qty=0,
+        default_elastic_min_batch_qty=0,
+        default_production_order_available_capital=10000,
+    )
+    create_article_planning_settings(
+        db_session,
+        article,
+        target_coverage_days=60,
+        lead_time_days=70,
+        service_level_percent=90,
+        production_order_production_cost_per_unit=100,
+        production_order_logistics_cost_per_unit=20,
+        production_order_wb_commission_percent_main=15,
+        production_order_wb_commission_percent_assorti=15,
+        production_order_average_realized_price_main=500,
+        production_order_average_realized_price_assorti=500,
+        production_order_available_capital=10000,
+    )
+    create_planning_settings(
+        db_session,
+        article,
+        is_active=True,
+        min_fabric_batch=0,
+        min_elastic_batch=0,
+        alert_threshold_days=90,
+        strictness=1.0,
+    )
+
+    wb_sku = "SKU-PO-api-canonical"
+    create_wb_mapping(
+        db_session,
+        article,
+        wb_sku=wb_sku,
+        bundle_type_id=bundle_type.id,
+        size_id=size.id,
+    )
+    add_wb_sales(db_session, wb_sku=wb_sku, day=target_date - timedelta(days=1), sales_qty=60)
+    add_wb_stock(db_session, wb_sku=wb_sku, stock_qty=20)
+    db_session.commit()
+
+    return article, target_date
+
+
 def test_create_from_proposal_endpoint(client, db_session):
     """POST /purchase-order/from-proposal creates draft PO with items from proposal."""
     article, target_date = _setup_article_with_non_zero_proposal(db_session)
@@ -88,6 +151,30 @@ def test_create_from_proposal_endpoint(client, db_session):
         .all()
     )
     assert len(items_db) == len(body["items"])
+
+
+def test_create_from_proposal_endpoint_accepts_article_id_for_canonical_branch(client, db_session):
+    article, target_date = _setup_article_with_canonical_from_wb_inputs(
+        db_session,
+        target_date=date.today() + timedelta(days=45),
+    )
+
+    payload = {
+        "article_id": article.id,
+        "target_date": target_date.isoformat(),
+        "comment": "Test PO from canonical branch",
+        "explanation": True,
+    }
+    resp = client.post("/api/v1/purchase-order/from-proposal", json=payload)
+    assert resp.status_code == 201, resp.text
+
+    body = resp.json()
+    assert body["status"] == "draft"
+    assert body["target_date"] == target_date.isoformat()
+    assert body["comment"] == "Test PO from canonical branch"
+    assert body["items"]
+    assert all(item["article_id"] == article.id for item in body["items"])
+    assert all(item["quantity"] > 0 for item in body["items"])
 
 
 def test_list_purchase_orders_with_status_filter(client, db_session):

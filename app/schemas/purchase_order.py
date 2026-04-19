@@ -58,6 +58,7 @@ class PurchaseOrderRead(PurchaseOrderBase):
 
 
 class PurchaseOrderFromProposalRequest(BaseModel):
+    article_id: int | None = Field(default=None, ge=1)
     target_date: date
     comment: str | None = None
     explanation: bool = True
