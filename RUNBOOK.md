@@ -23,6 +23,8 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 verify-live
 ```
 
+`proposal` now seeds deterministic smoke data inside the running backend container and calls the canonical `POST /api/v1/planning/core/production-order/proposal` happy path.
+
 `po-api-smoke-positive` validates only deterministic positive live API checks:
 - Auto-syncs backend image and waits for health readiness
 - Seeds deterministic smoke fixture data
@@ -85,7 +87,6 @@ curl.exe -i http://localhost:8000/api/v1/planning/core/health
 
 ### Proposal (PowerShell-safe JSON)
 Legacy stub endpoint example (`/api/v1/planning/core/proposal`, deprecated / low-fidelity):
-Create body file:
 ```powershell
 '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
 ```

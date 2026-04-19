@@ -1,10 +1,11 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "po-api-smoke", "po-api-smoke-positive", "context", "verify", "verify-live")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
     [string]$Command
 )
 
 $ComposeFile = ".\\docker-compose.yml"
+$MvpRequiredHostPorts = @(5432, 8000)
 
 function Get-ContextBaseRef {
     $BaseRef = git merge-base HEAD origin/main 2>$null
@@ -30,7 +31,94 @@ function Invoke-CompileCheck {
     }
 }
 
+function Get-DockerAvailabilityMode {
+    $DockerCommand = Get-Command docker -ErrorAction SilentlyContinue
+    if ($null -eq $DockerCommand) {
+        return "missing-cli"
+    }
+
+    docker version --format "{{.Server.Version}}" 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        return "ready"
+    }
+
+    return "daemon-unreachable"
+}
+
+function Assert-DockerAvailable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $DockerAvailabilityMode = Get-DockerAvailabilityMode
+    if ($DockerAvailabilityMode -eq "ready") {
+        return
+    }
+
+    if ($DockerAvailabilityMode -eq "missing-cli") {
+        Write-Host "[$CommandName] docker CLI is not installed or not available in PATH." -ForegroundColor Yellow
+        Write-Host "[$CommandName] Install Docker Desktop (or add docker to PATH) and retry." -ForegroundColor Yellow
+        exit 1
+    }
+
+    Write-Host "[$CommandName] Docker daemon is not reachable. Start Docker Desktop and wait until the engine is running, then retry." -ForegroundColor Yellow
+    exit 1
+}
+
+function Assert-MvpHostPortsAvailable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName,
+        [int[]]$Ports = $MvpRequiredHostPorts
+    )
+
+    try {
+        $ListeningPorts = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
+            ForEach-Object { $_.Port } |
+            Sort-Object -Unique
+    }
+    catch {
+        Write-Host "[$CommandName] unable to inspect host TCP listeners; continuing without port preflight." -ForegroundColor Yellow
+        return
+    }
+
+    $BusyPorts = @($Ports | Where-Object { $ListeningPorts -contains $_ })
+    if ($BusyPorts.Count -eq 0) {
+        return
+    }
+
+    $BusyPortsText = ($BusyPorts | Sort-Object | ForEach-Object { "$_" }) -join ", "
+    Write-Host "[$CommandName] required host port(s) already in use: $BusyPortsText" -ForegroundColor Yellow
+    Write-Host "[$CommandName] Stop the process using these ports or change the compose port mapping, then retry." -ForegroundColor Yellow
+    exit 1
+}
+
+function Assert-DockerComposeConfigValid {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $ComposeValidationOutput = & docker compose -f $ComposeFile config 2>&1
+    $ComposeValidationExitCode = $LASTEXITCODE
+    if ($ComposeValidationExitCode -eq 0) {
+        return
+    }
+
+    if ($ComposeValidationOutput) {
+        $ComposeValidationOutput | ForEach-Object { Write-Host $_ -ForegroundColor Yellow }
+    }
+
+    Write-Host "[$CommandName] docker compose config validation failed. Fix docker-compose.yml or env interpolation and retry." -ForegroundColor Yellow
+    exit 1
+}
+
 function Invoke-DockerComposeBackendBuild {
+    Assert-DockerAvailable -CommandName "po-api-smoke"
+    Assert-MvpHostPortsAvailable -CommandName "po-api-smoke"
+    Assert-DockerComposeConfigValid -CommandName "po-api-smoke"
+
     $ComposeArgs = @("compose", "-f", $ComposeFile, "up", "-d", "--build", "backend")
 
     $BuildOutput = & docker @ComposeArgs 2>&1
@@ -84,6 +172,8 @@ function Wait-BackendRunning {
         [int]$TimeoutSeconds = 30
     )
 
+    Assert-DockerAvailable -CommandName "backend-status"
+
     $Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $Deadline) {
         $RunningServices = docker compose -f $ComposeFile ps --status running --services 2>$null
@@ -124,6 +214,22 @@ function Wait-ApiHealthy {
     }
 
     return $false
+}
+
+function Write-DockerBackendDiagnostics {
+    param(
+        [string]$CommandName = "po-api-smoke",
+        [int]$LogTail = 120
+    )
+
+    Write-Host "[$CommandName] docker compose ps:" -ForegroundColor Yellow
+    docker compose -f $ComposeFile ps
+
+    Write-Host "[$CommandName] db logs (tail=$LogTail):" -ForegroundColor Yellow
+    docker compose -f $ComposeFile logs --tail=$LogTail db
+
+    Write-Host "[$CommandName] backend logs (tail=$LogTail):" -ForegroundColor Yellow
+    docker compose -f $ComposeFile logs --tail=$LogTail backend
 }
 
 function Invoke-ApiExpectedStatus {
@@ -189,6 +295,160 @@ function Invoke-ApiExpectedStatus {
     }
 }
 
+function Invoke-ApiExpectedStatusOrThrow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [Parameter(Mandatory = $true)]
+        [int]$ExpectedStatus,
+        [string]$JsonBody = "",
+        [string]$ExpectedBodyContains = "",
+        [string]$LogPrefix = "po-api-smoke-host"
+    )
+
+    $ResponseFile = [System.IO.Path]::GetTempFileName()
+    $PayloadFile = $null
+    $ResponseBody = ""
+    try {
+        if ($JsonBody) {
+            $PayloadFile = [System.IO.Path]::GetTempFileName()
+            $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        else {
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $ResponseFile) {
+                $ResponseBody = Get-Content -Raw $ResponseFile
+                if ($ResponseBody) {
+                    $ResponseBody | Write-Host
+                }
+            }
+            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
+        }
+
+        if (Test-Path $ResponseFile) {
+            $ResponseBody = Get-Content -Raw $ResponseFile
+        }
+
+        if ("$StatusCode" -ne "$ExpectedStatus") {
+            if ($ResponseBody) {
+                $ResponseBody | Write-Host
+            }
+            throw "[$LogPrefix] FAIL ${Name}: expected HTTP $ExpectedStatus, got HTTP $StatusCode"
+        }
+
+        if ($ExpectedBodyContains -and -not $ResponseBody.Contains($ExpectedBodyContains)) {
+            if ($ResponseBody) {
+                $ResponseBody | Write-Host
+            }
+            throw "[$LogPrefix] FAIL ${Name}: response body does not include expected fragment '$ExpectedBodyContains'"
+        }
+
+        Write-Host "[$LogPrefix] OK  $Name -> HTTP $StatusCode"
+    }
+    finally {
+        if ($PayloadFile -and (Test-Path $PayloadFile)) {
+            Remove-Item $PayloadFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $ResponseFile) {
+            Remove-Item $ResponseFile -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-ApiAndWriteResponseOrThrow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [Parameter(Mandatory = $true)]
+        [int]$ExpectedStatus,
+        [string]$JsonBody = "",
+        [string]$LogPrefix = "proposal"
+    )
+
+    $ResponseFile = [System.IO.Path]::GetTempFileName()
+    $HeaderFile = [System.IO.Path]::GetTempFileName()
+    $PayloadFile = $null
+    $ResponseBody = ""
+    $ResponseHeaders = ""
+    try {
+        if ($JsonBody) {
+            $PayloadFile = [System.IO.Path]::GetTempFileName()
+            $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
+            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        else {
+            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $ResponseFile) {
+                $ResponseBody = Get-Content -Raw $ResponseFile
+                if ($ResponseBody) {
+                    $ResponseBody | Write-Host
+                }
+            }
+            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
+        }
+
+        if (Test-Path $HeaderFile) {
+            $ResponseHeaders = Get-Content -Raw $HeaderFile
+        }
+
+        if (Test-Path $ResponseFile) {
+            $ResponseBody = Get-Content -Raw $ResponseFile
+            if ($ResponseBody) {
+                try {
+                    $ResponseBody = ($ResponseBody | ConvertFrom-Json | ConvertTo-Json -Depth 100)
+                }
+                catch {
+                }
+            }
+        }
+
+        if ("$StatusCode" -ne "$ExpectedStatus") {
+            if ($ResponseHeaders) {
+                $ResponseHeaders | Write-Host
+            }
+            if ($ResponseBody) {
+                $ResponseBody | Write-Host
+            }
+            throw "[$LogPrefix] FAIL ${Name}: expected HTTP $ExpectedStatus, got HTTP $StatusCode"
+        }
+
+        if ($ResponseHeaders) {
+            $ResponseHeaders | Write-Host
+        }
+        if ($ResponseBody) {
+            $ResponseBody | Write-Host
+        }
+
+        Write-Host "[$LogPrefix] OK  $Name -> HTTP $StatusCode"
+    }
+    finally {
+        if ($PayloadFile -and (Test-Path $PayloadFile)) {
+            Remove-Item $PayloadFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $HeaderFile) {
+            Remove-Item $HeaderFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $ResponseFile) {
+            Remove-Item $ResponseFile -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Invoke-SmokeTests {
     $TargetTests = @(
         "tests/test_planning_core_production_order_api.py",
@@ -245,84 +505,506 @@ function Invoke-ProductionOrderApiSmokePositive {
     Write-Host "[po-api-smoke] syncing backend image with current workspace..."
     Invoke-DockerComposeBackendBuild
 
-    if (-not (Wait-BackendRunning -TimeoutSeconds 45)) {
-        Write-Host "[po-api-smoke] backend did not reach running state in time." -ForegroundColor Yellow
-        exit 1
-    }
-
-    if (-not (Wait-ApiHealthy -TimeoutSeconds 45)) {
-        Write-Host "[po-api-smoke] health endpoint did not become ready in time." -ForegroundColor Yellow
-        docker compose -f $ComposeFile logs --tail=80 backend
-        exit 1
-    }
-
-    Invoke-ApiExpectedStatus -Name "planning-core-health" -Method "GET" -Url "http://localhost:8000/api/v1/planning/core/health" -ExpectedStatus 200
-
-    $SeedOutput = docker compose -f $ComposeFile exec -T backend python scripts/po_api_smoke_seed.py
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[po-api-smoke] FAIL seed step: unable to prepare smoke dataset." -ForegroundColor Red
-        exit $LASTEXITCODE
-    }
-
     try {
-        $SeedData = $SeedOutput | ConvertFrom-Json
+        if (-not (Wait-BackendRunning -TimeoutSeconds 45)) {
+            throw "[po-api-smoke] backend did not reach running state in time."
+        }
+
+        if (-not (Wait-ApiHealthy -TimeoutSeconds 45)) {
+            throw "[po-api-smoke] health endpoint did not become ready in time."
+        }
+
+        Invoke-ApiExpectedStatusOrThrow -Name "planning-core-health" -Method "GET" -Url "http://localhost:8000/api/v1/planning/core/health" -ExpectedStatus 200 -LogPrefix "po-api-smoke"
+
+        $SeedOutput = docker compose -f $ComposeFile exec -T backend python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[po-api-smoke] FAIL seed step: unable to prepare smoke dataset."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[po-api-smoke] FAIL seed step: invalid seed JSON output."
+        }
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
+
+        return $SeedData
     }
     catch {
-        Write-Host "[po-api-smoke] FAIL seed step: invalid seed JSON output." -ForegroundColor Red
-        Write-Host $SeedOutput
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        Write-DockerBackendDiagnostics -CommandName "po-api-smoke"
         exit 1
     }
-
-    $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
-    $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
-
-    Invoke-ApiExpectedStatus -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"'
-    Invoke-ApiExpectedStatus -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"'
-
-    return $SeedData
 }
 
 function Invoke-ProductionOrderApiSmoke {
     Invoke-ProductionOrderApiSmokePositive | Out-Null
 
-    $UnknownArticleDirectPayload = '{"article_id":999999999,"planning_horizon_days":90,"bundle_daily_sales":[{"bundle_type_id":1,"daily_sales":1.0}],"bundle_stock":[{"bundle_type_id":1,"wb_qty":0,"local_qty":0}],"in_flight_supply":[],"size_weights":{}}'
-    Invoke-ApiExpectedStatus -Name "production-order-direct-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 404 -JsonBody $UnknownArticleDirectPayload -ExpectedBodyContains 'Article not found'
+    try {
+        $UnknownArticleDirectPayload = '{"article_id":999999999,"planning_horizon_days":90,"bundle_daily_sales":[{"bundle_type_id":1,"daily_sales":1.0}],"bundle_stock":[{"bundle_type_id":1,"wb_qty":0,"local_qty":0}],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 404 -JsonBody $UnknownArticleDirectPayload -ExpectedBodyContains 'Article not found' -LogPrefix "po-api-smoke"
 
-    $UnknownArticleFromWbPayload = '{"article_id":999999999,"planning_horizon_days":90,"observation_window_days":30,"bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
-    Invoke-ApiExpectedStatus -Name "production-order-from-wb-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 404 -JsonBody $UnknownArticleFromWbPayload -ExpectedBodyContains 'Article not found'
+        $UnknownArticleFromWbPayload = '{"article_id":999999999,"planning_horizon_days":90,"observation_window_days":30,"bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 404 -JsonBody $UnknownArticleFromWbPayload -ExpectedBodyContains 'Article not found' -LogPrefix "po-api-smoke"
 
-    $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
-    Invoke-ApiExpectedStatus -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload -ExpectedBodyContains 'planning_horizon_days'
+        $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload -ExpectedBodyContains 'planning_horizon_days' -LogPrefix "po-api-smoke"
 
-    $FromWbInvalidPayload = '{"article_id":1,"planning_horizon_days":90,"observation_window_days":30,"freshness_mode":"hard_fail","bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
-    Invoke-ApiExpectedStatus -Name "production-order-from-wb-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 422 -JsonBody $FromWbInvalidPayload -ExpectedBodyContains 'freshness_mode'
+        $FromWbInvalidPayload = '{"article_id":1,"planning_horizon_days":90,"observation_window_days":30,"freshness_mode":"hard_fail","bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 422 -JsonBody $FromWbInvalidPayload -ExpectedBodyContains 'freshness_mode' -LogPrefix "po-api-smoke"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        Write-DockerBackendDiagnostics -CommandName "po-api-smoke"
+        exit 1
+    }
+}
+
+function Invoke-LiveProductionOrderProposal {
+    try {
+        $SeedOutput = docker compose -f $ComposeFile exec -T backend python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[proposal] FAIL seed step: unable to prepare canonical production-order payload."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[proposal] FAIL seed step: invalid seed JSON output."
+        }
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        Invoke-ApiAndWriteResponseOrThrow -Name "production-order-direct-proposal" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -LogPrefix "proposal"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        Write-DockerBackendDiagnostics -CommandName "proposal"
+        exit 1
+    }
+}
+
+function Invoke-LiveProductionOrderProposalFromWb {
+    try {
+        $SeedOutput = docker compose -f $ComposeFile exec -T backend python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[proposal-from-wb] FAIL seed step: unable to prepare canonical production-order payload."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[proposal-from-wb] FAIL seed step: invalid seed JSON output."
+        }
+
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+        Invoke-ApiAndWriteResponseOrThrow -Name "production-order-from-wb-proposal" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -LogPrefix "proposal-from-wb"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        Write-DockerBackendDiagnostics -CommandName "proposal-from-wb"
+        exit 1
+    }
+}
+
+function Invoke-HostProductionOrderApiSmokePositive {
+    $BaseUrl = "http://127.0.0.1:8010"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $DirectUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal"
+    $FromWbUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal/from-wb"
+    $PreviousDatabaseUrl = $env:DATABASE_URL
+    $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
+    $StdOutFile = [System.IO.Path]::GetTempFileName()
+    $StdErrFile = [System.IO.Path]::GetTempFileName()
+    $ServerProcess = $null
+
+    try {
+        $env:DATABASE_URL = "sqlite:///./ci.db"
+        $env:MONITORING_SCHEDULER_ENABLED = "false"
+
+        Write-Host "[po-api-smoke-host] bootstrapping SQLite schema..."
+        python -c "from app.models.base import Base; import app.models.models; from app.core.db import engine; Base.metadata.create_all(bind=engine)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "[po-api-smoke-host] FAIL schema bootstrap step."
+        }
+
+        Write-Host "[po-api-smoke-host] starting host uvicorn..."
+        $ServerProcess = Start-Process -FilePath "python" -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010") -WorkingDirectory (Get-Location).Path -PassThru -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -ErrorAction Stop
+
+        if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 45)) {
+            Write-Host "[po-api-smoke-host] health endpoint did not become ready in time." -ForegroundColor Yellow
+            if (Test-Path $StdOutFile) {
+                Get-Content -Raw $StdOutFile | Write-Host
+            }
+            if (Test-Path $StdErrFile) {
+                Get-Content -Raw $StdErrFile | Write-Host
+            }
+            throw "[po-api-smoke-host] FAIL host health readiness."
+        }
+
+        Invoke-ApiExpectedStatusOrThrow -Name "planning-core-health" -Method "GET" -Url $HealthUrl -ExpectedStatus 200 -LogPrefix "po-api-smoke-host"
+
+        $SeedOutput = python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            throw "[po-api-smoke-host] FAIL seed step: unable to prepare smoke dataset."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[po-api-smoke-host] FAIL seed step: invalid seed JSON output."
+        }
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-happy-path" -Method "POST" -Url $DirectUrl -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke-host"
+        Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-happy-path" -Method "POST" -Url $FromWbUrl -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke-host"
+
+        return $SeedData
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        if ($null -ne $ServerProcess) {
+            Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdOutFile) {
+            Remove-Item $StdOutFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdErrFile) {
+            Remove-Item $StdErrFile -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $PreviousDatabaseUrl) {
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DATABASE_URL = $PreviousDatabaseUrl
+        }
+        if ($null -eq $PreviousSchedulerEnabled) {
+            Remove-Item Env:MONITORING_SCHEDULER_ENABLED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MONITORING_SCHEDULER_ENABLED = $PreviousSchedulerEnabled
+        }
+    }
+}
+
+function Invoke-HostProductionOrderProposal {
+    $BaseUrl = "http://127.0.0.1:8010"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $DirectUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal"
+    $PreviousDatabaseUrl = $env:DATABASE_URL
+    $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
+    $StdOutFile = [System.IO.Path]::GetTempFileName()
+    $StdErrFile = [System.IO.Path]::GetTempFileName()
+    $ServerProcess = $null
+
+    try {
+        $env:DATABASE_URL = "sqlite:///./ci.db"
+        $env:MONITORING_SCHEDULER_ENABLED = "false"
+
+        Write-Host "[proposal-host] bootstrapping SQLite schema..."
+        python -c "from app.models.base import Base; import app.models.models; from app.core.db import engine; Base.metadata.create_all(bind=engine)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "[proposal-host] FAIL schema bootstrap step."
+        }
+
+        Write-Host "[proposal-host] starting host uvicorn..."
+        $ServerProcess = Start-Process -FilePath "python" -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010") -WorkingDirectory (Get-Location).Path -PassThru -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -ErrorAction Stop
+
+        if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 45)) {
+            Write-Host "[proposal-host] health endpoint did not become ready in time." -ForegroundColor Yellow
+            if (Test-Path $StdOutFile) {
+                Get-Content -Raw $StdOutFile | Write-Host
+            }
+            if (Test-Path $StdErrFile) {
+                Get-Content -Raw $StdErrFile | Write-Host
+            }
+            throw "[proposal-host] FAIL host health readiness."
+        }
+
+        $SeedOutput = python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[proposal-host] FAIL seed step: unable to prepare canonical production-order payload."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[proposal-host] FAIL seed step: invalid seed JSON output."
+        }
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        Invoke-ApiAndWriteResponseOrThrow -Name "production-order-direct-proposal" -Method "POST" -Url $DirectUrl -ExpectedStatus 200 -JsonBody $DirectHappyPayload -LogPrefix "proposal-host"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        if (Test-Path $StdOutFile) {
+            $StdOut = Get-Content -Raw $StdOutFile
+            if ($StdOut) {
+                $StdOut | Write-Host
+            }
+        }
+        if (Test-Path $StdErrFile) {
+            $StdErr = Get-Content -Raw $StdErrFile
+            if ($StdErr) {
+                $StdErr | Write-Host
+            }
+        }
+        Write-Host $Message -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        if ($null -ne $ServerProcess) {
+            Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdOutFile) {
+            Remove-Item $StdOutFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdErrFile) {
+            Remove-Item $StdErrFile -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $PreviousDatabaseUrl) {
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DATABASE_URL = $PreviousDatabaseUrl
+        }
+        if ($null -eq $PreviousSchedulerEnabled) {
+            Remove-Item Env:MONITORING_SCHEDULER_ENABLED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MONITORING_SCHEDULER_ENABLED = $PreviousSchedulerEnabled
+        }
+    }
+}
+
+function Invoke-HostProductionOrderProposalFromWb {
+    $BaseUrl = "http://127.0.0.1:8010"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $FromWbUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal/from-wb"
+    $PreviousDatabaseUrl = $env:DATABASE_URL
+    $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
+    $StdOutFile = [System.IO.Path]::GetTempFileName()
+    $StdErrFile = [System.IO.Path]::GetTempFileName()
+    $ServerProcess = $null
+
+    try {
+        $env:DATABASE_URL = "sqlite:///./ci.db"
+        $env:MONITORING_SCHEDULER_ENABLED = "false"
+
+        Write-Host "[proposal-from-wb-host] bootstrapping SQLite schema..."
+        python -c "from app.models.base import Base; import app.models.models; from app.core.db import engine; Base.metadata.create_all(bind=engine)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "[proposal-from-wb-host] FAIL schema bootstrap step."
+        }
+
+        Write-Host "[proposal-from-wb-host] starting host uvicorn..."
+        $ServerProcess = Start-Process -FilePath "python" -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010") -WorkingDirectory (Get-Location).Path -PassThru -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -ErrorAction Stop
+
+        if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 45)) {
+            Write-Host "[proposal-from-wb-host] health endpoint did not become ready in time." -ForegroundColor Yellow
+            if (Test-Path $StdOutFile) {
+                Get-Content -Raw $StdOutFile | Write-Host
+            }
+            if (Test-Path $StdErrFile) {
+                Get-Content -Raw $StdErrFile | Write-Host
+            }
+            throw "[proposal-from-wb-host] FAIL host health readiness."
+        }
+
+        $SeedOutput = python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[proposal-from-wb-host] FAIL seed step: unable to prepare canonical production-order payload."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[proposal-from-wb-host] FAIL seed step: invalid seed JSON output."
+        }
+
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+        Invoke-ApiAndWriteResponseOrThrow -Name "production-order-from-wb-proposal" -Method "POST" -Url $FromWbUrl -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -LogPrefix "proposal-from-wb-host"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        if (Test-Path $StdOutFile) {
+            $StdOut = Get-Content -Raw $StdOutFile
+            if ($StdOut) {
+                $StdOut | Write-Host
+            }
+        }
+        if (Test-Path $StdErrFile) {
+            $StdErr = Get-Content -Raw $StdErrFile
+            if ($StdErr) {
+                $StdErr | Write-Host
+            }
+        }
+        Write-Host $Message -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        if ($null -ne $ServerProcess) {
+            Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdOutFile) {
+            Remove-Item $StdOutFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdErrFile) {
+            Remove-Item $StdErrFile -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $PreviousDatabaseUrl) {
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DATABASE_URL = $PreviousDatabaseUrl
+        }
+        if ($null -eq $PreviousSchedulerEnabled) {
+            Remove-Item Env:MONITORING_SCHEDULER_ENABLED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MONITORING_SCHEDULER_ENABLED = $PreviousSchedulerEnabled
+        }
+    }
 }
 
 switch ($Command) {
     "up" {
-        docker compose -f $ComposeFile up -d --build
+        Assert-DockerAvailable -CommandName "up"
+        Assert-MvpHostPortsAvailable -CommandName "up"
+        Assert-DockerComposeConfigValid -CommandName "up"
+        docker compose -f $ComposeFile up -d --build db backend
     }
     "ps" {
+        Assert-DockerAvailable -CommandName "ps"
         docker compose -f $ComposeFile ps
     }
     "logs" {
+        Assert-DockerAvailable -CommandName "logs"
         docker compose -f $ComposeFile logs --tail=200 backend
     }
     "test" {
+        Assert-DockerAvailable -CommandName "test"
         docker compose -f $ComposeFile exec -T backend python -m pytest -q
     }
     "health" {
         curl.exe -i http://localhost:8000/api/v1/planning/core/health
     }
     "proposal" {
-        '{"sales_window_days":30,"horizon_days":90}' | Set-Content -Encoding utf8 -NoNewline test_request.json
-        curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/proposal -H "Content-Type: application/json" --data-binary "@test_request.json"
+        $DockerAvailabilityMode = Get-DockerAvailabilityMode
+        if ($DockerAvailabilityMode -eq "ready") {
+            if ((Wait-BackendRunning -TimeoutSeconds 5) -and (Wait-ApiHealthy -TimeoutSeconds 5)) {
+                Write-Host "[proposal] Docker backend reachable, using live canonical proposal..."
+                Invoke-LiveProductionOrderProposal
+                break
+            }
+
+            Write-Host "[proposal] Docker daemon reachable but backend is not ready, falling back to host canonical proposal..." -ForegroundColor Yellow
+            Invoke-HostProductionOrderProposal
+            break
+        }
+
+        if ($DockerAvailabilityMode -eq "missing-cli") {
+            Write-Host "[proposal] docker CLI is not available, falling back to host canonical proposal..." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "[proposal] Docker daemon is not reachable, falling back to host canonical proposal..." -ForegroundColor Yellow
+        }
+
+        Invoke-HostProductionOrderProposal
+    }
+    "proposal-from-wb" {
+        $DockerAvailabilityMode = Get-DockerAvailabilityMode
+        if ($DockerAvailabilityMode -eq "ready") {
+            if ((Wait-BackendRunning -TimeoutSeconds 5) -and (Wait-ApiHealthy -TimeoutSeconds 5)) {
+                Write-Host "[proposal-from-wb] Docker backend reachable, using live canonical proposal..."
+                Invoke-LiveProductionOrderProposalFromWb
+                break
+            }
+
+            Write-Host "[proposal-from-wb] Docker daemon reachable but backend is not ready, falling back to host canonical proposal..." -ForegroundColor Yellow
+            Invoke-HostProductionOrderProposalFromWb
+            break
+        }
+
+        if ($DockerAvailabilityMode -eq "missing-cli") {
+            Write-Host "[proposal-from-wb] docker CLI is not available, falling back to host canonical proposal..." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "[proposal-from-wb] Docker daemon is not reachable, falling back to host canonical proposal..." -ForegroundColor Yellow
+        }
+
+        Invoke-HostProductionOrderProposalFromWb
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke
     }
     "po-api-smoke-positive" {
         Invoke-ProductionOrderApiSmokePositive | Out-Null
+    }
+    "po-api-smoke-host-positive" {
+        Invoke-HostProductionOrderApiSmokePositive | Out-Null
     }
     "context" {
         Invoke-ContextGuard
@@ -339,6 +1021,21 @@ switch ($Command) {
 
         Write-Host "[verify] OK"
     }
+    "verify-host" {
+        Write-Host "[verify-host] context guard..."
+        Invoke-ContextGuard
+
+        Write-Host "[verify-host] compile check..."
+        Invoke-CompileCheck
+
+        Write-Host "[verify-host] smoke tests..."
+        Invoke-SmokeTests
+
+        Write-Host "[verify-host] production-order host API smoke..."
+        Invoke-HostProductionOrderApiSmokePositive | Out-Null
+
+        Write-Host "[verify-host] OK"
+    }
     "verify-live" {
         Write-Host "[verify-live] context guard..."
         Invoke-ContextGuard
@@ -353,5 +1050,35 @@ switch ($Command) {
         Invoke-ProductionOrderApiSmoke
 
         Write-Host "[verify-live] OK"
+    }
+    "verify-mvp" {
+        Write-Host "[verify-mvp] context guard..."
+        Invoke-ContextGuard
+
+        Write-Host "[verify-mvp] compile check..."
+        Invoke-CompileCheck
+
+        Write-Host "[verify-mvp] smoke tests..."
+        Invoke-SmokeTests
+
+        $DockerAvailabilityMode = Get-DockerAvailabilityMode
+        if ($DockerAvailabilityMode -eq "ready") {
+            Write-Host "[verify-mvp] Docker daemon reachable, running live API smoke..."
+            Invoke-ProductionOrderApiSmoke
+            Write-Host "[verify-mvp] OK (live)"
+            break
+        }
+
+        if ($DockerAvailabilityMode -eq "missing-cli") {
+            Write-Host "[verify-mvp] docker CLI is not available, falling back to host API smoke..." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "[verify-mvp] Docker daemon is not reachable, falling back to host API smoke..." -ForegroundColor Yellow
+        }
+
+        Write-Host "[verify-mvp] production-order host API smoke..."
+        Invoke-HostProductionOrderApiSmokePositive | Out-Null
+
+        Write-Host "[verify-mvp] OK (host)"
     }
 }
