@@ -534,9 +534,11 @@ function Invoke-ProductionOrderApiSmokePositive {
 
         $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
         $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+        $PurchaseOrderFromProposalHappyPayload = $SeedData.purchase_order_from_proposal_payload | ConvertTo-Json -Depth 8 -Compress
 
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
+        Invoke-ApiExpectedStatusOrThrow -Name "purchase-order-from-proposal-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/purchase-order/from-proposal" -ExpectedStatus 201 -JsonBody $PurchaseOrderFromProposalHappyPayload -ExpectedBodyContains '"status":"draft"' -LogPrefix "po-api-smoke"
 
         return $SeedData
     }
@@ -560,6 +562,9 @@ function Invoke-ProductionOrderApiSmoke {
 
         $UnknownArticleFromWbPayload = '{"article_id":999999999,"planning_horizon_days":90,"observation_window_days":30,"bundle_type_ids":[1],"in_flight_supply":[],"size_weights":{}}'
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 404 -JsonBody $UnknownArticleFromWbPayload -ExpectedBodyContains 'Article not found' -LogPrefix "po-api-smoke"
+
+        $UnknownArticlePurchaseOrderPayload = '{"article_id":999999999,"target_date":"2030-01-31","comment":"Missing article smoke","explanation":true}'
+        Invoke-ApiExpectedStatusOrThrow -Name "purchase-order-from-proposal-unknown-article" -Method "POST" -Url "http://localhost:8000/api/v1/purchase-order/from-proposal" -ExpectedStatus 404 -JsonBody $UnknownArticlePurchaseOrderPayload -ExpectedBodyContains 'article_not_found' -LogPrefix "po-api-smoke"
 
         $DirectInvalidPayload = '{"article_id":1,"planning_horizon_days":0,"bundle_daily_sales":[]}'
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-validation" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 422 -JsonBody $DirectInvalidPayload -ExpectedBodyContains 'planning_horizon_days' -LogPrefix "po-api-smoke"

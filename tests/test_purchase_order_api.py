@@ -177,6 +177,28 @@ def test_create_from_proposal_endpoint_accepts_article_id_for_canonical_branch(c
     assert all(item["quantity"] > 0 for item in body["items"])
 
 
+def test_create_from_proposal_endpoint_canonical_branch_article_not_found(client):
+    payload = {
+        "article_id": 999999999,
+        "target_date": (date.today() + timedelta(days=45)).isoformat(),
+        "comment": "Missing article",
+        "explanation": True,
+    }
+    resp = client.post("/api/v1/purchase-order/from-proposal", json=payload)
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == {
+        "code": "article_not_found",
+        "message": "Article not found",
+        "article_id": 999999999,
+        "field": "article_id",
+        "field_metadata": {
+            "description": "Requested article identifier",
+            "type": "int",
+        },
+        "next_steps": ["use_existing_article_id"],
+    }
+
+
 def test_list_purchase_orders_with_status_filter(client, db_session):
     """GET /purchase-order/ supports filtering by status."""
     now = datetime.now(timezone.utc)

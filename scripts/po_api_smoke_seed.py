@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -301,6 +301,8 @@ def main() -> None:
 
         db.commit()
 
+        purchase_order_target_date = now.date() + timedelta(days=90)
+
         payloads = {
             "direct_payload": {
                 "article_id": article.id,
@@ -343,6 +345,12 @@ def main() -> None:
                     "available_capital": 10000,
                     "allow_order_with_buffer": False,
                 },
+            },
+            "purchase_order_from_proposal_payload": {
+                "article_id": article.id,
+                "target_date": purchase_order_target_date.isoformat(),
+                "comment": "Smoke PO from canonical proposal",
+                "explanation": True,
             },
         }
         print(json.dumps(payloads))
