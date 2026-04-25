@@ -25,14 +25,14 @@ from tests.test_utils import (
 )
 
 
-def _setup_article_with_non_zero_proposal(db):
+def _setup_article_with_non_zero_proposal(db, code: str = "PO-service-A"):
     """Create article + WB data such that generate_order_proposal returns non-empty items.
 
     Returns (article, target_date).
     """
-    article = create_article(db, code="PO-service-A")
-    size = create_size(db, label="S", sort_order=1)
-    color = create_color(db, inner_code="C1")
+    article = create_article(db, code=code)
+    size = create_size(db, label=f"S-{code}", sort_order=1)
+    color = create_color(db, inner_code=f"C1-{code}")
     create_sku(db, article, color, size)
 
     create_global_planning_settings(db)
@@ -46,7 +46,7 @@ def _setup_article_with_non_zero_proposal(db):
         strictness=1.0,
     )
 
-    wb_sku = "SKU-PO-service-A"
+    wb_sku = f"SKU-{code}"
     create_wb_mapping(db, article, wb_sku=wb_sku)
     target_date = date(2025, 1, 31)
     add_wb_sales(db, wb_sku=wb_sku, day=target_date, sales_qty=10)
@@ -189,6 +189,55 @@ def test_create_purchase_order_from_non_empty_proposal(db_session):
 
     assert proposal_map == po_map
     assert sum(proposal_map.values()) == sum(po_map.values())
+
+
+def test_create_purchase_order_from_proposal_scopes_legacy_fallback_to_article_ids(db_session):
+    article_a, target_date = _setup_article_with_non_zero_proposal(
+        db_session,
+        code="PO-service-scope-A",
+    )
+    article_b, _ = _setup_article_with_non_zero_proposal(
+        db_session,
+        code="PO-service-scope-B",
+    )
+
+    scoped_proposal = generate_order_proposal(
+        db_session,
+        target_date=target_date,
+        explanation=False,
+        article_ids=[article_a.id],
+    )
+    assert scoped_proposal.items
+    assert {item.article_id for item in scoped_proposal.items} == {article_a.id}
+
+    po = create_purchase_order_from_proposal(
+        db=db_session,
+        target_date=target_date,
+        article_ids=[article_a.id],
+        explanation=False,
+        comment="scoped legacy fallback",
+    )
+
+    items = (
+        db_session.query(PurchaseOrderItem)
+        .filter(PurchaseOrderItem.purchase_order_id == po.id)
+        .all()
+    )
+    assert items
+    assert {item.article_id for item in items} == {article_a.id}
+    assert article_b.id not in {item.article_id for item in items}
+
+    from collections import defaultdict
+
+    proposal_map = defaultdict(int)
+    for it in scoped_proposal.items:
+        proposal_map[(it.article_id, it.color_id, it.size_id)] += it.quantity
+
+    po_map = defaultdict(int)
+    for it in items:
+        po_map[(it.article_id, it.color_id, it.size_id)] += it.quantity
+
+    assert proposal_map == po_map
 
 
 def test_create_purchase_order_from_proposal_uses_canonical_from_wb_adapter(

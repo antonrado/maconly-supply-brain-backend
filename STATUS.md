@@ -59,6 +59,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - WB shipment status mutations are now machine-readable too: unsupported status values and invalid status transitions return structured validation details with shipment id, field context, allowed values/targets, and deterministic `next_steps` instead of raw strings.
   - Planning monitoring timeseries validation is now machine-readable too: missing `metrics` query parameter on `GET /api/v1/planning/monitoring/timeseries` returns a structured `400` detail with field context and deterministic `next_steps` instead of a raw string.
   - Legacy `generate_order_proposal` now supports optional `article_ids` scoping, and order-explanation consumers reuse scoped legacy proposal runs instead of recomputing the full legacy portfolio for each article.
+  - `POST /api/v1/purchase-order/from-proposal` now accepts optional `article_ids` for the legacy fallback path, so operator-facing purchase-order draft creation can scope legacy proposal generation to a requested article set without switching semantics; ambiguous payloads that send both `article_id` and `article_ids` are rejected with `422`.
   - WB shipment draft creation remains a WB replenishment / shipment boundary backed by `compute_replenishment`; it is not currently treated as a safe direct migration target to the canonical production-order core.
   - `from-wb` adapter path auto-builds `bundle_daily_sales` and `bundle_stock` from WB-ingested tables (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
   - `from-wb` explanation now includes requested/effective `as_of_date` source trace, resolved sales window bounds, and adapter snapshots for `daily_sales_by_bundle`, `wb_stock_by_bundle`, and `wb_stock_updated_at_by_bundle` to make WB-derived input reconstruction auditable.
@@ -76,6 +77,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Layer 2 calibration coefficient precedence is now explicit and regression-locked on both direct and `from-wb` production-order paths: `layer2_capital_cost_rate`, `layer2_stockout_penalty_weight`, and `layer2_overstock_penalty_weight` resolve deterministically across `request > admin_defaults > global_default > code_default_constants`, and the effective values/sources are asserted in both `explanation.meta.layer_2_allocation` and `explanation.meta.alpha_proxy_economics.layer_proxy_source`.
   - Layer 2 contract summary is now emitted in `explanation.meta.layer_2_allocation.contract` (version/status/checks for summary consistency, allocation-vs-composite-objective-gate consistency with legacy alias compatibility, non-negative metrics, positive ETA, tie-break invariants, decision-reason mapping, tie/near-tie objective-gap consistency with legacy profit-gap aliases, profit/GMROI/objective-score gap consistency, and capital metric sanity) and projected in compact explainability mode.
   - Layer 2 helper + API compact/full regressions now explicitly assert canonical tie/near-tie contract keys (`tie_break_applied_matches_objective_tie`, `near_tie_matches_objective_gap_threshold`) and canonical objective-gap threshold tracing, while preserving legacy alias assertions for backward compatibility.
+  - Layer 2 contract hardening now explicitly validates Layer 4 handoff integrity: required `Conservative` / `Balanced` / `Aggressive` scenarios must be present exactly once in `explanation.meta.layer_5_intervention.contract.checks`, so malformed scenario handoff is surfaced as contract violation instead of silently degrading behind fallback-zero behavior.
   - Layer 2 contract hardening now includes objective-component formula integrity check (`objective_score = expected_gross_profit - capital_cost_penalty - stockout_penalty - overstock_penalty`) and objective-score decision-reason consistency check (`decision_reason_objective_score` must match allocation) to prevent silent non-composite fallback and malformed explainability drift.
   - Stable-alpha acceptance checklist now has sections 1-12 fully checked, including scope/API stability, Layer 1-5 contracts, explainability, from-WB freshness, decision-quality casebook evidence, Economic Alpha transition-block criteria, verification gate criteria, and documentation-discipline criteria, based on locked regressions and successful `verify`/`verify-live` runs.
   - Capital-aware line ranking/constraint evidence is now helper + API regression locked: objective-per-capital ranking can deterministically prioritize lower gross-profit lines when penalties dominate, budget-limited allocation follows this ranking rather than silent profit-only ordering, and proposal meta exposes deterministic ranking/cutoff behavior (including partial-cutoff allocation).
@@ -285,20 +287,20 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-26 02:25 +07:00`
-- Branch: `main` (dirty worktree)
-- Last commit (`git log -1 --oneline`): `85cf925`
+- Date: `2026-04-26 02:56 +07:00`
+- Branch: `feat/purchase-order-legacy-article-ids-scope` (dirty worktree)
+- Last commit (`git log -1 --oneline`): `15ecabe`
 - Gates:
-  - `python -m pytest -q tests/test_order_proposal.py tests/test_order_explanation_portfolio_api.py tests/test_planning_health_portfolio_api.py tests/test_monitoring_snapshot_api.py tests/test_article_dashboard_api.py tests/test_purchase_order_service.py tests/test_purchase_order_api.py` → `43 passed`
-  - `python -m pytest -q` → `449 passed`
+  - `python -m pytest -q tests/test_purchase_order_service.py tests/test_purchase_order_api.py` → `20 passed`
+  - `python -m pytest -q` → `452 passed`
 
 ### Minimal raw outputs
 ```text
-$ python -m pytest -q tests/test_order_proposal.py tests/test_order_explanation_portfolio_api.py tests/test_planning_health_portfolio_api.py tests/test_monitoring_snapshot_api.py tests/test_article_dashboard_api.py tests/test_purchase_order_service.py tests/test_purchase_order_api.py
-43 passed in 1.31s
+$ python -m pytest -q tests/test_purchase_order_service.py tests/test_purchase_order_api.py
+20 passed in 1.18s
 ```
 
 ```text
 $ python -m pytest -q
-449 passed in 6.76s
+452 passed in 6.87s
 ```

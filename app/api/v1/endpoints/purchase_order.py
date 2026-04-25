@@ -26,6 +26,7 @@ def create_from_proposal(
     po = create_purchase_order_from_proposal(
         db=db,
         article_id=payload.article_id,
+        article_ids=payload.article_ids,
         target_date=payload.target_date,
         explanation=payload.explanation,
         comment=payload.comment,
