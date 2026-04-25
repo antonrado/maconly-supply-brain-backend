@@ -84,17 +84,17 @@ def test_openapi_hides_legacy_planning_paths_and_keeps_canonical_production_orde
     assert "/api/v1/planning/core/production-order/proposal/from-wb" in paths
 
 
-def _setup_article_with_skus_and_planning(db_session):
+def _setup_article_with_skus_and_planning(db_session, code: str = "E2E-ART-1"):
     """Create article with multiple SKUs and planning settings for end-to-end tests."""
-    article = create_article(db_session, code="E2E-ART-1")
+    article = create_article(db_session, code=code)
 
     colors = [
-        create_color(db_session, inner_code="E2E-C1"),
-        create_color(db_session, inner_code="E2E-C2"),
+        create_color(db_session, inner_code=f"{code}-C1"),
+        create_color(db_session, inner_code=f"{code}-C2"),
     ]
     sizes = [
-        create_size(db_session, label="S", sort_order=1),
-        create_size(db_session, label="M", sort_order=2),
+        create_size(db_session, label=f"S-{code}", sort_order=1),
+        create_size(db_session, label=f"M-{code}", sort_order=2),
     ]
 
     for color in colors:
@@ -309,6 +309,50 @@ def test_end_to_end_happy_path_wb_to_po(client, db_session):
 
     for it in po["items"]:
         assert (it["color_id"], it["size_id"]) in sku_pairs
+
+
+def test_end_to_end_legacy_order_proposal_accepts_article_ids_scope(client, db_session):
+    article_a = _setup_article_with_skus_and_planning(db_session, code="E2E-SCOPE-A")
+    article_b = _setup_article_with_skus_and_planning(db_session, code="E2E-SCOPE-B")
+    target_date = date(2025, 1, 31)
+
+    create_wb_mapping(db_session, article_a, wb_sku="SKU-END2END-SCOPE-A")
+    add_wb_sales(
+        db_session,
+        wb_sku="SKU-END2END-SCOPE-A",
+        day=target_date,
+        sales_qty=20,
+    )
+    add_wb_stock(db_session, wb_sku="SKU-END2END-SCOPE-A", stock_qty=0)
+
+    create_wb_mapping(db_session, article_b, wb_sku="SKU-END2END-SCOPE-B")
+    add_wb_sales(
+        db_session,
+        wb_sku="SKU-END2END-SCOPE-B",
+        day=target_date,
+        sales_qty=15,
+    )
+    add_wb_stock(db_session, wb_sku="SKU-END2END-SCOPE-B", stock_qty=0)
+    db_session.commit()
+
+    resp_proposal = client.get(
+        "/api/v1/planning/order-proposal",
+        params={
+            "target_date": target_date.isoformat(),
+            "explanation": False,
+            "article_ids": [article_a.id],
+        },
+    )
+    assert resp_proposal.status_code == 200, resp_proposal.text
+    assert resp_proposal.headers["Deprecation"] == "true"
+    assert resp_proposal.headers["X-Planning-Fidelity"] == "legacy_live_low_fidelity"
+    assert resp_proposal.headers["X-Planning-Successor"] == "/api/v1/planning/core/production-order/proposal"
+    assert resp_proposal.headers["X-Planning-Legacy-Phase"] == "deprecated_runtime_supported"
+
+    proposal = resp_proposal.json()
+    assert proposal["items"]
+    assert {item["article_id"] for item in proposal["items"]} == {article_a.id}
+    assert article_b.id not in {item["article_id"] for item in proposal["items"]}
 
 
 def test_end_to_end_purchase_order_from_proposal_canonical_branch(client, db_session):
