@@ -187,6 +187,7 @@
   - Layer 3+ реализуются поэтапно после стабилизации Layer 1/2.
   - Совместимость legacy planning сейчас сужается bounded-cleanup шагами: `generate_order_proposal` получает scoped execution/reuse на живых compatibility surfaces без смены внешнего API-контракта.
   - Purchase-order legacy fallback теперь тоже умеет bounded article-set scoping через optional `article_ids`, так что живой operator-facing draft-creation path больше не требует full-portfolio legacy run для частичных кейсов.
+  - Deprecated `/api/v1/planning/order-proposal` теперь тоже поддерживает optional query-level `article_ids` scoping, поэтому явный legacy endpoint можно вызывать по article subset без принудительного full-portfolio run.
   - WB shipment draft creation пока сохраняется как отдельная replenishment / shipment boundary; это не считается безопасной прямой migration target для canonical production-order core.
   - Вне scope v1 alpha: ML, глобальная оптимизация, расширение elasticity-модели, multi-warehouse оптимизация.
 
@@ -209,10 +210,10 @@
   - Изменения структуры или смысла метрик потребуют аккуратных миграций и обратной совместимости на уровне сервисов и схем.
 
 - **Dual-engine compatibility boundary still exists**
-  - Legacy `generate_order_proposal` по-прежнему питает compatibility surfaces и требует дальнейшего bounded cleanup, чтобы не сохранять лишний full-portfolio recomputation и split-brain behavior.
-  - После scoped cleanup в order-explanation и purchase-order fallback основным явным remaining surface остаётся deprecated `/api/v1/planning/order-proposal`, который всё ещё выполняет полный legacy proposal run по старому контракту.
-  - `POST /api/v1/wb/manager/shipment/from-proposal` семантически остаётся replenishment / shipment boundary, а не production-order boundary; прямой swap на canonical production-order core был бы product-semantic change, а не безопасный refactor.
-  - Ближайший безопасный ход: продолжать сужать remaining legacy proposal consumers и не смешивать shipment/replenishment semantics с production-order semantics до появления canonical replenishment core.
+   - Legacy `generate_order_proposal` по-прежнему питает compatibility surfaces и требует дальнейшего bounded cleanup, чтобы не сохранять лишний full-portfolio recomputation и split-brain behavior.
+   - После scoped cleanup в order-explanation, purchase-order fallback и explicit legacy endpoint основным remaining technical question остаётся не сам lack of scoping, а то, нужны ли ещё какие-либо operator-facing unscoped full-portfolio legacy runs вообще.
+   - `POST /api/v1/wb/manager/shipment/from-proposal` семантически остаётся replenishment / shipment boundary, а не production-order boundary; прямой swap на canonical production-order core был бы product-semantic change, а не безопасный refactor.
+   - Ближайший безопасный ход: продолжать сужать remaining legacy proposal consumers и не смешивать shipment/replenishment semantics с production-order semantics до появления canonical replenishment core.
 
 ---
 
@@ -244,7 +245,8 @@
  | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
  | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
  | 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
-| 2026-04-26 | Extended `POST /api/v1/purchase-order/from-proposal` with backward-compatible legacy `article_ids` scoping and validation that rejects ambiguous `article_id` + `article_ids` payloads. | Сузить ещё один live legacy compatibility surface без смены canonical-vs-replenishment semantics и убрать лишний full-portfolio legacy run для частичных PO draft кейсов. |
+| 2026-04-26 | Extended deprecated `GET /api/v1/planning/order-proposal` with backward-compatible `article_ids` query scoping and e2e regression coverage for scoped legacy endpoint behavior. | Сузить последний явный legacy endpoint surface без ломки старого контракта и убрать лишний full-portfolio run, когда caller уже знает article subset. |
+ | 2026-04-26 | Extended `POST /api/v1/purchase-order/from-proposal` with backward-compatible legacy `article_ids` scoping and validation that rejects ambiguous `article_id` + `article_ids` payloads. | Сузить ещё один live legacy compatibility surface без смены canonical-vs-replenishment semantics и убрать лишний full-portfolio legacy run для частичных PO draft кейсов. |
  | 2026-04-26 | Hardened host pytest bootstrap in `tests/conftest.py` so plain `python -m pytest -q` works without ad hoc `PYTHONPATH` setup. | Убрать environment-sensitive false negatives из локальной/host верификации и сделать runtime truth по тестам детерминированным. |
  | 2026-04-26 | Scoped legacy `generate_order_proposal` execution and reused one shared scoped proposal in order-explanation consumers; documented WB shipment as a separate replenishment boundary. | Сузить живой dual-engine compatibility surface без смены API-семантики и не подменять shipment/replenishment flow production-order логикой. |
  | 2026-04-16 | Hardened mixed partial-data remediation for `/api/v1/wb/from-wb/readiness` and strict `/api/v1/planning/core/production-order/proposal/from-wb`: missing+stale WB states now emit combined sync next steps. | Довести availability/runtime truth до операторски честной remediation-модели и не подсказывать только одну sync-операцию, когда stale остаётся и на второй стороне. |

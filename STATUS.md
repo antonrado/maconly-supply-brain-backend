@@ -60,6 +60,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - Planning monitoring timeseries validation is now machine-readable too: missing `metrics` query parameter on `GET /api/v1/planning/monitoring/timeseries` returns a structured `400` detail with field context and deterministic `next_steps` instead of a raw string.
   - Legacy `generate_order_proposal` now supports optional `article_ids` scoping, and order-explanation consumers reuse scoped legacy proposal runs instead of recomputing the full legacy portfolio for each article.
   - `POST /api/v1/purchase-order/from-proposal` now accepts optional `article_ids` for the legacy fallback path, so operator-facing purchase-order draft creation can scope legacy proposal generation to a requested article set without switching semantics; ambiguous payloads that send both `article_id` and `article_ids` are rejected with `422`.
+  - Deprecated `GET /api/v1/planning/order-proposal` now also accepts optional repeated `article_ids` query params and forwards them into the same scoped legacy proposal path, so explicit legacy endpoint calls no longer require a full-portfolio run when the caller already knows the target article subset.
   - WB shipment draft creation remains a WB replenishment / shipment boundary backed by `compute_replenishment`; it is not currently treated as a safe direct migration target to the canonical production-order core.
   - `from-wb` adapter path auto-builds `bundle_daily_sales` and `bundle_stock` from WB-ingested tables (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
   - `from-wb` explanation now includes requested/effective `as_of_date` source trace, resolved sales window bounds, and adapter snapshots for `daily_sales_by_bundle`, `wb_stock_by_bundle`, and `wb_stock_updated_at_by_bundle` to make WB-derived input reconstruction auditable.
@@ -287,20 +288,20 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-26 02:56 +07:00`
-- Branch: `feat/purchase-order-legacy-article-ids-scope` (dirty worktree)
-- Last commit (`git log -1 --oneline`): `15ecabe`
+- Date: `2026-04-26 03:05 +07:00`
+- Branch: `feat/legacy-order-proposal-article-ids-scope` (dirty worktree)
+- Last commit (`git log -1 --oneline`): `a70d5d1`
 - Gates:
-  - `python -m pytest -q tests/test_purchase_order_service.py tests/test_purchase_order_api.py` → `20 passed`
-  - `python -m pytest -q` → `452 passed`
+  - `python -m pytest -q tests/test_end_to_end_planning.py -k "order_proposal or happy_path_wb_to_po or zero_demand"` → `3 passed, 3 deselected`
+  - `python -m pytest -q` → `453 passed`
 
 ### Minimal raw outputs
 ```text
-$ python -m pytest -q tests/test_purchase_order_service.py tests/test_purchase_order_api.py
-20 passed in 1.18s
+$ python -m pytest -q tests/test_end_to_end_planning.py -k "order_proposal or happy_path_wb_to_po or zero_demand"
+3 passed, 3 deselected in 0.98s
 ```
 
 ```text
 $ python -m pytest -q
-452 passed in 6.87s
+453 passed in 6.94s
 ```

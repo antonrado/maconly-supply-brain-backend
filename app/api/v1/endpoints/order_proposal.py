@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -27,6 +27,7 @@ def get_order_proposal(
     target_date: date,
     response: Response,
     explanation: bool = True,
+    article_ids: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     response.headers["Deprecation"] = LEGACY_ORDER_PROPOSAL_DEPRECATION
@@ -37,4 +38,5 @@ def get_order_proposal(
         db=db,
         target_date=target_date,
         explanation=explanation,
+        article_ids=article_ids,
     )
