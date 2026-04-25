@@ -204,6 +204,58 @@ class TestOrderProposal:
         assert "Elastic minima applied" in (resp.global_explanation or "")
         assert "elastic_min_batch_qty=500" in (resp.global_explanation or "")
 
+    def test_generate_order_proposal_filters_to_requested_article_ids(self, db_session):
+        target_date = date(2025, 1, 31)
+
+        article_a = create_article(db_session, code="A-filter-target")
+        color_a = create_color(db_session, inner_code="CF-A")
+        size_a = create_size(db_session, label="SF-A", sort_order=1)
+        create_sku(db_session, article_a, color_a, size_a)
+
+        article_b = create_article(db_session, code="A-filter-other")
+        color_b = create_color(db_session, inner_code="CF-B")
+        size_b = create_size(db_session, label="SF-B", sort_order=1)
+        create_sku(db_session, article_b, color_b, size_b)
+
+        create_global_planning_settings(db_session)
+
+        for article in (article_a, article_b):
+            create_article_planning_settings(db_session, article, target_coverage_days=10)
+            create_planning_settings(
+                db_session,
+                article,
+                is_active=True,
+                min_fabric_batch=0,
+                min_elastic_batch=0,
+                strictness=1.0,
+            )
+
+        wb_sku_a = "SKU-A-filter-target"
+        create_wb_mapping(db_session, article_a, wb_sku=wb_sku_a)
+        add_wb_sales(db_session, wb_sku=wb_sku_a, day=target_date, sales_qty=10)
+        add_wb_stock(db_session, wb_sku=wb_sku_a, stock_qty=0)
+
+        wb_sku_b = "SKU-A-filter-other"
+        create_wb_mapping(db_session, article_b, wb_sku=wb_sku_b)
+        add_wb_sales(db_session, wb_sku=wb_sku_b, day=target_date, sales_qty=12)
+        add_wb_stock(db_session, wb_sku=wb_sku_b, stock_qty=0)
+
+        unfiltered = generate_order_proposal(
+            db_session,
+            target_date=target_date,
+            explanation=False,
+        )
+        assert {item.article_id for item in unfiltered.items} == {article_a.id, article_b.id}
+
+        filtered = generate_order_proposal(
+            db_session,
+            target_date=target_date,
+            explanation=False,
+            article_ids=[article_a.id],
+        )
+        assert filtered.items
+        assert {item.article_id for item in filtered.items} == {article_a.id}
+
     def test_scenario_d_complex(self, db_session):
         """Scenario D: combined article, color and elastic minima with size ordering."""
         article = create_article(db_session, code="A-complex")
