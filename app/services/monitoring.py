@@ -9,13 +9,8 @@ from app.schemas.bundle_risk import BundleRiskLevel
 from app.services.integrations_config import build_integrations_config_snapshot
 from app.services.bundle_risk import build_bundle_risk_portfolio
 from app.services.order_explanation import build_order_explanation_portfolio
-from app.services.planning_health import build_planning_health_portfolio
-
 
 def build_monitoring_snapshot(db: Session) -> MonitoringSnapshot:
-    # Planning health is built for side-effects/consistency, even if not yet exposed directly
-    _health_items = build_planning_health_portfolio(db=db)
-
     integrations_snapshot = build_integrations_config_snapshot(db=db)
     wb_accounts = integrations_snapshot.wb_accounts
     ms_accounts = integrations_snapshot.moysklad_accounts
