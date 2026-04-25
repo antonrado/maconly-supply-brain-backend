@@ -33,9 +33,6 @@ def client(db_session):
 
 
 def test_monitoring_snapshot_empty_system(client, db_session, monkeypatch):  # noqa: ARG001
-    def fake_build_planning_health_portfolio(db, article_ids=None):  # noqa: ARG001
-        return []
-
     def fake_build_integrations_config_snapshot(db):  # noqa: ARG001
         return IntegrationsConfigSnapshot(wb_accounts=[], moysklad_accounts=[])
 
@@ -45,11 +42,6 @@ def test_monitoring_snapshot_empty_system(client, db_session, monkeypatch):  # n
     def fake_build_order_explanation_portfolio(db, article_ids=None):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr(
-        monitoring,
-        "build_planning_health_portfolio",
-        fake_build_planning_health_portfolio,
-    )
     monkeypatch.setattr(
         monitoring,
         "build_integrations_config_snapshot",
@@ -118,20 +110,12 @@ def test_monitoring_snapshot_integrations_status(client, db_session, monkeypatch
     db_session.add_all([wb1, wb2, ms1])
     db_session.flush()
 
-    def fake_build_planning_health_portfolio(db, article_ids=None):  # noqa: ARG001
-        return []
-
     def fake_build_bundle_risk_portfolio(db, article_ids=None):  # noqa: ARG001
         return []
 
     def fake_build_order_explanation_portfolio(db, article_ids=None):  # noqa: ARG001
         return []
 
-    monkeypatch.setattr(
-        monitoring,
-        "build_planning_health_portfolio",
-        fake_build_planning_health_portfolio,
-    )
     monkeypatch.setattr(
         monitoring,
         "build_bundle_risk_portfolio",
@@ -155,9 +139,6 @@ def test_monitoring_snapshot_integrations_status(client, db_session, monkeypatch
 
 
 def test_monitoring_snapshot_risk_summary(client, db_session, monkeypatch):  # noqa: ARG001
-    def fake_build_planning_health_portfolio(db, article_ids=None):  # noqa: ARG001
-        return []
-
     def fake_build_integrations_config_snapshot(db):  # noqa: ARG001
         return IntegrationsConfigSnapshot(wb_accounts=[], moysklad_accounts=[])
 
@@ -256,11 +237,6 @@ def test_monitoring_snapshot_risk_summary(client, db_session, monkeypatch):  # n
 
     monkeypatch.setattr(
         monitoring,
-        "build_planning_health_portfolio",
-        fake_build_planning_health_portfolio,
-    )
-    monkeypatch.setattr(
-        monitoring,
         "build_integrations_config_snapshot",
         fake_build_integrations_config_snapshot,
     )
@@ -288,9 +264,6 @@ def test_monitoring_snapshot_risk_summary(client, db_session, monkeypatch):  # n
 
 
 def test_monitoring_snapshot_order_summary(client, db_session, monkeypatch):  # noqa: ARG001
-    def fake_build_planning_health_portfolio(db, article_ids=None):  # noqa: ARG001
-        return []
-
     def fake_build_integrations_config_snapshot(db):  # noqa: ARG001
         return IntegrationsConfigSnapshot(wb_accounts=[], moysklad_accounts=[])
 
@@ -381,11 +354,6 @@ def test_monitoring_snapshot_order_summary(client, db_session, monkeypatch):  # 
     def fake_build_order_explanation_portfolio(db, article_ids=None):  # noqa: ARG001
         return explanations
 
-    monkeypatch.setattr(
-        monitoring,
-        "build_planning_health_portfolio",
-        fake_build_planning_health_portfolio,
-    )
     monkeypatch.setattr(
         monitoring,
         "build_integrations_config_snapshot",
