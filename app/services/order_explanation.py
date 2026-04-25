@@ -118,6 +118,7 @@ def _compute_total_available_before(db: Session, article_id: int) -> int:
 def build_order_explanation_for_article(
     db: Session,
     article_id: int,
+    proposal: OrderProposalResponse | None = None,
 ) -> ArticleOrderExplanation:
     article = _resolve_article(db, article_id)
 
@@ -169,11 +170,13 @@ def build_order_explanation_for_article(
     internal_available = _compute_total_available_before(db=db, article_id=article.id)
     total_available_before = (demand.current_stock or 0) + internal_available
 
-    proposal: OrderProposalResponse = generate_order_proposal(
-        db=db,
-        target_date=target_date,
-        explanation=True,
-    )
+    if proposal is None:
+        proposal = generate_order_proposal(
+            db=db,
+            target_date=target_date,
+            explanation=True,
+            article_ids=[article.id],
+        )
 
     article_items = [it for it in proposal.items if it.article_id == article.id]
 
@@ -315,10 +318,22 @@ def build_order_explanation_portfolio(
                 target_article_ids.append(aid)
 
     portfolio: list[ArticleOrderExplanation] = []
+    shared_proposal: OrderProposalResponse | None = None
+    if target_article_ids:
+        shared_proposal = generate_order_proposal(
+            db=db,
+            target_date=date.today(),
+            explanation=True,
+            article_ids=target_article_ids,
+        )
 
     for aid in target_article_ids:
         try:
-            explanation = build_order_explanation_for_article(db=db, article_id=aid)
+            explanation = build_order_explanation_for_article(
+                db=db,
+                article_id=aid,
+                proposal=shared_proposal,
+            )
         except HTTPException as exc:  # type: ignore[py310-no-except-type-comments]
             if exc.status_code == status.HTTP_404_NOT_FOUND and _is_article_not_found_detail(exc.detail):
                 continue

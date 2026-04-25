@@ -21,8 +21,15 @@ def generate_order_proposal(
     db: Session,
     target_date: date,
     explanation: bool = True,
+    article_ids: list[int] | None = None,
 ) -> OrderProposalResponse:
-    settings_list = db.query(PlanningSettings).all()
+    settings_query = db.query(PlanningSettings)
+    if article_ids is not None:
+        if article_ids:
+            settings_query = settings_query.filter(PlanningSettings.article_id.in_(article_ids))
+        else:
+            settings_query = settings_query.filter(PlanningSettings.article_id.in_([-1]))
+    settings_list = settings_query.all()
 
     items: list[OrderProposalItem] = []
     explanation_parts: list[str] = []

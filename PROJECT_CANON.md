@@ -185,6 +185,8 @@
   - Layer 1: deterministic stock-health метрики по SKU.
   - Layer 2: deterministic allocation comparison (`main` / `assorti` / `hold`) на horizon до ETA.
   - Layer 3+ реализуются поэтапно после стабилизации Layer 1/2.
+  - Совместимость legacy planning сейчас сужается bounded-cleanup шагами: `generate_order_proposal` получает scoped execution/reuse на живых compatibility surfaces без смены внешнего API-контракта.
+  - WB shipment draft creation пока сохраняется как отдельная replenishment / shipment boundary; это не считается безопасной прямой migration target для canonical production-order core.
   - Вне scope v1 alpha: ML, глобальная оптимизация, расширение elasticity-модели, multi-warehouse оптимизация.
 
 ---
@@ -204,6 +206,11 @@
 - **Версионирование снапшотов**
   - Таблица `monitoring_snapshots` на текущий момент не содержит явного поля версии схемы снапшота.
   - Изменения структуры или смысла метрик потребуют аккуратных миграций и обратной совместимости на уровне сервисов и схем.
+
+- **Dual-engine compatibility boundary still exists**
+  - Legacy `generate_order_proposal` по-прежнему питает compatibility surfaces и требует дальнейшего bounded cleanup, чтобы не сохранять лишний full-portfolio recomputation и split-brain behavior.
+  - `POST /api/v1/wb/manager/shipment/from-proposal` семантически остаётся replenishment / shipment boundary, а не production-order boundary; прямой swap на canonical production-order core был бы product-semantic change, а не безопасный refactor.
+  - Ближайший безопасный ход: продолжать сужать remaining legacy proposal consumers и не смешивать shipment/replenishment semantics с production-order semantics до появления canonical replenishment core.
 
 ---
 
@@ -228,13 +235,15 @@
 | 2025-12-29 | repo initialized, origin set to GitHub, initial baseline pushed (commit 2d120b8, branch main). | Зафиксировать привязку репозитория к GitHub и базовый коммит. |
 | 2025-12-29 | Added PG advisory lock to prevent multi-instance scheduler duplication.                    | Сделать запуск планировщика single-instance при нескольких backend-инстансах. |
 | 2025-12-29 | Verified multi-instance scheduler advisory lock with two backend services under Docker Compose. | Подтвердить, что при двух backend-инстансах только один получает lock и выполняет планировщик. |
-| 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, stub endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
-| 2025-12-31 | Updated Planning Core v1 endpoints to return HTTP 200 stub responses for health and proposal. | Обновить Planning Core v1 для возвращения stub-ответов. |
-| 2026-02-24 | Added canonical docs set (VISION, ARCHITECTURE_CANON, ROADMAP, AGENT_WORKFLOW, RUNBOOK) and refreshed STATUS/PROJECT_CANON with reproducible verification commands. | Перенести ключевой контекст и решения из чата в репозиторий как единый источник правды. |
-| 2026-02-24 | Added engineering foundation pack (CI workflow, PR template, CONTRIBUTING, CODEOWNERS scaffold, ADR process, release policy). | Снизить риск рефакторинга «задним числом» и зафиксировать quality gates для масштабирования платформы. |
-| 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
-| 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
-| 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
-| 2026-04-16 | Hardened mixed partial-data remediation for `/api/v1/wb/from-wb/readiness` and strict `/api/v1/planning/core/production-order/proposal/from-wb`: missing+stale WB states now emit combined sync next steps. | Довести availability/runtime truth до операторски честной remediation-модели и не подсказывать только одну sync-операцию, когда stale остаётся и на второй стороне. |
-| 2026-04-16 | Hardened live `/api/v1/planning/core/production-order/proposal/from-wb` freshness semantics so sales-only and stock-only WB data produce explicit partial-data statuses, and strict mode rejects them with structured remediation. | Согласовать strict runtime truth с уже ужесточённым readiness контрактом и убрать ложный `fresh` для частично пустого WB ingest. |
-| 2026-04-15 | Hardened `/api/v1/wb/from-wb/readiness` to block sales-only-missing and stock-only-missing WB data with explicit blocker codes and next steps. | Согласовать availability/readiness контракт с уже существующей vocabulary блокеров и не выдавать частично пустой WB ingest как fully ready. |
+ | 2025-12-29 | Added Planning Core v1 skeleton (domain, service interface, stub endpoints).                | Подготовить каркас ядра планирования без изменения текущей логики. |
+ | 2025-12-31 | Updated Planning Core v1 endpoints to return HTTP 200 stub responses for health and proposal. | Обновить Planning Core v1 для возвращения stub-ответов. |
+ | 2026-02-24 | Added canonical docs set (VISION, ARCHITECTURE_CANON, ROADMAP, AGENT_WORKFLOW, RUNBOOK) and refreshed STATUS/PROJECT_CANON with reproducible verification commands. | Перенести ключевой контекст и решения из чата в репозиторий как единый источник правды. |
+ | 2026-02-24 | Added engineering foundation pack (CI workflow, PR template, CONTRIBUTING, CODEOWNERS scaffold, ADR process, release policy). | Снизить риск рефакторинга «задним числом» и зафиксировать quality gates для масштабирования платформы. |
+ | 2026-02-24 | Added Planning Core production-order proposal endpoint + schemas/service/tests (MVP logic with model-B deficit, minima and alternatives). | Начать реализацию ядра заказа в Китай в контрактном формате без ломки существующих API. |
+ | 2026-02-24 | Added event-driven context synchronization guard (CI + local helper + ADR-0002) to enforce canonical docs updates for runtime/API/planning changes. | Исключить потерю проектного вектора, вводных и контекста на длинном горизонте разработки. |
+ | 2026-02-24 | Added production-order admin settings contract (size weights, elastic bindings, in-flight defaults) with persistence tables, migration 0009 and API endpoints. | Перевести ключевые входы planning-core из «ручного JSON» в управляемые настройки админки. |
+| 2026-04-26 | Hardened host pytest bootstrap in `tests/conftest.py` so plain `python -m pytest -q` works without ad hoc `PYTHONPATH` setup. | Убрать environment-sensitive false negatives из локальной/host верификации и сделать runtime truth по тестам детерминированным. |
+| 2026-04-26 | Scoped legacy `generate_order_proposal` execution and reused one shared scoped proposal in order-explanation consumers; documented WB shipment as a separate replenishment boundary. | Сузить живой dual-engine compatibility surface без смены API-семантики и не подменять shipment/replenishment flow production-order логикой. |
+ | 2026-04-16 | Hardened mixed partial-data remediation for `/api/v1/wb/from-wb/readiness` and strict `/api/v1/planning/core/production-order/proposal/from-wb`: missing+stale WB states now emit combined sync next steps. | Довести availability/runtime truth до операторски честной remediation-модели и не подсказывать только одну sync-операцию, когда stale остаётся и на второй стороне. |
+ | 2026-04-16 | Hardened live `/api/v1/planning/core/production-order/proposal/from-wb` freshness semantics so sales-only and stock-only WB data produce explicit partial-data statuses, and strict mode rejects them with structured remediation. | Согласовать strict runtime truth с уже ужесточённым readiness контрактом и убрать ложный `fresh` для частично пустого WB ingest. |
+ | 2026-04-15 | Hardened `/api/v1/wb/from-wb/readiness` to block sales-only-missing and stock-only-missing WB data with explicit blocker codes and next steps. | Согласовать availability/readiness контракт с уже существующей vocabulary блокеров и не выдавать частично пустой WB ingest как fully ready. |

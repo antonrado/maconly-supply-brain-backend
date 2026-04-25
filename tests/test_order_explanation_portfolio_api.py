@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.core.db import get_db
 from app.main import app
 from app.models.models import PlanningSettings
+from app.schemas.order_proposal import OrderProposalResponse
 from app.services import order_explanation
 from tests.test_utils import (
     add_wb_sales,
@@ -40,11 +41,11 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _setup_basic_article_with_deficit(db_session):
-    article = create_article(db_session, code="EXPL-A-1")
+def _setup_basic_article_with_deficit(db_session, code: str = "EXPL-A-1"):
+    article = create_article(db_session, code=code)
 
-    size_s = create_size(db_session, label="S", sort_order=1)
-    color = create_color(db_session, inner_code="EXPL-C1")
+    size_s = create_size(db_session, label=f"S-{code}", sort_order=1)
+    color = create_color(db_session, inner_code=f"EXPL-C1-{code}")
     create_sku(db_session, article, color, size_s)
 
     create_global_planning_settings(db_session)
@@ -58,7 +59,7 @@ def _setup_basic_article_with_deficit(db_session):
         strictness=1.0,
     )
 
-    wb_sku = "SKU-EXPL-A-1"
+    wb_sku = f"SKU-{code}"
     target_date = date.today()
     create_wb_mapping(db_session, article, wb_sku=wb_sku)
     add_wb_sales(db_session, wb_sku=wb_sku, day=target_date, sales_qty=10)
@@ -178,6 +179,84 @@ def test_build_order_explanation_for_article_rejects_unknown_article_with_struct
         },
         "next_steps": ["use_existing_article_id"],
     }
+
+
+def test_build_order_explanation_for_article_scopes_legacy_proposal_to_requested_article(
+    db_session,
+    monkeypatch,
+):
+    article, _color = _setup_basic_article_with_deficit(db_session)
+    captured: dict[str, object] = {}
+
+    def fake_generate_order_proposal(*, db, target_date, explanation, article_ids=None):
+        captured["db"] = db
+        captured["target_date"] = target_date
+        captured["explanation"] = explanation
+        captured["article_ids"] = article_ids
+        return OrderProposalResponse(
+            target_date=target_date,
+            items=[],
+            global_explanation=None,
+        )
+
+    monkeypatch.setattr(
+        order_explanation,
+        "generate_order_proposal",
+        fake_generate_order_proposal,
+    )
+
+    explanation = order_explanation.build_order_explanation_for_article(
+        db=db_session,
+        article_id=article.id,
+    )
+
+    assert explanation.article_id == article.id
+    assert explanation.reasons == []
+    assert captured["db"] is db_session
+    assert captured["explanation"] is True
+    assert captured["article_ids"] == [article.id]
+
+
+def test_build_order_explanation_portfolio_reuses_shared_scoped_proposal_for_requested_articles(
+    db_session,
+    monkeypatch,
+):
+    article_a, _color_a = _setup_basic_article_with_deficit(db_session, code="EXPL-SHARED-A")
+    article_b, _color_b = _setup_basic_article_with_deficit(db_session, code="EXPL-SHARED-B")
+    calls: list[dict[str, object]] = []
+
+    def fake_generate_order_proposal(*, db, target_date, explanation, article_ids=None):
+        calls.append(
+            {
+                "db": db,
+                "target_date": target_date,
+                "explanation": explanation,
+                "article_ids": article_ids,
+            }
+        )
+        return OrderProposalResponse(
+            target_date=target_date,
+            items=[],
+            global_explanation=None,
+        )
+
+    monkeypatch.setattr(
+        order_explanation,
+        "generate_order_proposal",
+        fake_generate_order_proposal,
+    )
+
+    portfolio = order_explanation.build_order_explanation_portfolio(
+        db=db_session,
+        article_ids=[article_a.id, article_b.id, article_a.id],
+    )
+
+    assert {item.article_id for item in portfolio} == {article_a.id, article_b.id}
+    assert all(item.reasons == [] for item in portfolio)
+    assert len(calls) == 1
+    assert calls[0]["db"] is db_session
+    assert calls[0]["explanation"] is True
+    assert calls[0]["article_ids"] == [article_a.id, article_b.id]
 
 
 def test_filtering_by_article_ids_and_is_active(client, db_session):

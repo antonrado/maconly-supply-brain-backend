@@ -342,6 +342,7 @@
 5. Freeze freshness/infrastructure work to bug-fix-only while economics release evidence is being locked.
 6. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
 7. Keep section 12 documentation-discipline checklist evidence current in each accepted work block while release candidate evidence is finalized.
+8. Continue shrinking remaining live `generate_order_proposal` compatibility surfaces via bounded scoping/reuse cleanup; do not treat `wb/manager/shipment/from-proposal` as a production-order migration target until a canonical replenishment core exists.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.
