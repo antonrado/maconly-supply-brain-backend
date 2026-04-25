@@ -36,10 +36,10 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _setup_article_with_non_zero_proposal(db_session):
-    article = create_article(db_session, code="PO-api-A")
-    size = create_size(db_session, label="S", sort_order=1)
-    color = create_color(db_session, inner_code="C-api-A")
+def _setup_article_with_non_zero_proposal(db_session, code: str = "PO-api-A"):
+    article = create_article(db_session, code=code)
+    size = create_size(db_session, label=f"S-{code}", sort_order=1)
+    color = create_color(db_session, inner_code=f"C-{code}")
     create_sku(db_session, article, color, size)
 
     create_global_planning_settings(db_session)
@@ -53,7 +53,7 @@ def _setup_article_with_non_zero_proposal(db_session):
         strictness=1.0,
     )
 
-    wb_sku = "SKU-PO-api-A"
+    wb_sku = f"SKU-{code}"
     create_wb_mapping(db_session, article, wb_sku=wb_sku)
     target_date = date(2025, 1, 31)
     add_wb_sales(db_session, wb_sku=wb_sku, day=target_date, sales_qty=10)
@@ -175,6 +175,52 @@ def test_create_from_proposal_endpoint_accepts_article_id_for_canonical_branch(c
     assert body["items"]
     assert all(item["article_id"] == article.id for item in body["items"])
     assert all(item["quantity"] > 0 for item in body["items"])
+
+
+def test_create_from_proposal_endpoint_accepts_article_ids_for_legacy_scope(client, db_session):
+    article_a, target_date = _setup_article_with_non_zero_proposal(
+        db_session,
+        code="PO-api-scope-A",
+    )
+    article_b, _ = _setup_article_with_non_zero_proposal(
+        db_session,
+        code="PO-api-scope-B",
+    )
+
+    payload = {
+        "article_ids": [article_a.id],
+        "target_date": target_date.isoformat(),
+        "comment": "Scoped legacy PO",
+        "explanation": False,
+    }
+    resp = client.post("/api/v1/purchase-order/from-proposal", json=payload)
+    assert resp.status_code == 201, resp.text
+
+    body = resp.json()
+    assert body["status"] == "draft"
+    assert body["target_date"] == target_date.isoformat()
+    assert body["comment"] == "Scoped legacy PO"
+    assert body["items"]
+    assert {item["article_id"] for item in body["items"]} == {article_a.id}
+    assert article_b.id not in {item["article_id"] for item in body["items"]}
+
+
+def test_create_from_proposal_endpoint_rejects_both_article_id_and_article_ids(client, db_session):
+    article, target_date = _setup_article_with_non_zero_proposal(
+        db_session,
+        code="PO-api-scope-validator",
+    )
+
+    payload = {
+        "article_id": article.id,
+        "article_ids": [article.id],
+        "target_date": target_date.isoformat(),
+        "comment": "Ambiguous scope",
+        "explanation": True,
+    }
+    resp = client.post("/api/v1/purchase-order/from-proposal", json=payload)
+    assert resp.status_code == 422, resp.text
+    assert "Use either article_id or article_ids, not both." in resp.text
 
 
 def test_create_from_proposal_endpoint_canonical_branch_article_not_found(client):

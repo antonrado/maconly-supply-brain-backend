@@ -24,6 +24,7 @@ def create_purchase_order_from_proposal(
     db: Session,
     target_date: date,
     article_id: int | None = None,
+    article_ids: list[int] | None = None,
     explanation: bool = True,
     comment: str | None = None,
 ) -> PurchaseOrder:
@@ -59,6 +60,7 @@ def create_purchase_order_from_proposal(
             db=db,
             target_date=target_date,
             explanation=explanation,
+            article_ids=article_ids,
         )
         proposal_items = [
             (
