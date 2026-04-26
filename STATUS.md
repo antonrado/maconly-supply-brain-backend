@@ -62,6 +62,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - `POST /api/v1/purchase-order/from-proposal` now accepts optional `article_ids` for the legacy fallback path, so operator-facing purchase-order draft creation can scope legacy proposal generation to a requested article set without switching semantics; ambiguous payloads that send both `article_id` and `article_ids` are rejected with `422`.
   - Deprecated `GET /api/v1/planning/order-proposal` now also accepts optional repeated `article_ids` query params and forwards them into the same scoped legacy proposal path, so explicit legacy endpoint calls no longer require a full-portfolio run when the caller already knows the target article subset.
   - `build_monitoring_snapshot()` no longer triggers an unused `build_planning_health_portfolio()` warm-up “for side-effects/consistency”; monitoring snapshot/order-status/dashboard paths now avoid that extra hidden full-portfolio legacy aggregation and keep only the inputs actually used for the returned snapshot.
+  - Follow-up audit confirmed that the remaining no-`article_ids` default behavior is preserved only on explicit public dashboard/portfolio contracts (`wb/manager/online`, bundle-risk / order-explanation / health portfolio, monitoring aggregations); further tightening there is now a product decision, not a safe hidden-legacy cleanup.
   - WB shipment draft creation remains a WB replenishment / shipment boundary backed by `compute_replenishment`; it is not currently treated as a safe direct migration target to the canonical production-order core.
   - `from-wb` adapter path auto-builds `bundle_daily_sales` and `bundle_stock` from WB-ingested tables (`article_wb_mapping`, `wb_sales_daily`, `wb_stock`) and then runs the same proposal engine.
   - `from-wb` explanation now includes requested/effective `as_of_date` source trace, resolved sales window bounds, and adapter snapshots for `daily_sales_by_bundle`, `wb_stock_by_bundle`, and `wb_stock_updated_at_by_bundle` to make WB-derived input reconstruction auditable.
@@ -289,20 +290,22 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-26 03:18 +07:00`
-- Branch: `feat/monitoring-snapshot-drop-health-warmup` (dirty worktree)
-- Last commit (`git log -1 --oneline`): `a14cd82`
+- Date: `2026-04-26 11:02 +07:00`
+- Branch: `docs/explicit-portfolio-default-contract-audit` (dirty worktree)
+- Last commit (`git log -1 --oneline`): `983de7c`
 - Gates:
-  - `python -m pytest -q tests/test_monitoring_snapshot_api.py tests/test_monitoring_snapshot_service.py tests/test_monitoring_dashboard_api.py tests/test_monitoring_status_api.py` → `12 passed`
+  - `git diff --name-only` → `PROJECT_CANON.md`, `ROADMAP.md`, `STATUS.md`
   - `python -m pytest -q` → `454 passed`
 
 ### Minimal raw outputs
 ```text
-$ python -m pytest -q tests/test_monitoring_snapshot_api.py tests/test_monitoring_snapshot_service.py tests/test_monitoring_dashboard_api.py tests/test_monitoring_status_api.py
-12 passed in 1.03s
+$ git diff --name-only
+PROJECT_CANON.md
+ROADMAP.md
+STATUS.md
 ```
 
 ```text
 $ python -m pytest -q
-454 passed in 6.98s
+454 passed in 7.42s
 ```
