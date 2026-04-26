@@ -11493,6 +11493,12 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_main"] == 0.2
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
 
+    economics_trust = body["explanation"]["meta"]["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_UNTRUSTED
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert economics_trust["warnings"][0]["severity"] == "HIGH"
+    assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
+
     commission_meta = full_from_wb["economic_observed_commission"]
     assert commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert commission_meta["status"] == "ok"
