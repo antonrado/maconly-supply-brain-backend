@@ -342,7 +342,7 @@
 5. Freeze freshness/infrastructure work to bug-fix-only while economics release evidence is being locked.
 6. Maintain explicit `Production Order v1 Stable Alpha` acceptance checklist (`PRODUCTION_ORDER_V1_STABLE_ALPHA_CHECKLIST.md`) as release gate.
 7. Keep section 12 documentation-discipline checklist evidence current in each accepted work block while release candidate evidence is finalized.
-8. After removing the hidden monitoring snapshot planning-health warm-up, audit whether the remaining default full-portfolio behavior on explicit dashboard/portfolio surfaces (`wb/manager/online`, `order-explanation-portfolio`, `health-portfolio`, related monitoring aggregations) is intentional product contract or just leftover legacy defaulting; preserve `wb/manager/shipment/from-proposal` as a separate replenishment boundary until a canonical replenishment core exists.
+8. After removing the hidden monitoring snapshot planning-health warm-up, preserve the remaining no-`article_ids` default behavior only on explicit dashboard/portfolio contract surfaces (`wb/manager/online`, `bundle-risk-portfolio`, `order-explanation-portfolio`, `health-portfolio`, monitoring snapshot/dashboard aggregations) unless a later product decision intentionally changes those contracts; continue preserving `wb/manager/shipment/from-proposal` as a separate replenishment boundary until a canonical replenishment core exists.
 
 ## Phase 3 - Hardening and developer UX
 - Docker-first test execution for environments without host `pytest`.
