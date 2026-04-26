@@ -11064,6 +11064,7 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     body = response.json()
     full_from_wb = body["explanation"]["meta"]["from_wb"]
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["economic_calibration_state"] == "economic_inputs_calibrated"
     assert alpha_proxy["economic_source"]["average_realized_price_main"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 3.0
