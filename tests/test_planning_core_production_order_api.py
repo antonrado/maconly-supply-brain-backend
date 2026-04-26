@@ -11075,6 +11075,22 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
     assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
+    expected_trust_key_field_sources = {
+        field_name: alpha_proxy["economic_source"][field_name]
+        for field_name in economics_trust["key_fields"]
+    }
+    expected_code_default_key_fields = sorted(
+        field_name
+        for field_name, source in expected_trust_key_field_sources.items()
+        if source == LAYER_PROXY_VALUE_SOURCE
+    )
+    assert economics_trust["key_field_sources"] == expected_trust_key_field_sources
+    assert economics_trust["code_default_key_fields"] == expected_code_default_key_fields
+    assert economics_trust["code_default_key_fields_count"] == len(expected_code_default_key_fields)
+    assert economics_trust["code_default_dominance_ratio"] == round(
+        len(expected_code_default_key_fields) / len(economics_trust["key_fields"]),
+        4,
+    )
 
     from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
