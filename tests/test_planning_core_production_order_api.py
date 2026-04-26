@@ -2418,6 +2418,33 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
         == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
     )
 
+    main_contract = main_wins_body["explanation"]["meta"]["layer_2_allocation"]["contract"]
+    assorti_contract = assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["contract"]
+    assert main_contract["status"] == "ok"
+    assert main_contract["decision_count"] == len(
+        main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert main_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert (
+        main_contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"]
+        is True
+    )
+    assert main_contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert main_contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert main_contract["checks"]["allocation_matches_profit_gate"] is True
+    assert assorti_contract["status"] == "ok"
+    assert assorti_contract["decision_count"] == len(
+        assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert assorti_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert (
+        assorti_contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"]
+        is True
+    )
+    assert assorti_contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert assorti_contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert assorti_contract["checks"]["allocation_matches_profit_gate"] is True
+
     main_decisions = sorted(
         main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"],
         key=lambda item: (item["color_id"], item["size_id"]),
@@ -7893,6 +7920,33 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
         assorti_quality["decision_reason_counts_objective_score"]["objective_score_main_gt_assorti"]
         == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
     )
+
+    main_contract = main_wins_body["explanation"]["meta"]["layer_2_allocation"]["contract"]
+    assorti_contract = assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["contract"]
+    assert main_contract["status"] == "ok"
+    assert main_contract["decision_count"] == len(
+        main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert main_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert (
+        main_contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"]
+        is True
+    )
+    assert main_contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert main_contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert main_contract["checks"]["allocation_matches_profit_gate"] is True
+    assert assorti_contract["status"] == "ok"
+    assert assorti_contract["decision_count"] == len(
+        assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert assorti_contract["checks"]["decision_reason_matches_allocation"] is True
+    assert (
+        assorti_contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"]
+        is True
+    )
+    assert assorti_contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert assorti_contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert assorti_contract["checks"]["allocation_matches_profit_gate"] is True
 
     main_from_wb = main_wins_body["explanation"]["meta"]["from_wb"]
     assorti_from_wb = assorti_wins_body["explanation"]["meta"]["from_wb"]
