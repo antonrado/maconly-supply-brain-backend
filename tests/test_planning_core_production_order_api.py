@@ -2418,6 +2418,7 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
             == "expected_gross_profit_assorti_gt_main"
         )
         assert main_decision["allocation_decision"] == "assorti"
+        assert main_decision["decision_reason"] == "profit_assorti_gt_main"
         assert (
             main_decision["decision_reason_objective_score"]
             == "objective_score_assorti_gt_main"
@@ -2431,6 +2432,7 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
             == "expected_gross_profit_main_gt_assorti"
         )
         assert assorti_decision["allocation_decision"] == "main"
+        assert assorti_decision["decision_reason"] == "profit_main_gt_assorti"
         assert (
             assorti_decision["decision_reason_objective_score"]
             == "objective_score_main_gt_assorti"
@@ -7849,6 +7851,7 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
             == "expected_gross_profit_assorti_gt_main"
         )
         assert main_decision["allocation_decision"] == "assorti"
+        assert main_decision["decision_reason"] == "profit_assorti_gt_main"
         assert (
             main_decision["decision_reason_objective_score"]
             == "objective_score_assorti_gt_main"
@@ -7866,6 +7869,7 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
             == "expected_gross_profit_main_gt_assorti"
         )
         assert assorti_decision["allocation_decision"] == "main"
+        assert assorti_decision["decision_reason"] == "profit_main_gt_assorti"
         assert (
             assorti_decision["decision_reason_objective_score"]
             == "objective_score_main_gt_assorti"
