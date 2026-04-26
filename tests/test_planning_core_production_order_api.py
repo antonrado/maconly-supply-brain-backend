@@ -7701,6 +7701,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
     assert alpha_proxy["source"] == LAYER_PROXY_VALUE_SOURCE
     assert alpha_proxy["calibration_state"] == "alpha_proxy_not_calibrated"
+    assert alpha_proxy["economic_calibration_state"] == "economic_inputs_default_formula"
     assert alpha_proxy["margin_proxy"] == {"main": 0.8, "assorti": 0.65}
     assert alpha_proxy["unit_capital_proxy"] == 1.0
     assert alpha_proxy["economic_source"]["wb_commission_percent_main"] == LAYER_PROXY_VALUE_SOURCE
