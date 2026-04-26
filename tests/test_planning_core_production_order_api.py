@@ -2710,6 +2710,36 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
         "main": "objective_score_main_gt_assorti",
         "assorti": "objective_score_assorti_gt_main",
     }
+    legacy_reason_by_decision = {
+        "main": "profit_main_gt_assorti",
+        "assorti": "profit_assorti_gt_main",
+    }
+    canonical_reason_by_decision = {
+        "main": "expected_gross_profit_main_gt_assorti",
+        "assorti": "expected_gross_profit_assorti_gt_main",
+    }
+    decision_quality = layer2["decision_quality"]
+    contract = layer2["contract"]
+    assert decision_quality["decision_count"] == len(decisions)
+    assert (
+        decision_quality["decision_reason_counts"][legacy_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert (
+        decision_quality["decision_reason_counts_expected_gross_profit"][canonical_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert (
+        decision_quality["decision_reason_counts_objective_score"][objective_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert contract["status"] == "ok"
+    assert contract["decision_count"] == len(decisions)
+    assert contract["checks"]["decision_reason_matches_allocation"] is True
+    assert contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"] is True
+    assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert contract["checks"]["allocation_matches_profit_gate"] is True
     objective_over_profit_conflicts = 0
 
     for decision in decisions:
@@ -3103,6 +3133,36 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         "main": "objective_score_main_gt_assorti",
         "assorti": "objective_score_assorti_gt_main",
     }
+    legacy_reason_by_decision = {
+        "main": "profit_main_gt_assorti",
+        "assorti": "profit_assorti_gt_main",
+    }
+    canonical_reason_by_decision = {
+        "main": "expected_gross_profit_main_gt_assorti",
+        "assorti": "expected_gross_profit_assorti_gt_main",
+    }
+    decision_quality = layer2["decision_quality"]
+    contract = layer2["contract"]
+    assert decision_quality["decision_count"] == len(decisions)
+    assert (
+        decision_quality["decision_reason_counts"][legacy_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert (
+        decision_quality["decision_reason_counts_expected_gross_profit"][canonical_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert (
+        decision_quality["decision_reason_counts_objective_score"][objective_reason_by_decision[expected_objective_winner]]
+        == len(decisions)
+    )
+    assert contract["status"] == "ok"
+    assert contract["decision_count"] == len(decisions)
+    assert contract["checks"]["decision_reason_matches_allocation"] is True
+    assert contract["checks"]["decision_reason_expected_gross_profit_matches_allocation"] is True
+    assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
+    assert contract["checks"]["allocation_matches_composite_objective_gate"] is True
+    assert contract["checks"]["allocation_matches_profit_gate"] is True
     objective_over_profit_conflicts = 0
 
     for decision in decisions:
