@@ -7711,6 +7711,15 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == LAYER_PROXY_VALUE_SOURCE
     assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 1.8
     assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 1.65
+    economics_trust = body["explanation"]["meta"]["economics_trust"]
+    expected_trust_key_field_sources = {
+        field_name: alpha_proxy["economic_source"][field_name]
+        for field_name in economics_trust["key_fields"]
+    }
+    assert economics_trust["key_field_sources"] == expected_trust_key_field_sources
+    assert economics_trust["code_default_key_fields"] == sorted(expected_trust_key_field_sources)
+    assert economics_trust["code_default_key_fields_count"] == len(expected_trust_key_field_sources)
+    assert economics_trust["code_default_dominance_ratio"] == 1.0
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
