@@ -2479,9 +2479,28 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
 
     main_compact_body = main_compact_response.json()
     main_compact_meta = main_compact_body["explanation"]["meta"]
+    main_full_layer2 = main_wins_body["explanation"]["meta"]["layer_2_allocation"]
+    expected_main_compact_layer2 = {
+        "method": main_full_layer2.get("method"),
+        "method_canonical": main_full_layer2.get("method_canonical"),
+        "legacy_method": main_full_layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": main_full_layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": main_full_layer2.get("summary", {}),
+        "contract": main_full_layer2.get("contract", {}),
+        "decision_quality": main_full_layer2.get("decision_quality", {}),
+        "decision_gate": main_full_layer2.get("decision_gate"),
+        "decision_gate_canonical": main_full_layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": main_full_layer2.get("legacy_decision_gate"),
+        "tie_break": main_full_layer2.get("tie_break"),
+        "gmroi_usage": main_full_layer2.get("gmroi_usage"),
+        "objective_formula": main_full_layer2.get("objective_formula"),
+        "objective_parameters": main_full_layer2.get("objective_parameters", {}),
+        "objective_source": main_full_layer2.get("objective_source", {}),
+    }
     assert _business_projection(main_wins_body) == _business_projection(main_compact_body)
     assert main_compact_meta["capital_constraint"] == main_wins_body["explanation"]["meta"]["capital_constraint"]
     assert main_compact_meta["warnings"] == main_wins_body["explanation"]["meta"]["warnings"]
+    assert main_compact_meta["layer_2_allocation"] == expected_main_compact_layer2
 
 
 @pytest.mark.parametrize(
@@ -7943,10 +7962,28 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
 
     main_compact_body = main_compact_response.json()
     main_compact_meta = main_compact_body["explanation"]["meta"]
+    main_full_layer2 = main_wins_body["explanation"]["meta"]["layer_2_allocation"]
+    expected_main_compact_layer2 = {
+        "method": main_full_layer2.get("method"),
+        "method_canonical": main_full_layer2.get("method_canonical"),
+        "legacy_method": main_full_layer2.get("legacy_method"),
+        "legacy_alias_deprecation_plan": main_full_layer2.get("legacy_alias_deprecation_plan", {}),
+        "summary": main_full_layer2.get("summary", {}),
+        "contract": main_full_layer2.get("contract", {}),
+        "decision_quality": main_full_layer2.get("decision_quality", {}),
+        "decision_gate": main_full_layer2.get("decision_gate"),
+        "decision_gate_canonical": main_full_layer2.get("decision_gate_canonical"),
+        "legacy_decision_gate": main_full_layer2.get("legacy_decision_gate"),
+        "tie_break": main_full_layer2.get("tie_break"),
+        "gmroi_usage": main_full_layer2.get("gmroi_usage"),
+        "objective_formula": main_full_layer2.get("objective_formula"),
+        "objective_parameters": main_full_layer2.get("objective_parameters", {}),
+        "objective_source": main_full_layer2.get("objective_source", {}),
+    }
     assert _business_projection(main_wins_body) == _business_projection(main_compact_body)
     assert main_compact_meta["alpha_proxy_economics"] == main_wins_body["explanation"]["meta"]["alpha_proxy_economics"]
     assert main_compact_meta["alpha_proxy_economics"]["margin_proxy"] == main_margin_proxy
-    assert main_compact_meta["layer_2_allocation"]["summary"] == main_summary
+    assert main_compact_meta["layer_2_allocation"] == expected_main_compact_layer2
 
 
 def test_production_order_proposal_from_wb_skipped_when_article_excluded(client, db_session):
