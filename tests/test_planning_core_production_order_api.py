@@ -7716,10 +7716,14 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
         field_name: alpha_proxy["economic_source"][field_name]
         for field_name in economics_trust["key_fields"]
     }
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_UNTRUSTED
     assert economics_trust["key_field_sources"] == expected_trust_key_field_sources
     assert economics_trust["code_default_key_fields"] == sorted(expected_trust_key_field_sources)
     assert economics_trust["code_default_key_fields_count"] == len(expected_trust_key_field_sources)
     assert economics_trust["code_default_dominance_ratio"] == 1.0
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert economics_trust["warnings"][0]["severity"] == "HIGH"
+    assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
