@@ -7724,6 +7724,9 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
     assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
+    assert alpha_proxy["economics_trust"] == economics_trust
+    assert alpha_proxy["economics_trust_level"] == economics_trust["economics_trust_level"]
+    assert alpha_proxy["capital_governance"] == body["explanation"]["meta"]["capital_governance"]
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
