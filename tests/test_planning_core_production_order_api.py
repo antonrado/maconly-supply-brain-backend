@@ -11091,6 +11091,9 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
         len(expected_code_default_key_fields) / len(economics_trust["key_fields"]),
         4,
     )
+    assert alpha_proxy["economics_trust"] == economics_trust
+    assert alpha_proxy["economics_trust_level"] == economics_trust["economics_trust_level"]
+    assert alpha_proxy["capital_governance"] == body["explanation"]["meta"]["capital_governance"]
 
     from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
