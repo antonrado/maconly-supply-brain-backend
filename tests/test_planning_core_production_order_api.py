@@ -11548,6 +11548,104 @@ def test_production_order_proposal_from_wb_reports_empty_token_commission_metada
     assert commission_meta["kgvp_supplier_percent_stats"] == {"avg": None, "min": None, "max": None}
 
 
+def test_production_order_proposal_from_wb_reports_empty_report_commission_metadata(
+    client,
+    db_session,
+    monkeypatch,
+):
+    seeded = _seed_article_bundle_base(db_session)
+
+    commission_account = WbIntegrationAccount(
+        name="WB Empty Report Commission",
+        supplier_id=None,
+        api_token="token-empty-report",
+        is_active=True,
+    )
+    db_session.add(commission_account)
+    db_session.add(
+        ArticleWbMapping(
+            article_id=seeded["article"].id,
+            wb_sku="WB-PO-COMMISSION-EMPTY-REPORT",
+            bundle_type_id=seeded["bundle_type"].id,
+            size_id=seeded["size_s"].id,
+        )
+    )
+    db_session.add(
+        WbSalesDaily(
+            wb_sku="WB-PO-COMMISSION-EMPTY-REPORT",
+            date=datetime(2026, 1, 10, tzinfo=timezone.utc).date(),
+            sales_qty=20,
+            revenue=None,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add(
+        WbStock(
+            wb_sku="WB-PO-COMMISSION-EMPTY-REPORT",
+            warehouse_id=1,
+            warehouse_name="WB-1",
+            stock_qty=8,
+            updated_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    class FakeResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def fake_httpx_get(url, *, headers=None, timeout=None):
+        assert url.endswith("/api/v1/tariffs/commission")
+        assert headers and "Authorization" in headers
+        assert timeout is not None
+        return FakeResponse(
+            200,
+            {
+                "report": [
+                    {"subjectID": 100, "subjectName": "Subject-A", "kgvpSupplier": None},
+                    {"subjectID": 200, "subjectName": "Subject-B", "kgvpSupplier": "n/a"},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(planning_production_order_service.httpx, "get", fake_httpx_get)
+
+    payload = {
+        "article_id": seeded["article"].id,
+        "planning_horizon_days": 90,
+        "observation_window_days": 30,
+        "as_of_date": "2026-01-10",
+        "bundle_type_ids": [seeded["bundle_type"].id],
+        "in_flight_supply": [],
+        "size_weights": {},
+        "overrides": {
+            "fabric_min_batch_qty_default": 0,
+            "elastic_min_batch_qty_default": 0,
+            "allow_order_with_buffer": False,
+        },
+    }
+
+    response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert response.status_code == 200, response.text
+
+    body = response.json()
+    full_from_wb = body["explanation"]["meta"]["from_wb"]
+    commission_meta = full_from_wb["economic_observed_commission"]
+    assert commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
+    assert commission_meta["status"] == "empty_report"
+    assert commission_meta["reason"] == "no_numeric_commission_values"
+    assert commission_meta["account_id"] == commission_account.id
+    assert commission_meta["fetched_rows"] == 2
+    assert commission_meta["subjects_with_commission"] == 0
+    assert commission_meta["commission_percent"] == {"main": None, "assorti": None}
+    assert commission_meta["commission_percent_stats"] == {"avg": None, "min": None, "max": None}
+    assert commission_meta["kgvp_supplier_percent_stats"] == {"avg": None, "min": None, "max": None}
+
+
 def test_production_order_proposal_from_wb_compact_explainability_mode(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     stock_updated_at = datetime(2026, 1, 11, tzinfo=timezone.utc)
