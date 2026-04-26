@@ -2733,6 +2733,9 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
         decision_quality["decision_reason_counts_objective_score"][objective_reason_by_decision[expected_objective_winner]]
         == len(decisions)
     )
+    assert decision_quality["objective_fields_valid_count"] == len(decisions)
+    assert decision_quality["objective_fields_missing_count"] == 0
+    assert decision_quality["objective_fields_invalid_count"] == 0
     assert contract["status"] == "ok"
     assert contract["decision_count"] == len(decisions)
     assert contract["checks"]["decision_reason_matches_allocation"] is True
@@ -2740,6 +2743,14 @@ def test_production_order_proposal_e2e_regimes_objective_over_profit_and_layer5_
     assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
     assert contract["checks"]["allocation_matches_composite_objective_gate"] is True
     assert contract["checks"]["allocation_matches_profit_gate"] is True
+    assert contract["checks"]["profit_gap_consistent_with_profits"] is True
+    assert contract["checks"]["objective_required_fields_present"] is True
+    assert contract["checks"]["objective_score_fields_numeric"] is True
+    assert contract["checks"]["objective_components_present"] is True
+    assert contract["checks"]["objective_components_numeric"] is True
+    assert contract["checks"]["objective_components_consistent_with_scores"] is True
+    assert contract["checks"]["objective_components_match_formula"] is True
+    assert contract["checks"]["objective_score_gap_consistent_with_objective_scores"] is True
     objective_over_profit_conflicts = 0
 
     for decision in decisions:
@@ -3156,6 +3167,9 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
         decision_quality["decision_reason_counts_objective_score"][objective_reason_by_decision[expected_objective_winner]]
         == len(decisions)
     )
+    assert decision_quality["objective_fields_valid_count"] == len(decisions)
+    assert decision_quality["objective_fields_missing_count"] == 0
+    assert decision_quality["objective_fields_invalid_count"] == 0
     assert contract["status"] == "ok"
     assert contract["decision_count"] == len(decisions)
     assert contract["checks"]["decision_reason_matches_allocation"] is True
@@ -3163,6 +3177,14 @@ def test_production_order_proposal_from_wb_e2e_regimes_objective_over_profit_and
     assert contract["checks"]["decision_reason_objective_score_matches_allocation"] is True
     assert contract["checks"]["allocation_matches_composite_objective_gate"] is True
     assert contract["checks"]["allocation_matches_profit_gate"] is True
+    assert contract["checks"]["profit_gap_consistent_with_profits"] is True
+    assert contract["checks"]["objective_required_fields_present"] is True
+    assert contract["checks"]["objective_score_fields_numeric"] is True
+    assert contract["checks"]["objective_components_present"] is True
+    assert contract["checks"]["objective_components_numeric"] is True
+    assert contract["checks"]["objective_components_consistent_with_scores"] is True
+    assert contract["checks"]["objective_components_match_formula"] is True
+    assert contract["checks"]["objective_score_gap_consistent_with_objective_scores"] is True
     objective_over_profit_conflicts = 0
 
     for decision in decisions:
