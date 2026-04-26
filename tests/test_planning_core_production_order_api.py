@@ -2391,6 +2391,33 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
     assert assorti_summary["main"] > 0
     assert assorti_summary["assorti"] == 0
 
+    main_quality = main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decision_quality"]
+    assorti_quality = assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decision_quality"]
+    assert main_quality["decision_count"] == len(main_summary) - 1 or main_quality["decision_count"] > 0
+    assert main_quality["decision_reason_counts"]["profit_assorti_gt_main"] == len(
+        main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert (
+        main_quality["decision_reason_counts_expected_gross_profit"]["expected_gross_profit_assorti_gt_main"]
+        == len(main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert (
+        main_quality["decision_reason_counts_objective_score"]["objective_score_assorti_gt_main"]
+        == len(main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert assorti_quality["decision_count"] == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    assert assorti_quality["decision_reason_counts"]["profit_main_gt_assorti"] == len(
+        assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert (
+        assorti_quality["decision_reason_counts_expected_gross_profit"]["expected_gross_profit_main_gt_assorti"]
+        == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert (
+        assorti_quality["decision_reason_counts_objective_score"]["objective_score_main_gt_assorti"]
+        == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+
     main_decisions = sorted(
         main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"],
         key=lambda item: (item["color_id"], item["size_id"]),
@@ -7820,6 +7847,33 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
     assert main_summary["main"] == 0
     assert assorti_summary["main"] > 0
     assert assorti_summary["assorti"] == 0
+
+    main_quality = main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decision_quality"]
+    assorti_quality = assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decision_quality"]
+    assert main_quality["decision_count"] == len(main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    assert main_quality["decision_reason_counts"]["profit_assorti_gt_main"] == len(
+        main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert (
+        main_quality["decision_reason_counts_expected_gross_profit"]["expected_gross_profit_assorti_gt_main"]
+        == len(main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert (
+        main_quality["decision_reason_counts_objective_score"]["objective_score_assorti_gt_main"]
+        == len(main_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert assorti_quality["decision_count"] == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    assert assorti_quality["decision_reason_counts"]["profit_main_gt_assorti"] == len(
+        assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"]
+    )
+    assert (
+        assorti_quality["decision_reason_counts_expected_gross_profit"]["expected_gross_profit_main_gt_assorti"]
+        == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
+    assert (
+        assorti_quality["decision_reason_counts_objective_score"]["objective_score_main_gt_assorti"]
+        == len(assorti_wins_body["explanation"]["meta"]["layer_2_allocation"]["decisions"])
+    )
 
     main_from_wb = main_wins_body["explanation"]["meta"]["from_wb"]
     assorti_from_wb = assorti_wins_body["explanation"]["meta"]["from_wb"]
