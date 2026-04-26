@@ -11481,6 +11481,7 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     body = response.json()
     full_from_wb = body["explanation"]["meta"]["from_wb"]
     alpha_proxy = body["explanation"]["meta"]["alpha_proxy_economics"]
+    assert alpha_proxy["economic_calibration_state"] == "economic_inputs_calibrated"
     assert (
         alpha_proxy["economic_source"]["wb_commission_percent_main"]
         == FROM_WB_TARIFFS_COMMISSION_SOURCE
