@@ -11514,6 +11514,9 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
         len(expected_code_default_key_fields) / len(economics_trust["key_fields"]),
         4,
     )
+    assert alpha_proxy["economics_trust"] == economics_trust
+    assert alpha_proxy["economics_trust_level"] == economics_trust["economics_trust_level"]
+    assert alpha_proxy["capital_governance"] == body["explanation"]["meta"]["capital_governance"]
 
     commission_meta = full_from_wb["economic_observed_commission"]
     assert commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
