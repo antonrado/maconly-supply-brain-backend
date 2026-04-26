@@ -7801,6 +7801,24 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     }
     assert from_wb_meta["economic_observed_commission"]["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert from_wb_meta["economic_observed_commission"]["status"] == "unavailable"
+    assert from_wb_meta["economic_observed_commission"]["reason"] == "no_active_account"
+    assert from_wb_meta["economic_observed_commission"]["account_id"] is None
+    assert from_wb_meta["economic_observed_commission"]["fetched_rows"] == 0
+    assert from_wb_meta["economic_observed_commission"]["subjects_with_commission"] == 0
+    assert from_wb_meta["economic_observed_commission"]["commission_percent"] == {
+        "main": None,
+        "assorti": None,
+    }
+    assert from_wb_meta["economic_observed_commission"]["commission_percent_stats"] == {
+        "avg": None,
+        "min": None,
+        "max": None,
+    }
+    assert from_wb_meta["economic_observed_commission"]["kgvp_supplier_percent_stats"] == {
+        "avg": None,
+        "min": None,
+        "max": None,
+    }
 
     helper_physical_scope, helper_arrival_projection = build_physical_scope_and_arrival_projection(
         bundle_stock_source="request",
@@ -11304,14 +11322,13 @@ def test_production_order_proposal_from_wb_request_price_override_has_precedence
 def test_production_order_proposal_from_wb_uses_live_commission_calibration(client, db_session, monkeypatch):
     seeded = _seed_article_bundle_base(db_session)
 
-    db_session.add(
-        WbIntegrationAccount(
-            name="WB Live Commission",
-            supplier_id=None,
-            api_token="token-live-commission",
-            is_active=True,
-        )
+    commission_account = WbIntegrationAccount(
+        name="WB Live Commission",
+        supplier_id=None,
+        api_token="token-live-commission",
+        is_active=True,
     )
+    db_session.add(commission_account)
     db_session.add(
         ArticleWbMapping(
             article_id=seeded["article"].id,
@@ -11397,8 +11414,11 @@ def test_production_order_proposal_from_wb_uses_live_commission_calibration(clie
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_assorti"] == 0.2
 
     commission_meta = full_from_wb["economic_observed_commission"]
+    assert commission_meta["source"] == FROM_WB_TARIFFS_COMMISSION_SOURCE
     assert commission_meta["status"] == "ok"
     assert commission_meta["reason"] is None
+    assert commission_meta["account_id"] == commission_account.id
+    assert commission_meta["fetched_rows"] == 2
     assert commission_meta["subjects_with_commission"] == 2
     assert commission_meta["commission_percent"] == {"main": 0.2, "assorti": 0.2}
     assert commission_meta["commission_percent_stats"] == {"avg": 0.2, "min": 0.15, "max": 0.25}
