@@ -7813,6 +7813,33 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
         "start_date": "2025-12-12",
         "end_date": "2026-01-10",
     }
+    assert from_wb_meta["economic_observed_prices"] == {
+        "source": FROM_WB_OBSERVED_ECONOMIC_SOURCE,
+        "window": from_wb_meta["sales_window"],
+        "anomaly_max_deviation": 0.3,
+        "prices": {
+            "main": None,
+            "assorti": None,
+        },
+        "sample_counts": {
+            "main": {
+                "raw_samples": 0,
+                "accepted_samples": 0,
+                "anomaly_filtered": 0,
+                "raw_units": 0,
+                "accepted_units": 0,
+                "fallback_used": False,
+            },
+            "assorti": {
+                "raw_samples": 0,
+                "accepted_samples": 0,
+                "anomaly_filtered": 0,
+                "raw_units": 0,
+                "accepted_units": 0,
+                "fallback_used": False,
+            },
+        },
+    }
     assert from_wb_meta["bundle_type_ids"] == [seeded["bundle_type"].id]
     bundle_key = str(seeded["bundle_type"].id)
     assert from_wb_meta["daily_sales_by_bundle"][bundle_key] == 2.0
