@@ -11070,6 +11070,12 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 3.0
     assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 2.2
 
+    economics_trust = body["explanation"]["meta"]["economics_trust"]
+    assert economics_trust["economics_trust_level"] == ECONOMICS_TRUST_LEVEL_UNTRUSTED
+    assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
+    assert economics_trust["warnings"][0]["severity"] == "HIGH"
+    assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
+
     from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert from_wb_observed["prices"] == {"main": 3.0, "assorti": 2.2}
