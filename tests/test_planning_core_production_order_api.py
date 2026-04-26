@@ -2405,6 +2405,14 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
         assert main_decision["size_id"] == assorti_decision["size_id"]
         assert main_decision["eta_days"] == assorti_decision["eta_days"]
         assert main_decision["capital_locked"] == assorti_decision["capital_locked"]
+        assert (
+            main_decision["expected_gross_profit_if_main_until_eta"]
+            > main_decision["expected_gross_profit_if_assorti_until_eta"]
+        )
+        assert (
+            assorti_decision["expected_gross_profit_if_assorti_until_eta"]
+            > assorti_decision["expected_gross_profit_if_main_until_eta"]
+        )
         assert main_decision["allocation_decision"] == "assorti"
         assert (
             main_decision["objective_score_if_assorti_until_eta"]
@@ -2415,6 +2423,20 @@ def test_production_order_proposal_price_flip_changes_layer2_allocation_decision
             assorti_decision["objective_score_if_main_until_eta"]
             > assorti_decision["objective_score_if_assorti_until_eta"]
         )
+
+    main_compact_payload = deepcopy(main_wins_payload)
+    main_compact_payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    main_compact_response = client.post(
+        "/api/v1/planning/core/production-order/proposal",
+        json=main_compact_payload,
+    )
+    assert main_compact_response.status_code == 200, main_compact_response.text
+
+    main_compact_body = main_compact_response.json()
+    main_compact_meta = main_compact_body["explanation"]["meta"]
+    assert _business_projection(main_wins_body) == _business_projection(main_compact_body)
+    assert main_compact_meta["capital_constraint"] == main_wins_body["explanation"]["meta"]["capital_constraint"]
+    assert main_compact_meta["warnings"] == main_wins_body["explanation"]["meta"]["warnings"]
 
 
 @pytest.mark.parametrize(
@@ -7802,10 +7824,18 @@ def test_production_order_proposal_from_wb_price_flip_changes_layer2_allocation_
         assert main_decision["size_id"] == assorti_decision["size_id"]
         assert main_decision["eta_days"] == assorti_decision["eta_days"]
         assert main_decision["capital_locked"] == assorti_decision["capital_locked"]
+        assert (
+            main_decision["expected_gross_profit_if_main_until_eta"]
+            > main_decision["expected_gross_profit_if_assorti_until_eta"]
+        )
         assert main_decision["allocation_decision"] == "assorti"
         assert (
             main_decision["objective_score_if_assorti_until_eta"]
             > main_decision["objective_score_if_main_until_eta"]
+        )
+        assert (
+            assorti_decision["expected_gross_profit_if_assorti_until_eta"]
+            > assorti_decision["expected_gross_profit_if_main_until_eta"]
         )
         assert assorti_decision["allocation_decision"] == "main"
         assert (
