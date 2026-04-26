@@ -7707,6 +7707,10 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert alpha_proxy["economic_source"]["wb_commission_percent_assorti"] == LAYER_PROXY_VALUE_SOURCE
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_main"] == 0.0
     assert alpha_proxy["economic_inputs"]["wb_commission_percent_assorti"] == 0.0
+    assert alpha_proxy["economic_source"]["average_realized_price_main"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["economic_source"]["average_realized_price_assorti"] == LAYER_PROXY_VALUE_SOURCE
+    assert alpha_proxy["economic_inputs"]["average_realized_price_main"] == 1.8
+    assert alpha_proxy["economic_inputs"]["average_realized_price_assorti"] == 1.65
     assert alpha_proxy["layer_1_high_stockout_risk_threshold"] == LAYER1_HIGH_STOCKOUT_RISK_THRESHOLD
     assert alpha_proxy["layer_2_allocation_method"] == LAYER2_ALLOCATION_METHOD_CANONICAL
     assert alpha_proxy["layer_2_legacy_allocation_method"] == LAYER2_ALLOCATION_METHOD
