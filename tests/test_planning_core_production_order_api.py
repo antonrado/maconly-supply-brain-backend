@@ -11001,8 +11001,22 @@ def test_production_order_proposal_from_wb_uses_observed_revenue_prices_for_econ
     from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["source"] == FROM_WB_OBSERVED_ECONOMIC_SOURCE
     assert from_wb_observed["prices"] == {"main": 3.0, "assorti": 2.2}
-    assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
-    assert from_wb_observed["sample_counts"]["assorti"]["accepted_samples"] == 1
+    assert from_wb_observed["sample_counts"]["main"] == {
+        "raw_samples": 1,
+        "accepted_samples": 1,
+        "anomaly_filtered": 0,
+        "raw_units": 30,
+        "accepted_units": 30,
+        "fallback_used": False,
+    }
+    assert from_wb_observed["sample_counts"]["assorti"] == {
+        "raw_samples": 1,
+        "accepted_samples": 1,
+        "anomaly_filtered": 0,
+        "raw_units": 20,
+        "accepted_units": 20,
+        "fallback_used": False,
+    }
     expected_compact_from_wb = {
         "observation_window_days": full_from_wb["observation_window_days"],
         "freshness_mode": full_from_wb["freshness_mode"],
@@ -11117,8 +11131,22 @@ def test_production_order_proposal_from_wb_observed_price_filters_anomaly_spike(
 
     from_wb_observed = full_from_wb["economic_observed_prices"]
     assert from_wb_observed["prices"]["main"] == 2.0
-    assert from_wb_observed["sample_counts"]["main"]["anomaly_filtered"] == 1
-    assert from_wb_observed["sample_counts"]["main"]["accepted_samples"] == 1
+    assert from_wb_observed["sample_counts"]["main"] == {
+        "raw_samples": 2,
+        "accepted_samples": 1,
+        "anomaly_filtered": 1,
+        "raw_units": 20,
+        "accepted_units": 10,
+        "fallback_used": False,
+    }
+    assert from_wb_observed["sample_counts"]["assorti"] == {
+        "raw_samples": 0,
+        "accepted_samples": 0,
+        "anomaly_filtered": 0,
+        "raw_units": 0,
+        "accepted_units": 0,
+        "fallback_used": False,
+    }
     expected_compact_from_wb = {
         "observation_window_days": full_from_wb["observation_window_days"],
         "freshness_mode": full_from_wb["freshness_mode"],
