@@ -7723,6 +7723,7 @@ def test_production_order_proposal_from_wb_endpoint(client, db_session):
     assert economics_trust["code_default_dominance_ratio"] == 1.0
     assert economics_trust["warnings"][0]["code"] == ECONOMICS_TRUST_WARNING_CODE_UNTRUSTED
     assert economics_trust["warnings"][0]["severity"] == "HIGH"
+    assert economics_trust["warnings"][0]["code_default_key_fields"] == economics_trust["code_default_key_fields"]
     assert body["explanation"]["meta"]["warnings"][0] == economics_trust["warnings"][0]
     assert alpha_proxy["economics_trust"] == economics_trust
     assert alpha_proxy["economics_trust_level"] == economics_trust["economics_trust_level"]
