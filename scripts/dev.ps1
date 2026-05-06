@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
     [string]$Command
 )
 
@@ -449,6 +449,74 @@ function Invoke-ApiAndWriteResponseOrThrow {
         }
         if (Test-Path $HeaderFile) {
             Remove-Item $HeaderFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $ResponseFile) {
+            Remove-Item $ResponseFile -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-ApiAndSaveResponseOrThrow {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [Parameter(Mandatory = $true)]
+        [int]$ExpectedStatus,
+        [Parameter(Mandatory = $true)]
+        [string]$OutputPath,
+        [string]$JsonBody = "",
+        [string]$LogPrefix = "mvp-first-analytics"
+    )
+
+    $ResponseFile = [System.IO.Path]::GetTempFileName()
+    $PayloadFile = $null
+    $ResponseBody = ""
+    try {
+        if ($JsonBody) {
+            $PayloadFile = [System.IO.Path]::GetTempFileName()
+            $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        else {
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
+        }
+
+        if (Test-Path $ResponseFile) {
+            $ResponseBody = Get-Content -Raw $ResponseFile
+        }
+
+        if ("$StatusCode" -ne "$ExpectedStatus") {
+            if ($ResponseBody) {
+                $ResponseBody | Write-Host
+            }
+            throw "[$LogPrefix] FAIL ${Name}: expected HTTP $ExpectedStatus, got HTTP $StatusCode"
+        }
+
+        $OutputParent = Split-Path -Parent $OutputPath
+        if ($OutputParent -and -not (Test-Path $OutputParent)) {
+            New-Item -ItemType Directory -Force -Path $OutputParent | Out-Null
+        }
+
+        try {
+            $ResponseBody = ($ResponseBody | ConvertFrom-Json | ConvertTo-Json -Depth 100)
+        }
+        catch {
+        }
+        $ResponseBody | Set-Content -Encoding utf8 -NoNewline $OutputPath
+
+        Write-Host "[$LogPrefix] OK  $Name -> HTTP $StatusCode -> $OutputPath"
+    }
+    finally {
+        if ($PayloadFile -and (Test-Path $PayloadFile)) {
+            Remove-Item $PayloadFile -ErrorAction SilentlyContinue
         }
         if (Test-Path $ResponseFile) {
             Remove-Item $ResponseFile -ErrorAction SilentlyContinue
@@ -946,6 +1014,115 @@ function Invoke-HostProductionOrderProposalFromWb {
     }
 }
 
+function Invoke-HostMvpFirstAnalyticsReport {
+    $BaseUrl = "http://127.0.0.1:8010"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $DirectUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal"
+    $FromWbUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal/from-wb"
+    $ShipmentComparisonUrl = "$BaseUrl/api/v1/wb/manager/shipment/from-proposal/comparison"
+    $MonitoringDashboardUrl = "$BaseUrl/api/v1/planning/monitoring/dashboard"
+    $MonitoringRiskFocusUrl = "$BaseUrl/api/v1/planning/monitoring/risk-focus"
+    $MonitoringTimeseriesUrl = "$BaseUrl/api/v1/planning/monitoring/timeseries?metrics=risk_critical&metrics=risk_warning&metrics=total_final_order_qty"
+    $PreviousDatabaseUrl = $env:DATABASE_URL
+    $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
+    $StdOutFile = [System.IO.Path]::GetTempFileName()
+    $StdErrFile = [System.IO.Path]::GetTempFileName()
+    $ServerProcess = $null
+    $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $OutputDir = Join-Path (Get-Location).Path "artifacts\mvp_first_analytics\$Timestamp"
+
+    try {
+        $env:DATABASE_URL = "sqlite:///./ci.db"
+        $env:MONITORING_SCHEDULER_ENABLED = "false"
+
+        Write-Host "[mvp-first-analytics] bootstrapping SQLite schema..."
+        python -c "from app.models.base import Base; import app.models.models; from app.core.db import engine; Base.metadata.create_all(bind=engine)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "[mvp-first-analytics] FAIL schema bootstrap step."
+        }
+
+        Write-Host "[mvp-first-analytics] starting host uvicorn..."
+        $ServerProcess = Start-Process -FilePath "python" -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010") -WorkingDirectory (Get-Location).Path -PassThru -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -ErrorAction Stop
+
+        if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 45)) {
+            Write-Host "[mvp-first-analytics] health endpoint did not become ready in time." -ForegroundColor Yellow
+            if (Test-Path $StdOutFile) {
+                Get-Content -Raw $StdOutFile | Write-Host
+            }
+            if (Test-Path $StdErrFile) {
+                Get-Content -Raw $StdErrFile | Write-Host
+            }
+            throw "[mvp-first-analytics] FAIL host health readiness."
+        }
+
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+        $SeedOutput = python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[mvp-first-analytics] FAIL seed step: unable to prepare smoke dataset."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[mvp-first-analytics] FAIL seed step: invalid seed JSON output."
+        }
+
+        ($SeedData | ConvertTo-Json -Depth 100) | Set-Content -Encoding utf8 -NoNewline (Join-Path $OutputDir "seed_payloads.json")
+
+        $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
+        $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+        $ShipmentComparisonPayload = $SeedData.shipment_comparison_payload | ConvertTo-Json -Depth 8 -Compress
+
+        Invoke-ApiAndSaveResponseOrThrow -Name "planning-core-health" -Method "GET" -Url $HealthUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "planning_core_health.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "production-order-direct" -Method "POST" -Url $DirectUrl -ExpectedStatus 200 -JsonBody $DirectHappyPayload -OutputPath (Join-Path $OutputDir "production_order_direct.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "production-order-from-wb" -Method "POST" -Url $FromWbUrl -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -OutputPath (Join-Path $OutputDir "production_order_from_wb.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "shipment-comparison" -Method "POST" -Url $ShipmentComparisonUrl -ExpectedStatus 200 -JsonBody $ShipmentComparisonPayload -OutputPath (Join-Path $OutputDir "shipment_comparison.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "monitoring-dashboard" -Method "GET" -Url $MonitoringDashboardUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "monitoring_dashboard.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "monitoring-risk-focus" -Method "GET" -Url $MonitoringRiskFocusUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "monitoring_risk_focus.json")
+        Invoke-ApiAndSaveResponseOrThrow -Name "monitoring-timeseries" -Method "GET" -Url $MonitoringTimeseriesUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "monitoring_timeseries.json")
+
+        Write-Host "[mvp-first-analytics] OK"
+        Write-Host "[mvp-first-analytics] report directory: $OutputDir"
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        Write-Host $Message -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        if ($null -ne $ServerProcess) {
+            Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdOutFile) {
+            Remove-Item $StdOutFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdErrFile) {
+            Remove-Item $StdErrFile -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $PreviousDatabaseUrl) {
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DATABASE_URL = $PreviousDatabaseUrl
+        }
+        if ($null -eq $PreviousSchedulerEnabled) {
+            Remove-Item Env:MONITORING_SCHEDULER_ENABLED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MONITORING_SCHEDULER_ENABLED = $PreviousSchedulerEnabled
+        }
+    }
+}
+
 switch ($Command) {
     "up" {
         Assert-DockerAvailable -CommandName "up"
@@ -1013,6 +1190,9 @@ switch ($Command) {
         }
 
         Invoke-HostProductionOrderProposalFromWb
+    }
+    "mvp-first-analytics" {
+        Invoke-HostMvpFirstAnalyticsReport
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke

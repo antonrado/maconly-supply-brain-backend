@@ -47,5 +47,6 @@ htmlcov/
 alembic/versions/__pycache__/
 
 # Misc
+artifacts/
 *.pid
 audit_pytest.txt
