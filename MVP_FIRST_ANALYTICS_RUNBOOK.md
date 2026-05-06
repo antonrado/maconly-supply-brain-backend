@@ -41,6 +41,20 @@ Optional live API gate:
 .\scripts\dev.ps1 verify-live
 ```
 
+Recommended practical MVP gate:
+
+```powershell
+.\scripts\dev.ps1 verify-mvp
+```
+
+Optional live-data readiness snapshot for an already running backend:
+
+```powershell
+.\scripts\dev.ps1 mvp-live-readiness
+```
+
+This command calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint and does not call external WB sync endpoints.
+
 ## First analytics path
 
 Example request payloads live under `examples/mvp_first_analytics/`.

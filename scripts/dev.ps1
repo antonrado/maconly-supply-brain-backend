@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
     [string]$Command
 )
 
@@ -1129,6 +1129,36 @@ function Invoke-HostMvpFirstAnalyticsReport {
     }
 }
 
+function Invoke-MvpLiveReadinessReport {
+    $BaseUrl = "http://localhost:8000"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $ReadinessUrl = "$BaseUrl/api/v1/wb/from-wb/readiness"
+    $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $OutputDir = Join-Path (Get-Location).Path "artifacts\mvp_live_readiness\$Timestamp"
+    $Payload = '{"limit":100,"freshness_sales_stale_after_days":3,"freshness_stock_stale_after_days":3}'
+
+    if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 10)) {
+        Write-Host "[mvp-live-readiness] backend is not reachable at $BaseUrl." -ForegroundColor Yellow
+        Write-Host "[mvp-live-readiness] Start the backend first with '.\scripts\dev.ps1 up' or your usual uvicorn command, then rerun." -ForegroundColor Yellow
+        exit 1
+    }
+
+    New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+    Invoke-ApiAndSaveResponseOrThrow -Name "from-wb-readiness" -Method "POST" -Url $ReadinessUrl -ExpectedStatus 200 -JsonBody $Payload -OutputPath (Join-Path $OutputDir "readiness.json") -LogPrefix "mvp-live-readiness"
+
+    $SummaryOutput = python -m scripts.mvp_live_readiness_summary $OutputDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "[mvp-live-readiness] FAIL summary step."
+    }
+
+    Write-Host "[mvp-live-readiness] OK"
+    Write-Host "[mvp-live-readiness] report directory: $OutputDir"
+    if ($SummaryOutput) {
+        $SummaryOutput | ForEach-Object { Write-Host "[mvp-live-readiness] summary: $_" }
+    }
+}
+
 switch ($Command) {
     "up" {
         Assert-DockerAvailable -CommandName "up"
@@ -1199,6 +1229,9 @@ switch ($Command) {
     }
     "mvp-first-analytics" {
         Invoke-HostMvpFirstAnalyticsReport
+    }
+    "mvp-live-readiness" {
+        Invoke-MvpLiveReadinessReport
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke

@@ -29,7 +29,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 - FastAPI app mounts `api_router` under `/api/v1` and starts `MonitoringScheduler` on startup.
 - MVP first-analytics runbook is documented in `MVP_FIRST_ANALYTICS_RUNBOOK.md`, including startup, WB sync, readiness, production-order/from-WB, monitoring analytics, and shipment-comparison calls.
-- MVP first-analytics helper command is available via `.\scripts\dev.ps1 mvp-first-analytics`; it starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, and writes JSON responses under ignored `artifacts/mvp_first_analytics/<timestamp>/`.
+- MVP first-analytics helper command is available via `.\scripts\dev.ps1 mvp-first-analytics`; it starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, writes raw JSON responses under ignored `artifacts/mvp_first_analytics/<timestamp>/`, and generates compact `summary.json` / `summary.md` outputs with derived next actions.
+- MVP live-readiness helper command is available via `.\scripts\dev.ps1 mvp-live-readiness`; it requires an already running backend, calls only local from-WB readiness, and writes blocker/next-step summaries under ignored `artifacts/mvp_live_readiness/<timestamp>/`.
 - FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
 - Monitoring scheduler uses PostgreSQL advisory lock (`pg_try_advisory_lock` / `pg_advisory_unlock`) via a dedicated connection (`engine.raw_connection`) to keep one writer in multi-instance runtime.
 - Test bootstrap is now deterministic on host Python too: `tests/conftest.py` inserts the repo root before importing `app`, so plain `python -m pytest -q` no longer depends on ad hoc `PYTHONPATH` setup.
@@ -294,13 +295,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-07 03:21 +07:00`
-- Branch: `main` (dirty worktree, ahead of `origin/main` by 6 commits)
-- Last commit (`git log -1 --oneline`): `3b1ce21 Add readable MVP analytics markdown summary`
+- Date: `2026-05-07 03:30 +07:00`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness follow-up commit)
+- Last commit (`git log -1 --oneline`): `3674912 Add MVP analytics next-action hints`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus actionable `summary.json` / `summary.md` written under `artifacts/mvp_first_analytics/20260507_032147/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness` → `OK`, report plus `summary.json` / `summary.md` written under `artifacts/mvp_live_readiness/20260507_033000/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
-  - `python -m pytest -q` → `473 passed`
+  - `python -m pytest -q` → `475 passed`
 
 ### Minimal raw outputs
 ```text
@@ -318,22 +320,29 @@ examples/mvp_first_analytics/from_wb_proposal_request.json
 examples/mvp_first_analytics/readiness_request.json
 examples/mvp_first_analytics/shipment_comparison_request.json
 scripts/mvp_first_analytics_summary.py
+scripts/mvp_live_readiness_summary.py
 scripts/context_guard.py
 scripts/dev.ps1
 scripts/po_api_smoke_seed.py
 tests/test_context_guard.py
 tests/test_mvp_first_analytics_summary.py
+tests/test_mvp_live_readiness_summary.py
 tests/test_wb_shipment_comparison_api.py
 ```
 
 ```text
 $ python -m pytest -q
-473 passed in 7.93s
+475 passed in 8.05s
 ```
 
 ```text
 $ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics
 [mvp-first-analytics] OK
+```
+
+```text
+$ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness
+[mvp-live-readiness] OK
 ```
 
 ```text
