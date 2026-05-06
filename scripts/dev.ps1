@@ -1,7 +1,15 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
-    [string]$Command
+    [string]$Command,
+    [ValidateRange(0, 2147483647)]
+    [int]$ArticleId = 0,
+    [ValidateRange(1, 1000)]
+    [int]$ReadinessLimit = 100,
+    [ValidateRange(0, 3650)]
+    [int]$FreshnessSalesStaleAfterDays = 3,
+    [ValidateRange(0, 3650)]
+    [int]$FreshnessStockStaleAfterDays = 3
 )
 
 $ComposeFile = ".\\docker-compose.yml"
@@ -1135,7 +1143,15 @@ function Invoke-MvpLiveReadinessReport {
     $ReadinessUrl = "$BaseUrl/api/v1/wb/from-wb/readiness"
     $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $OutputDir = Join-Path (Get-Location).Path "artifacts\mvp_live_readiness\$Timestamp"
-    $Payload = '{"limit":100,"freshness_sales_stale_after_days":3,"freshness_stock_stale_after_days":3}'
+    $PayloadObject = [ordered]@{
+        limit = $ReadinessLimit
+        freshness_sales_stale_after_days = $FreshnessSalesStaleAfterDays
+        freshness_stock_stale_after_days = $FreshnessStockStaleAfterDays
+    }
+    if ($ArticleId -gt 0) {
+        $PayloadObject.article_id = $ArticleId
+    }
+    $Payload = $PayloadObject | ConvertTo-Json -Compress
 
     if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 10)) {
         Write-Host "[mvp-live-readiness] backend is not reachable at $BaseUrl." -ForegroundColor Yellow

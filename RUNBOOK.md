@@ -32,6 +32,11 @@ Use helper commands from `scripts/dev.ps1`:
 
 `mvp-live-readiness` requires an already running backend at `http://localhost:8000`, calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint, and writes readiness `summary.json` / `summary.md` under `artifacts/mvp_live_readiness/<timestamp>/`. It does not call WB external sync endpoints.
 
+Optional targeting parameters for `mvp-live-readiness`:
+```powershell
+.\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3
+```
+
 `po-api-smoke-positive` validates only deterministic positive live API checks:
 - Auto-syncs backend image and waits for health readiness
 - Seeds deterministic smoke fixture data

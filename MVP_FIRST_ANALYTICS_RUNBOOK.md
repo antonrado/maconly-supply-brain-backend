@@ -54,6 +54,11 @@ Optional live-data readiness snapshot for an already running backend:
 ```
 
 This command calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint and does not call external WB sync endpoints.
+For a specific article or smaller readiness sample:
+
+```powershell
+.\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20
+```
 
 ## First analytics path
 
