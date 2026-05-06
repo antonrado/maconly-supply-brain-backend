@@ -89,9 +89,16 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
     assert summary["monitoring"]["overall_status"] == "warning"
     assert summary["monitoring"]["top_risk_count"] == 2
     assert summary["monitoring"]["timeseries_metrics"] == ["risk_critical"]
+    assert len(summary["next_actions"]) == 4
+    assert summary["next_actions"][0].startswith("Review production-order recommendations")
+    assert "shortage-before-arrival" in summary["next_actions"][1]
+    assert "qty_mismatch=1" in summary["next_actions"][2]
+    assert "overall=warning" in summary["next_actions"][3]
 
     markdown = render_markdown_summary(summary)
     assert "# MVP First Analytics Summary" in markdown
+    assert "## Next actions" in markdown
+    assert "- **Action**: Review production-order recommendations" in markdown
     assert "| Direct | ok | 1 | critical | order_minimum_only | 100 | 2 | shortage_before_arrival | 25 |" in markdown
     assert "- **Categories**: `qty_mismatch=1`" in markdown
     assert "- **Overall status**: `warning`" in markdown
@@ -104,5 +111,6 @@ def test_write_summary_creates_summary_json(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["production_order_direct"]["status"] is None
     assert payload["shipment_comparison"]["categories"] == {}
+    assert payload["next_actions"] == ["No immediate MVP analytics blockers detected in the deterministic smoke dataset."]
     assert (tmp_path / "summary.md").exists()
     assert "- **Top risks**: none" in (tmp_path / "summary.md").read_text(encoding="utf-8")

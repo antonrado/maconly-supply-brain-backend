@@ -97,9 +97,52 @@ def _monitoring_summary(dashboard: dict[str, Any], risk_focus: dict[str, Any], t
     }
 
 
+def _derive_next_actions(summary: dict[str, Any]) -> list[str]:
+    direct = summary.get("production_order_direct") or {}
+    from_wb = summary.get("production_order_from_wb") or {}
+    shipment = summary.get("shipment_comparison") or {}
+    monitoring = summary.get("monitoring") or {}
+
+    actions: list[str] = []
+    direct_risk = direct.get("risk_level")
+    from_wb_risk = from_wb.get("risk_level")
+    if direct_risk in {"warning", "critical"} or from_wb_risk in {"warning", "critical"}:
+        actions.append(
+            "Review production-order recommendations: "
+            f"direct risk={_value(direct_risk)}, direct units={_value(direct.get('total_units'))}; "
+            f"from-WB risk={_value(from_wb_risk)}, from-WB units={_value(from_wb.get('total_units'))}."
+        )
+
+    arrival_statuses = {
+        direct.get("arrival_projection_status"),
+        from_wb.get("arrival_projection_status"),
+    }
+    if "shortage_before_arrival" in arrival_statuses:
+        actions.append(
+            "Prioritize shortage-before-arrival review: inspect arrival projection and decide whether inbound/order timing must be accelerated."
+        )
+
+    if shipment.get("has_divergence"):
+        actions.append(
+            "Review shipment comparison divergences before changing operator flow: "
+            f"{_category_text(shipment.get('categories') or {})}."
+        )
+
+    if monitoring.get("overall_status") in {"warning", "critical"} or monitoring.get("top_risk_count", 0):
+        actions.append(
+            "Inspect monitoring dashboard and risk-focus list: "
+            f"overall={_value(monitoring.get('overall_status'))}, top_risk_count={_value(monitoring.get('top_risk_count'))}."
+        )
+
+    if not actions:
+        actions.append("No immediate MVP analytics blockers detected in the deterministic smoke dataset.")
+
+    return actions
+
+
 def build_summary(report_dir: Path) -> dict[str, Any]:
     payloads = {name: _read_json(report_dir / filename) for name, filename in REPORT_FILES.items()}
-    return {
+    summary = {
         "report_dir": str(report_dir),
         "production_order_direct": _recommendation_summary(payloads["production_order_direct"]),
         "production_order_from_wb": _recommendation_summary(payloads["production_order_from_wb"]),
@@ -110,6 +153,8 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
             payloads["monitoring_timeseries"],
         ),
     }
+    summary["next_actions"] = _derive_next_actions(summary)
+    return summary
 
 
 def _value(value: Any) -> str:
@@ -131,14 +176,30 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
     from_wb = summary.get("production_order_from_wb") or {}
     shipment = summary.get("shipment_comparison") or {}
     monitoring = summary.get("monitoring") or {}
+    next_actions = summary.get("next_actions") or []
     top_risks = monitoring.get("top_risks") or []
     if not isinstance(top_risks, list):
         top_risks = []
+    if not isinstance(next_actions, list):
+        next_actions = []
 
     lines = [
         "# MVP First Analytics Summary",
         "",
         f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
+        "",
+        "## Next actions",
+        "",
+    ]
+
+    if next_actions:
+        for action in next_actions:
+            lines.append(f"- **Action**: {action}")
+    else:
+        lines.append("- **Action**: n/a")
+
+    lines.extend(
+        [
         "",
         "## Production order",
         "",
@@ -158,6 +219,11 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
             f"{_value(from_wb.get('arrival_projection_status'))} | "
             f"{_value(from_wb.get('projected_shortage_before_arrival'))} |"
         ),
+        ]
+    )
+
+    lines.extend(
+        [
         "",
         "## Shipment comparison",
         "",
@@ -179,7 +245,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "",
         "## Top risks",
         "",
-    ]
+        ]
+    )
 
     if top_risks:
         lines.extend(

@@ -294,11 +294,11 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-07 03:18 +07:00`
-- Branch: `main` (dirty worktree, ahead of `origin/main` by 4 commits)
-- Last commit (`git log -1 --oneline`): `8d13b8c Add MVP first analytics report command`
+- Date: `2026-05-07 03:21 +07:00`
+- Branch: `main` (dirty worktree, ahead of `origin/main` by 6 commits)
+- Last commit (`git log -1 --oneline`): `3b1ce21 Add readable MVP analytics markdown summary`
 - Gates:
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `summary.json` / `summary.md` written under `artifacts/mvp_first_analytics/20260507_031820/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus actionable `summary.json` / `summary.md` written under `artifacts/mvp_first_analytics/20260507_032147/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
   - `python -m pytest -q` → `473 passed`
 
@@ -328,7 +328,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-473 passed in 7.81s
+473 passed in 7.93s
 ```
 
 ```text
