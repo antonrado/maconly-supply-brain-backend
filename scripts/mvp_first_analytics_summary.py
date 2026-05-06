@@ -112,12 +112,111 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
     }
 
 
+def _value(value: Any) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _category_text(categories: dict[str, Any]) -> str:
+    if not categories:
+        return "none"
+    return ", ".join(f"{name}={count}" for name, count in sorted(categories.items()))
+
+
+def render_markdown_summary(summary: dict[str, Any]) -> str:
+    direct = summary.get("production_order_direct") or {}
+    from_wb = summary.get("production_order_from_wb") or {}
+    shipment = summary.get("shipment_comparison") or {}
+    monitoring = summary.get("monitoring") or {}
+    top_risks = monitoring.get("top_risks") or []
+    if not isinstance(top_risks, list):
+        top_risks = []
+
+    lines = [
+        "# MVP First Analytics Summary",
+        "",
+        f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
+        "",
+        "## Production order",
+        "",
+        "| Source | Status | Article | Risk | Action | Units | Lines | Arrival status | Shortage before arrival |",
+        "|---|---:|---:|---|---|---:|---:|---|---:|",
+        (
+            f"| Direct | {_value(direct.get('status'))} | {_value(direct.get('article_id'))} | "
+            f"{_value(direct.get('risk_level'))} | {_value(direct.get('action'))} | "
+            f"{_value(direct.get('total_units'))} | {_value(direct.get('line_count'))} | "
+            f"{_value(direct.get('arrival_projection_status'))} | "
+            f"{_value(direct.get('projected_shortage_before_arrival'))} |"
+        ),
+        (
+            f"| From WB | {_value(from_wb.get('status'))} | {_value(from_wb.get('article_id'))} | "
+            f"{_value(from_wb.get('risk_level'))} | {_value(from_wb.get('action'))} | "
+            f"{_value(from_wb.get('total_units'))} | {_value(from_wb.get('line_count'))} | "
+            f"{_value(from_wb.get('arrival_projection_status'))} | "
+            f"{_value(from_wb.get('projected_shortage_before_arrival'))} |"
+        ),
+        "",
+        "## Shipment comparison",
+        "",
+        f"- **Target date**: `{_value(shipment.get('target_date'))}`",
+        f"- **WB arrival date**: `{_value(shipment.get('wb_arrival_date'))}`",
+        f"- **Has divergence**: `{_value(shipment.get('has_divergence'))}`",
+        f"- **Articles**: `{_value(shipment.get('article_count'))}` total, `{_value(shipment.get('divergent_article_count'))}` divergent",
+        f"- **Categories**: `{_category_text(shipment.get('categories') or {})}`",
+        f"- **Normalization**: `{_value(shipment.get('normalization_strategy'))}`",
+        f"- **Canonical planning horizon days**: `{_value(shipment.get('canonical_planning_horizon_days'))}`",
+        "",
+        "## Monitoring",
+        "",
+        f"- **Overall status**: `{_value(monitoring.get('overall_status'))}`",
+        f"- **Alerts**: `{_value(monitoring.get('critical_alerts'))}` critical, `{_value(monitoring.get('warning_alerts'))}` warning",
+        f"- **Risks**: `{_category_text(monitoring.get('risks') or {})}`",
+        f"- **Orders**: `{_category_text(monitoring.get('orders') or {})}`",
+        f"- **Timeseries metrics**: `{', '.join(monitoring.get('timeseries_metrics') or []) or 'none'}`",
+        "",
+        "## Top risks",
+        "",
+    ]
+
+    if top_risks:
+        lines.extend(
+            [
+                "| Article | Code | Bundle | Risk | Days of cover | Final order qty |",
+                "|---:|---|---|---|---:|---:|",
+            ]
+        )
+        for item in top_risks:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {_value(item.get('article_id'))} | {_value(item.get('article_code'))} | "
+                f"{_value(item.get('bundle_type_name') or item.get('bundle_type_id'))} | "
+                f"{_value(item.get('risk_level'))} | {_value(item.get('days_of_cover'))} | "
+                f"{_value(item.get('final_order_qty'))} |"
+            )
+    else:
+        lines.append("- **Top risks**: none")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_markdown_summary(report_dir: Path, summary: dict[str, Any]) -> Path:
+    markdown_path = report_dir / "summary.md"
+    markdown_path.write_text(render_markdown_summary(summary), encoding="utf-8")
+    return markdown_path
+
+
 def write_summary(report_dir: Path) -> Path:
     summary_path = report_dir / "summary.json"
     summary = build_summary(report_dir=report_dir)
     with summary_path.open("w", encoding="utf-8") as file_obj:
         json.dump(summary, file_obj, ensure_ascii=False, indent=2)
         file_obj.write("\n")
+    write_markdown_summary(report_dir=report_dir, summary=summary)
     return summary_path
 
 

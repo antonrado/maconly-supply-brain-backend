@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from scripts.mvp_first_analytics_summary import build_summary, write_summary
+from scripts.mvp_first_analytics_summary import build_summary, render_markdown_summary, write_summary
 
 
 def _write_json(path, payload):
@@ -90,6 +90,12 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
     assert summary["monitoring"]["top_risk_count"] == 2
     assert summary["monitoring"]["timeseries_metrics"] == ["risk_critical"]
 
+    markdown = render_markdown_summary(summary)
+    assert "# MVP First Analytics Summary" in markdown
+    assert "| Direct | ok | 1 | critical | order_minimum_only | 100 | 2 | shortage_before_arrival | 25 |" in markdown
+    assert "- **Categories**: `qty_mismatch=1`" in markdown
+    assert "- **Overall status**: `warning`" in markdown
+
 
 def test_write_summary_creates_summary_json(tmp_path):
     path = write_summary(report_dir=tmp_path)
@@ -98,3 +104,5 @@ def test_write_summary_creates_summary_json(tmp_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["production_order_direct"]["status"] is None
     assert payload["shipment_comparison"]["categories"] == {}
+    assert (tmp_path / "summary.md").exists()
+    assert "- **Top risks**: none" in (tmp_path / "summary.md").read_text(encoding="utf-8")

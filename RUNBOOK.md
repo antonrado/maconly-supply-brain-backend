@@ -27,7 +27,7 @@ Use helper commands from `scripts/dev.ps1`:
 
 `proposal` now seeds deterministic smoke data inside the running backend container and calls the canonical `POST /api/v1/planning/core/production-order/proposal` happy path.
 
-`mvp-first-analytics` starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, saves JSON responses under `artifacts/mvp_first_analytics/<timestamp>/`, and writes a compact `summary.json` with the main first-analytics signals.
+`mvp-first-analytics` starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, saves JSON responses under `artifacts/mvp_first_analytics/<timestamp>/`, and writes compact `summary.json` / `summary.md` files with the main first-analytics signals.
 
 `po-api-smoke-positive` validates only deterministic positive live API checks:
 - Auto-syncs backend image and waits for health readiness
