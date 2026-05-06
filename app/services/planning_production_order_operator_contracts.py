@@ -5,6 +5,7 @@ from app.services.planning_production_order_economics import (
     CAPITAL_CONSTRAINT_STATUS_MISSING_STRICT,
 )
 from app.services.planning_production_order_freshness import (
+    FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES,
     build_from_wb_freshness_blocker,
     build_from_wb_freshness_next_steps,
 )
@@ -54,7 +55,10 @@ def _build_from_wb_freshness_failure_detail(
 
     return {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": (
+            "WB data freshness check failed in strict mode; "
+            f"status '{freshness_status}' is not allowed."
+        ),
         "article_id": int(article_id),
         "field": "freshness_mode",
         "field_metadata": {
@@ -73,7 +77,14 @@ def _build_from_wb_freshness_failure_detail(
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": blocker,
         "stale_components": stale_components,
+        "action": "Refresh missing or stale WB inputs, or switch freshness_mode to warn if degraded freshness is acceptable.",
         "next_steps": next_steps,
+        "strict_policy": {
+            "decision": "reject",
+            "reason": "status_blocked_in_strict_mode",
+            "effective_status": freshness_status,
+            "allowed_statuses": sorted(FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES),
+        },
     }
 
 

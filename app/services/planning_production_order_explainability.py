@@ -5,8 +5,10 @@ from datetime import date, timedelta
 
 from app.schemas.planning_production_order import ProductionOrderExplanationBlock
 from app.services.planning_production_order_freshness import (
+    FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES,
     build_from_wb_freshness_blocker,
     build_from_wb_freshness_next_steps,
+    is_from_wb_freshness_status_allowed_in_strict_mode,
 )
 
 EXPLAINABILITY_MODE_COMPACT = "compact"
@@ -845,6 +847,24 @@ def _apply_from_wb_explainability(
             f"freshness_next_steps={freshness_meta['next_steps']}"
         )
 
+    strict_policy_text = ""
+    if (
+        freshness_mode == "strict"
+        and freshness_status != "fresh"
+        and is_from_wb_freshness_status_allowed_in_strict_mode(freshness_status)
+    ):
+        strict_policy_meta = {
+            "decision": "allow",
+            "reason": "status_allowed_in_strict_mode",
+            "effective_status": freshness_status,
+            "allowed_statuses": sorted(FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES),
+        }
+        freshness_meta["strict_policy"] = strict_policy_meta
+        strict_policy_text = (
+            ", freshness_strict_policy="
+            f"{strict_policy_meta['decision']}:{strict_policy_meta['effective_status']}"
+        )
+
     explanation.meta["from_wb"] = {
         "observation_window_days": observation_window_days,
         "freshness_mode": freshness_mode,
@@ -899,7 +919,7 @@ def _apply_from_wb_explainability(
             f"sales:{sales_stale_after_days}|stock:{stock_stale_after_days}, "
             "freshness_threshold_source="
             f"sales:{freshness_threshold_source['sales']}|stock:{freshness_threshold_source['stock']}"
-            f"{freshness_actionability_text}."
+            f"{freshness_actionability_text}{strict_policy_text}."
         ),
     )
     return explanation
@@ -1118,6 +1138,8 @@ def _build_compact_explanation_meta(meta: dict[str, object]) -> dict[str, object
                 freshness_compact["blocker"] = freshness_raw.get("blocker")
                 freshness_compact["stale_components"] = freshness_raw.get("stale_components")
                 freshness_compact["next_steps"] = freshness_raw.get("next_steps")
+            if "strict_policy" in freshness_raw:
+                freshness_compact["strict_policy"] = freshness_raw.get("strict_policy")
         if isinstance(economic_observed_raw, dict):
             economic_observed_compact = {
                 "source": economic_observed_raw.get("source"),

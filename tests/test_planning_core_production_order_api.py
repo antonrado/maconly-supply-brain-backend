@@ -71,6 +71,14 @@ from app.services.planning_production_order_recommendation import (
 from app.services.planning_production_order_scope import (
     build_physical_scope_and_arrival_projection,
 )
+from app.services.planning_production_order_freshness import (
+    FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES,
+    build_from_wb_freshness_snapshot,
+    is_from_wb_freshness_status_allowed_in_strict_mode,
+)
+from app.services.planning_production_order_operator_contracts import (
+    _build_from_wb_freshness_failure_detail,
+)
 from app.models.models import (
     Article,
     ArticleWbMapping,
@@ -232,6 +240,68 @@ def _build_payload(article_id: int, bundle_type_id: int, size_s_id: int, size_m_
             "available_capital": 1000000.0,
             "allow_order_with_buffer": True,
         },
+    }
+
+
+def test_from_wb_strict_freshness_policy_allows_only_declared_statuses():
+    assert FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES == {"fresh", "missing_stock_data"}
+    assert is_from_wb_freshness_status_allowed_in_strict_mode("fresh") is True
+    assert is_from_wb_freshness_status_allowed_in_strict_mode("missing_stock_data") is True
+    assert is_from_wb_freshness_status_allowed_in_strict_mode("missing_sales_data") is False
+    assert is_from_wb_freshness_status_allowed_in_strict_mode("no_data") is False
+    assert is_from_wb_freshness_status_allowed_in_strict_mode("stale") is False
+
+
+def test_build_from_wb_freshness_snapshot_marks_missing_stock_data_when_sales_are_present():
+    freshness_status, sales_age_days, stock_oldest_age_days, stock_age_days_by_bundle = (
+        build_from_wb_freshness_snapshot(
+            effective_as_of_date=date(2026, 1, 5),
+            wb_stock_updated_at_by_bundle={101: None, 102: None},
+            sales_stale_after_days=3,
+            stock_stale_after_days=2,
+            now=datetime(2026, 1, 5, tzinfo=timezone.utc),
+        )
+    )
+
+    assert freshness_status == "missing_stock_data"
+    assert sales_age_days == 0
+    assert stock_oldest_age_days is None
+    assert stock_age_days_by_bundle == {101: None, 102: None}
+
+
+def test_build_from_wb_freshness_failure_detail_includes_strict_policy_message_action_and_next_steps():
+    detail = _build_from_wb_freshness_failure_detail(
+        article_id=123,
+        freshness_status="missing_sales_data",
+        freshness_mode="strict",
+        sales_age_days=None,
+        stock_oldest_age_days=7,
+        sales_stale_after_days=3,
+        stock_stale_after_days=2,
+        threshold_source={"sales": "global_default", "stock": "request"},
+    )
+
+    assert detail == {
+        "code": "wb_data_freshness_failed",
+        "message": _build_expected_rejected_strict_freshness_message("missing_sales_data"),
+        "article_id": 123,
+        "field": "freshness_mode",
+        "field_metadata": {
+            "description": "from-WB freshness gate mode",
+            "type": "Literal['warn', 'strict']",
+        },
+        "freshness_mode": "strict",
+        "freshness_status": "missing_sales_data",
+        "sales_age_days": None,
+        "stock_oldest_age_days": 7,
+        "threshold_days": {"sales": 3, "stock": 2},
+        "threshold_source": {"sales": "global_default", "stock": "request"},
+        "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
+        "blocker": "no_wb_sales_data",
+        "stale_components": ["stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
+        "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("missing_sales_data"),
     }
 
 
@@ -1857,7 +1927,29 @@ def _build_expected_compact_freshness(freshness_meta: dict[str, object]) -> dict
         expected_compact_freshness["blocker"] = freshness_meta["blocker"]
         expected_compact_freshness["stale_components"] = freshness_meta["stale_components"]
         expected_compact_freshness["next_steps"] = freshness_meta["next_steps"]
+    if "strict_policy" in freshness_meta:
+        expected_compact_freshness["strict_policy"] = freshness_meta["strict_policy"]
     return expected_compact_freshness
+
+
+def _build_expected_rejected_strict_freshness_policy(effective_status: str) -> dict[str, object]:
+    return {
+        "decision": "reject",
+        "reason": "status_blocked_in_strict_mode",
+        "effective_status": effective_status,
+        "allowed_statuses": ["fresh", "missing_stock_data"],
+    }
+
+
+def _build_expected_rejected_strict_freshness_action() -> str:
+    return (
+        "Refresh missing or stale WB inputs, or switch freshness_mode to warn if degraded "
+        "freshness is acceptable."
+    )
+
+
+def _build_expected_rejected_strict_freshness_message(effective_status: str) -> str:
+    return f"WB data freshness check failed in strict mode; status '{effective_status}' is not allowed."
 
 
 def test_production_order_proposal_happy_path(client, db_session):
@@ -16280,7 +16372,7 @@ def test_production_order_proposal_direct_request_overrides_wb_import_state(clie
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16296,7 +16388,9 @@ def test_production_order_proposal_direct_request_overrides_wb_import_state(clie
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -16333,7 +16427,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("no_data"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16349,7 +16443,9 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data(client, db_ses
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("no_data"),
     }
 
 
@@ -16398,7 +16494,7 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data_with_admin_def
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("no_data"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16414,7 +16510,9 @@ def test_production_order_proposal_from_wb_strict_rejects_no_data_with_admin_def
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_or_stock_data",
         "stale_components": [],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("no_data"),
     }
 
 
@@ -16460,7 +16558,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_data(cli
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("missing_sales_data"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16476,7 +16574,9 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_data(cli
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": [],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("missing_sales_data"),
     }
 
 
@@ -16523,7 +16623,7 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_with_sta
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("missing_sales_data"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16539,7 +16639,9 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_sales_with_sta
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("missing_sales_data"),
     }
 
 
@@ -16599,7 +16701,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("missing_sales_data"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16615,11 +16717,13 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_sales_data",
         "stale_components": ["stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("missing_sales_data"),
     }
 
 
-def test_production_order_proposal_from_wb_strict_rejects_missing_stock_data(client, db_session):
+def test_production_order_proposal_from_wb_strict_allows_missing_stock_data(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     today_utc = datetime.now(timezone.utc).date()
 
@@ -16659,31 +16763,54 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_data(cli
     }
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
-    assert response.status_code == 400, response.text
+    assert response.status_code == 200, response.text
 
-    assert response.json()["detail"] == {
-        "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
-        "article_id": seeded["article"].id,
-        "field": "freshness_mode",
-        "field_metadata": {
-            "description": "from-WB freshness gate mode",
-            "type": "Literal['warn', 'strict']",
-        },
-        "freshness_mode": "strict",
-        "freshness_status": "missing_stock_data",
+    body = response.json()
+    wb_adapter_step = next(
+        (step for step in body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
+    assert "freshness_strict_policy=allow:missing_stock_data" in wb_adapter_step
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness_mode"] == "strict"
+    assert from_wb_meta["freshness"] == {
+        "status": "missing_stock_data",
         "sales_age_days": 0,
         "stock_oldest_age_days": None,
+        "stock_age_days_by_bundle": {
+            str(seeded["bundle_type"].id): None,
+        },
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": [],
         "next_steps": ["run_wb_stock_sync_live"],
+        "strict_policy": {
+            "decision": "allow",
+            "reason": "status_allowed_in_strict_mode",
+            "effective_status": "missing_stock_data",
+            "allowed_statuses": ["fresh", "missing_stock_data"],
+        },
     }
 
+    payload["explainability_mode"] = EXPLAINABILITY_MODE_COMPACT
+    compact_response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
+    assert compact_response.status_code == 200, compact_response.text
 
-def test_production_order_proposal_from_wb_strict_rejects_missing_stock_with_stale_sales(client, db_session):
+    compact_body = compact_response.json()
+    assert _business_projection(body) == _business_projection(compact_body)
+    compact_wb_adapter_step = next(
+        (step for step in compact_body["explanation"]["steps"] if "WB ingestion adapter" in step),
+        "",
+    )
+    assert "freshness_strict_policy=allow:missing_stock_data" in compact_wb_adapter_step
+    assert compact_body["explanation"]["meta"]["from_wb"]["freshness"] == _build_expected_compact_freshness(
+        from_wb_meta["freshness"]
+    )
+
+
+def test_production_order_proposal_from_wb_strict_allows_missing_stock_with_stale_sales(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     stale_sales_date = date(2020, 1, 1)
     today_utc = datetime.now(timezone.utc).date()
@@ -16724,31 +16851,34 @@ def test_production_order_proposal_from_wb_strict_rejects_missing_stock_with_sta
     }
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
-    assert response.status_code == 400, response.text
+    assert response.status_code == 200, response.text
 
-    assert response.json()["detail"] == {
-        "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
-        "article_id": seeded["article"].id,
-        "field": "freshness_mode",
-        "field_metadata": {
-            "description": "from-WB freshness gate mode",
-            "type": "Literal['warn', 'strict']",
-        },
-        "freshness_mode": "strict",
-        "freshness_status": "missing_stock_data",
+    body = response.json()
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness_mode"] == "strict"
+    assert from_wb_meta["freshness"] == {
+        "status": "missing_stock_data",
         "sales_age_days": (today_utc - stale_sales_date).days,
         "stock_oldest_age_days": None,
+        "stock_age_days_by_bundle": {
+            str(seeded["bundle_type"].id): None,
+        },
         "threshold_days": {"sales": 3, "stock": 2},
         "threshold_source": {"sales": "global_default", "stock": "global_default"},
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": {
+            "decision": "allow",
+            "reason": "status_allowed_in_strict_mode",
+            "effective_status": "missing_stock_data",
+            "allowed_statuses": ["fresh", "missing_stock_data"],
+        },
     }
 
 
-def test_production_order_proposal_from_wb_strict_request_sales_threshold_overrides_admin_defaults_for_missing_stock_with_stale_sales(client, db_session):
+def test_production_order_proposal_from_wb_strict_request_sales_threshold_overrides_admin_defaults_for_allowed_missing_stock_with_stale_sales(client, db_session):
     seeded = _seed_article_bundle_base(db_session)
     stale_sales_date = date(2020, 1, 1)
     today_utc = datetime.now(timezone.utc).date()
@@ -16802,27 +16932,30 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
     }
 
     response = client.post("/api/v1/planning/core/production-order/proposal/from-wb", json=payload)
-    assert response.status_code == 400, response.text
+    assert response.status_code == 200, response.text
 
-    assert response.json()["detail"] == {
-        "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
-        "article_id": seeded["article"].id,
-        "field": "freshness_mode",
-        "field_metadata": {
-            "description": "from-WB freshness gate mode",
-            "type": "Literal['warn', 'strict']",
-        },
-        "freshness_mode": "strict",
-        "freshness_status": "missing_stock_data",
+    body = response.json()
+    from_wb_meta = body["explanation"]["meta"]["from_wb"]
+    assert from_wb_meta["freshness_mode"] == "strict"
+    assert from_wb_meta["freshness"] == {
+        "status": "missing_stock_data",
         "sales_age_days": (today_utc - stale_sales_date).days,
         "stock_oldest_age_days": None,
+        "stock_age_days_by_bundle": {
+            str(seeded["bundle_type"].id): None,
+        },
         "threshold_days": {"sales": 1, "stock": 3650},
         "threshold_source": {"sales": "request", "stock": "admin_defaults"},
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "no_wb_stock_data",
         "stale_components": ["sales"],
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": {
+            "decision": "allow",
+            "reason": "status_allowed_in_strict_mode",
+            "effective_status": "missing_stock_data",
+            "allowed_statuses": ["fresh", "missing_stock_data"],
+        },
     }
 
 
@@ -16977,7 +17110,7 @@ def test_production_order_proposal_from_wb_strict_admin_defaults_can_force_stale
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -16993,7 +17126,9 @@ def test_production_order_proposal_from_wb_strict_admin_defaults_can_force_stale
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -17160,7 +17295,7 @@ def test_production_order_proposal_from_wb_strict_request_thresholds_override_ad
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -17176,7 +17311,9 @@ def test_production_order_proposal_from_wb_strict_request_thresholds_override_ad
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_and_stock_data",
         "stale_components": ["sales", "stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live", "run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -17246,7 +17383,7 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -17262,7 +17399,9 @@ def test_production_order_proposal_from_wb_strict_request_sales_threshold_overri
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -17332,7 +17471,7 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -17348,7 +17487,9 @@ def test_production_order_proposal_from_wb_strict_request_stock_threshold_overri
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -17405,7 +17546,7 @@ def test_production_order_proposal_from_wb_strict_rejects_sales_only_stale_data(
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -17421,7 +17562,9 @@ def test_production_order_proposal_from_wb_strict_rejects_sales_only_stale_data(
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_sales_data",
         "stale_components": ["sales"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_sales_daily_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 
@@ -17478,7 +17621,7 @@ def test_production_order_proposal_from_wb_strict_rejects_stock_only_stale_data(
 
     assert response.json()["detail"] == {
         "code": "wb_data_freshness_failed",
-        "message": "WB data freshness check failed",
+        "message": _build_expected_rejected_strict_freshness_message("stale"),
         "article_id": seeded["article"].id,
         "field": "freshness_mode",
         "field_metadata": {
@@ -17494,7 +17637,9 @@ def test_production_order_proposal_from_wb_strict_rejects_stock_only_stale_data(
         "readiness_endpoint": "/api/v1/wb/from-wb/readiness",
         "blocker": "stale_wb_stock_data",
         "stale_components": ["stock"],
+        "action": _build_expected_rejected_strict_freshness_action(),
         "next_steps": ["run_wb_stock_sync_live"],
+        "strict_policy": _build_expected_rejected_strict_freshness_policy("stale"),
     }
 
 

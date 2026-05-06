@@ -10,6 +10,7 @@ from app.models.models import ArticlePlanningSettings
 
 FROM_WB_SALES_STALE_AFTER_DAYS = 3
 FROM_WB_STOCK_STALE_AFTER_DAYS = 2
+FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES = frozenset({"fresh", "missing_stock_data"})
 
 
 def parse_iso_datetime(value: str | None) -> datetime | None:
@@ -221,6 +222,10 @@ def build_from_wb_freshness_blocker(
     return None
 
 
+def is_from_wb_freshness_status_allowed_in_strict_mode(freshness_status: str) -> bool:
+    return freshness_status in FROM_WB_STRICT_ALLOWED_FRESHNESS_STATUSES
+
+
 def _raise_from_wb_strict_freshness_failure_if_needed(
     *,
     article_id: int,
@@ -233,7 +238,9 @@ def _raise_from_wb_strict_freshness_failure_if_needed(
     threshold_source: dict[str, object],
     build_from_wb_freshness_failure_detail: Callable[..., dict[str, object]],
 ) -> None:
-    if freshness_mode != "strict" or freshness_status == "fresh":
+    if freshness_mode != "strict" or is_from_wb_freshness_status_allowed_in_strict_mode(
+        freshness_status
+    ):
         return
 
     raise HTTPException(
