@@ -1087,8 +1087,14 @@ function Invoke-HostMvpFirstAnalyticsReport {
         Invoke-ApiAndSaveResponseOrThrow -Name "monitoring-risk-focus" -Method "GET" -Url $MonitoringRiskFocusUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "monitoring_risk_focus.json")
         Invoke-ApiAndSaveResponseOrThrow -Name "monitoring-timeseries" -Method "GET" -Url $MonitoringTimeseriesUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "monitoring_timeseries.json")
 
+        $SummaryPath = python -m scripts.mvp_first_analytics_summary $OutputDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "[mvp-first-analytics] FAIL summary step."
+        }
+
         Write-Host "[mvp-first-analytics] OK"
         Write-Host "[mvp-first-analytics] report directory: $OutputDir"
+        Write-Host "[mvp-first-analytics] summary: $SummaryPath"
     }
     catch {
         $Message = $_.Exception.Message

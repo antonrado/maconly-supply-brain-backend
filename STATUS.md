@@ -294,13 +294,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-07 03:10 +07:00`
-- Branch: `main` (dirty worktree, ahead of `origin/main` by 3 commits)
-- Last commit (`git log -1 --oneline`): `fe90676 Add MVP first analytics request examples`
+- Date: `2026-05-07 03:15 +07:00`
+- Branch: `main` (dirty worktree, ahead of `origin/main` by 4 commits)
+- Last commit (`git log -1 --oneline`): `8d13b8c Add MVP first analytics report command`
 - Gates:
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report written under `artifacts/mvp_first_analytics/20260507_031013/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report and `summary.json` written under `artifacts/mvp_first_analytics/20260507_031501/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
-  - `python -m pytest -q` → `471 passed`
+  - `python -m pytest -q` → `473 passed`
 
 ### Minimal raw outputs
 ```text
@@ -317,16 +317,18 @@ app/services/wb_shipment_comparison.py
 examples/mvp_first_analytics/from_wb_proposal_request.json
 examples/mvp_first_analytics/readiness_request.json
 examples/mvp_first_analytics/shipment_comparison_request.json
+scripts/mvp_first_analytics_summary.py
 scripts/context_guard.py
 scripts/dev.ps1
 scripts/po_api_smoke_seed.py
 tests/test_context_guard.py
+tests/test_mvp_first_analytics_summary.py
 tests/test_wb_shipment_comparison_api.py
 ```
 
 ```text
 $ python -m pytest -q
-471 passed in 7.95s
+473 passed in 7.66s
 ```
 
 ```text
