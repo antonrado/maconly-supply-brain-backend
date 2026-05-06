@@ -21,6 +21,7 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 context
 .\scripts\dev.ps1 verify
 .\scripts\dev.ps1 verify-live
+.\scripts\dev.ps1 verify-mvp
 ```
 
 `proposal` now seeds deterministic smoke data inside the running backend container and calls the canonical `POST /api/v1/planning/core/production-order/proposal` happy path.
@@ -31,6 +32,7 @@ Use helper commands from `scripts/dev.ps1`:
 - `GET /api/v1/planning/core/health` -> `200`
 - `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (happy-path payload) -> `200`
+- `POST /api/v1/wb/manager/shipment/from-proposal/comparison` (happy-path payload) -> `200`
 
 `po-api-smoke` validates live API connectivity for production-order routes with deterministic expected statuses:
 - Auto-syncs backend image (`docker compose up -d --build backend`) and waits for running state
@@ -38,6 +40,7 @@ Use helper commands from `scripts/dev.ps1`:
 - Seeds deterministic smoke fixture data via backend container (`scripts/po_api_smoke_seed.py`)
 - `POST /api/v1/planning/core/production-order/proposal` (happy-path payload) -> `200`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (happy-path payload) -> `200`
+- `POST /api/v1/wb/manager/shipment/from-proposal/comparison` (happy-path payload) -> `200`
 - `POST /api/v1/planning/core/production-order/proposal` (unknown article) -> `404`
 - `POST /api/v1/planning/core/production-order/proposal/from-wb` (unknown article) -> `404`
 - `POST /api/v1/planning/core/production-order/proposal` (schema-invalid payload) -> `422`
@@ -174,6 +177,20 @@ For a full local gate that includes deterministic live API checks for production
 What `verify-live` does:
 1. Runs everything in `verify` (context + compile + targeted production-order smoke tests).
 2. Runs `po-api-smoke` (auto-sync backend image, seed deterministic smoke data, then assert 200/404/422 API contracts).
+
+## One-command MVP verification
+
+For the practical MVP gate that prefers live Docker API checks and falls back to a host SQLite API smoke when Docker is unavailable:
+
+```powershell
+.\scripts\dev.ps1 verify-mvp
+```
+
+What `verify-mvp` does:
+1. Runs context guard.
+2. Runs compile check.
+3. Runs targeted smoke tests, including production-order and shipment-comparison regressions.
+4. Runs deterministic API smoke for production-order direct/from-WB and WB shipment comparison.
 
 ## Interactive rebase / COMMIT_EDITMSG swap recovery
 If Vim opens and reports a swap file for `.git/COMMIT_EDITMSG`:

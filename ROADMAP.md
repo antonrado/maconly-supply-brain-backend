@@ -15,11 +15,13 @@
   - inbound and in-transit truth
   - receiving reconciliation
   - operational visibility basics
+- Practical MVP target for this stage is first API-backed analytics: run the backend, ingest or seed data, call planning/WB/monitoring endpoints, and inspect actionable supply signals before broad UI/ERP expansion.
 - Safe near-term work should stay in the `narrow_quality_pass_or_truth_hardening` lane:
   - runtime truth hardening
   - operator trust surfacing
   - small core cleanup
   - narrow availability-first hardening
+  - read-only comparison bridges that expose semantic divergence before replacing existing operator flows
 - Not-now work remains out of immediate scope even if architecture should leave room for it:
   - broad dashboard build
   - deep simulation
@@ -32,6 +34,7 @@
   - finance facts != planning explainability
   - discrepancy events != stock balance adjustments
   - UI views != domain model
+  - shipment comparison diagnostics != shipment behavior migration
 - Future modular domains must remain possible from current boundaries:
   - master_data
   - inventory_truth

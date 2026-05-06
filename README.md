@@ -106,6 +106,7 @@ The main endpoints are:
 
 - **Shipments**
   - `GET /shipment/preset` — suggested parameters for a new shipment based on recent history.
+  - `POST /shipment/from-proposal/comparison` — read-only comparison between the current WB replenishment shipment proposal and canonical production-order/from-WB behavior for the same scope.
   - `POST /shipment/from-proposal` — create a draft WB shipment from the current replenishment proposal.
   - `GET /shipment/headers` — paginated list of shipment headers with aggregate metrics.
   - `GET /shipment/{shipment_id}` — full shipment header and items for editing.

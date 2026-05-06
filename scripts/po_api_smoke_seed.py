@@ -302,6 +302,7 @@ def main() -> None:
         db.commit()
 
         purchase_order_target_date = now.date() + timedelta(days=90)
+        shipment_comparison_target_date = now.date()
 
         payloads = {
             "direct_payload": {
@@ -351,6 +352,16 @@ def main() -> None:
                 "target_date": purchase_order_target_date.isoformat(),
                 "comment": "Smoke PO from canonical proposal",
                 "explanation": True,
+            },
+            "shipment_comparison_payload": {
+                "target_date": shipment_comparison_target_date.isoformat(),
+                "wb_arrival_date": shipment_comparison_target_date.isoformat(),
+                "target_coverage_days": 30,
+                "min_coverage_days": 7,
+                "replenishment_strategy": "normal",
+                "zero_sales_policy": "ignore",
+                "max_coverage_days_after": 60,
+                "article_ids": [article.id],
             },
         }
         print(json.dumps(payloads))

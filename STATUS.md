@@ -23,10 +23,12 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - merged warehouse scope is treated as a current simplification, not a permanent truth model
   - helper/module boundaries should continue mapping toward future domains like inventory truth, inbound tracking, receiving reconciliation, WB replenishment, leakage control, sales intelligence, finance, cash planning, and trust/exception handling
 - Long-horizon roadmap order is now explicit as a direction guardrail: planning core and truth basics -> operational visibility -> inbound truth and receiving -> WB replenishment -> reconciliation and leakage -> sales intelligence -> finance -> cash planning -> trust operating system.
+- Practical MVP definition for the current workstream is now explicit: launch the backend, ingest or seed data, call the API surfaces, and obtain first supply analytics before broader ERP polish. See `MVP_FIRST_ANALYTICS_RUNBOOK.md`.
 
 ## Implemented now (code-backed)
 
 - FastAPI app mounts `api_router` under `/api/v1` and starts `MonitoringScheduler` on startup.
+- MVP first-analytics runbook is documented in `MVP_FIRST_ANALYTICS_RUNBOOK.md`, including startup, WB sync, readiness, production-order/from-WB, monitoring analytics, and shipment-comparison calls.
 - FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
 - Monitoring scheduler uses PostgreSQL advisory lock (`pg_try_advisory_lock` / `pg_advisory_unlock`) via a dedicated connection (`engine.raw_connection`) to keep one writer in multi-instance runtime.
 - Test bootstrap is now deterministic on host Python too: `tests/conftest.py` inserts the repo root before importing `app`, so plain `python -m pytest -q` no longer depends on ad hoc `PYTHONPATH` setup.
@@ -57,6 +59,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
   - WB shipment headers sorting is now hardened too: invalid `sort_by` / `sort_dir` values return structured validation details, and the previous `status` query shadowing bug no longer breaks those `400` paths.
   - WB shipment edit restrictions are now machine-readable as well: final shipment locks, non-draft item locks, and `final_qty` over available NSC stock all return structured validation details with shipment/item IDs and deterministic `next_steps` instead of raw strings.
   - WB shipment status mutations are now machine-readable too: unsupported status values and invalid status transitions return structured validation details with shipment id, field context, allowed values/targets, and deterministic `next_steps` instead of raw strings.
+  - `POST /api/v1/wb/manager/shipment/from-proposal/comparison` now exposes a read-only diagnostic bridge between current WB replenishment shipment proposal output and canonical production-order/from-WB behavior, returning scope normalization, per-article divergence categories, line-level quantity comparisons, and canonical blocker/action metadata without persisting shipments or changing shipment semantics.
   - Planning monitoring timeseries validation is now machine-readable too: missing `metrics` query parameter on `GET /api/v1/planning/monitoring/timeseries` returns a structured `400` detail with field context and deterministic `next_steps` instead of a raw string.
   - Legacy `generate_order_proposal` now supports optional `article_ids` scoping, and order-explanation consumers reuse scoped legacy proposal runs instead of recomputing the full legacy portfolio for each article.
   - `POST /api/v1/purchase-order/from-proposal` now accepts optional `article_ids` for the legacy fallback path, so operator-facing purchase-order draft creation can scope legacy proposal generation to a requested article set without switching semantics; ambiguous payloads that send both `article_id` and `article_ids` are rejected with `422`.
@@ -290,22 +293,37 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-04-26 11:02 +07:00`
-- Branch: `docs/explicit-portfolio-default-contract-audit` (dirty worktree)
-- Last commit (`git log -1 --oneline`): `983de7c`
+- Date: `2026-05-07 02:49 +07:00`
+- Branch: `main` (dirty worktree, ahead of `origin/main` by 1 commit)
+- Last commit (`git log -1 --oneline`): `3c60937 Improve from-WB strict freshness explainability and error UX`
 - Gates:
-  - `git diff --name-only` → `PROJECT_CANON.md`, `ROADMAP.md`, `STATUS.md`
-  - `python -m pytest -q` → `454 passed`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
+  - `python -m pytest -q` → `471 passed`
 
 ### Minimal raw outputs
 ```text
 $ git diff --name-only
-PROJECT_CANON.md
+MVP_FIRST_ANALYTICS_RUNBOOK.md
+README.md
 ROADMAP.md
+RUNBOOK.md
 STATUS.md
+app/api/v1/endpoints/wb_shipment.py
+app/schemas/wb_shipment.py
+app/services/wb_shipment_comparison.py
+scripts/context_guard.py
+scripts/dev.ps1
+scripts/po_api_smoke_seed.py
+tests/test_context_guard.py
+tests/test_wb_shipment_comparison_api.py
 ```
 
 ```text
 $ python -m pytest -q
-454 passed in 7.42s
+471 passed in 7.95s
+```
+
+```text
+$ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp
+[verify-mvp] OK (host)
 ```

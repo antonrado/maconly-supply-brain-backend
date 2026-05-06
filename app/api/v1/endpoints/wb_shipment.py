@@ -17,8 +17,11 @@ from app.schemas.wb_shipment import (
     WbShipmentHeaderRead,
     WbShipmentAggregates,
     WbShipmentItemSummary,
+    WbShipmentProposalComparisonRequest,
+    WbShipmentProposalComparisonResponse,
 )
 from app.schemas import WbShipmentPresetResponse
+from app.services.wb_shipment_comparison import build_wb_shipment_proposal_comparison
 from app.services.wb_shipment import create_wb_shipment_from_proposal
 from app.services.wb_shipment_preset import compute_shipment_preset
 
@@ -216,6 +219,32 @@ class WbShipmentStatusList(BaseModel):
 )
 def get_shipment_status_list() -> WbShipmentStatusList:
     return WbShipmentStatusList(statuses=list(WB_SHIPMENT_STATUS_ORDER))
+
+
+@router.post(
+    "/shipment/from-proposal/comparison",
+    response_model=WbShipmentProposalComparisonResponse,
+    tags=["WB Manager Public API"],
+    summary="Compare replenishment shipment proposal against canonical production-order",
+    description=(
+        "Runs the current WB replenishment proposal and a read-only canonical from-WB "
+        "comparison for the same shipment scope without persisting or changing shipment behavior."
+    ),
+)
+def compare_shipment_from_proposal(
+    payload: WbShipmentProposalComparisonRequest,
+    db: Session = Depends(get_db),
+) -> WbShipmentProposalComparisonResponse:
+    if payload.wb_arrival_date < payload.target_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_build_invalid_wb_arrival_date_detail(
+                target_date=payload.target_date,
+                wb_arrival_date=payload.wb_arrival_date,
+            ),
+        )
+
+    return build_wb_shipment_proposal_comparison(db=db, payload=payload)
 
 
 @router.post(

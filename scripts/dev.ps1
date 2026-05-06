@@ -18,7 +18,7 @@ function Get-ContextBaseRef {
 
 function Invoke-ContextGuard {
     $BaseRef = Get-ContextBaseRef
-    python .\scripts\context_guard.py --base $BaseRef --head HEAD
+    python .\scripts\context_guard.py --base $BaseRef --head HEAD --include-working-tree
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
@@ -116,7 +116,14 @@ function Assert-DockerComposeConfigValid {
 
 function Invoke-DockerComposeBackendBuild {
     Assert-DockerAvailable -CommandName "po-api-smoke"
-    Assert-MvpHostPortsAvailable -CommandName "po-api-smoke"
+    $RunningServices = docker compose -f $ComposeFile ps --status running --services 2>$null
+    $RunningServiceNames = @()
+    if ($LASTEXITCODE -eq 0) {
+        $RunningServiceNames = @($RunningServices | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+    if ($RunningServiceNames.Count -eq 0) {
+        Assert-MvpHostPortsAvailable -CommandName "po-api-smoke"
+    }
     Assert-DockerComposeConfigValid -CommandName "po-api-smoke"
 
     $ComposeArgs = @("compose", "-f", $ComposeFile, "up", "-d", "--build", "backend")
@@ -535,10 +542,12 @@ function Invoke-ProductionOrderApiSmokePositive {
         $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
         $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
         $PurchaseOrderFromProposalHappyPayload = $SeedData.purchase_order_from_proposal_payload | ConvertTo-Json -Depth 8 -Compress
+        $ShipmentComparisonPayload = $SeedData.shipment_comparison_payload | ConvertTo-Json -Depth 8 -Compress
 
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal" -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb" -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke"
         Invoke-ApiExpectedStatusOrThrow -Name "purchase-order-from-proposal-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/purchase-order/from-proposal" -ExpectedStatus 201 -JsonBody $PurchaseOrderFromProposalHappyPayload -ExpectedBodyContains '"status":"draft"' -LogPrefix "po-api-smoke"
+        Invoke-ApiExpectedStatusOrThrow -Name "shipment-comparison-happy-path" -Method "POST" -Url "http://localhost:8000/api/v1/wb/manager/shipment/from-proposal/comparison" -ExpectedStatus 200 -JsonBody $ShipmentComparisonPayload -ExpectedBodyContains '"divergence_summary"' -LogPrefix "po-api-smoke"
 
         return $SeedData
     }
@@ -652,6 +661,7 @@ function Invoke-HostProductionOrderApiSmokePositive {
     $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
     $DirectUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal"
     $FromWbUrl = "$BaseUrl/api/v1/planning/core/production-order/proposal/from-wb"
+    $ShipmentComparisonUrl = "$BaseUrl/api/v1/wb/manager/shipment/from-proposal/comparison"
     $PreviousDatabaseUrl = $env:DATABASE_URL
     $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
     $StdOutFile = [System.IO.Path]::GetTempFileName()
@@ -699,9 +709,11 @@ function Invoke-HostProductionOrderApiSmokePositive {
 
         $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
         $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
+        $ShipmentComparisonPayload = $SeedData.shipment_comparison_payload | ConvertTo-Json -Depth 8 -Compress
 
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-direct-happy-path" -Method "POST" -Url $DirectUrl -ExpectedStatus 200 -JsonBody $DirectHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke-host"
         Invoke-ApiExpectedStatusOrThrow -Name "production-order-from-wb-happy-path" -Method "POST" -Url $FromWbUrl -ExpectedStatus 200 -JsonBody $FromWbHappyPayload -ExpectedBodyContains '"status":"ok"' -LogPrefix "po-api-smoke-host"
+        Invoke-ApiExpectedStatusOrThrow -Name "shipment-comparison-happy-path" -Method "POST" -Url $ShipmentComparisonUrl -ExpectedStatus 200 -JsonBody $ShipmentComparisonPayload -ExpectedBodyContains '"divergence_summary"' -LogPrefix "po-api-smoke-host"
 
         return $SeedData
     }
