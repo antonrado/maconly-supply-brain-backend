@@ -1,0 +1,18 @@
+{
+  "article_id": 1,
+  "planning_horizon_days": 90,
+  "explainability_mode": "compact",
+  "observation_window_days": 30,
+  "freshness_mode": "warn",
+  "freshness_sales_stale_after_days": 3,
+  "freshness_stock_stale_after_days": 3,
+  "bundle_type_ids": [],
+  "in_flight_supply": [],
+  "size_weights": {},
+  "overrides": {
+    "fabric_min_batch_qty_default": 0,
+    "elastic_min_batch_qty_default": 0,
+    "available_capital": 10000,
+    "allow_order_with_buffer": false
+  }
+}

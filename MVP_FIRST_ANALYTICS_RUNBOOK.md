@@ -43,6 +43,9 @@ Optional live API gate:
 
 ## First analytics path
 
+Example request payloads live under `examples/mvp_first_analytics/`.
+Replace `article_id`, `bundle_type_ids`, `article_ids`, and dates with IDs/dates from your local or live dataset before using the examples against real data.
+
 1. Check Planning Core health:
 
 ```powershell
@@ -68,13 +71,13 @@ curl.exe -i -X POST http://localhost:8000/api/v1/wb/article-mapping/sync-live
 4. Check from-WB production-order readiness:
 
 ```powershell
-curl.exe -i -X POST http://localhost:8000/api/v1/wb/from-wb/readiness -H "Content-Type: application/json" --data-binary "@readiness_request.json"
+curl.exe -i -X POST http://localhost:8000/api/v1/wb/from-wb/readiness -H "Content-Type: application/json" --data-binary "@examples/mvp_first_analytics/readiness_request.json"
 ```
 
 5. Run canonical production-order from WB data:
 
 ```powershell
-curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb -H "Content-Type: application/json" --data-binary "@from_wb_proposal_request.json"
+curl.exe -i -X POST http://localhost:8000/api/v1/planning/core/production-order/proposal/from-wb -H "Content-Type: application/json" --data-binary "@examples/mvp_first_analytics/from_wb_proposal_request.json"
 ```
 
 6. Inspect monitoring/risk analytics:
@@ -88,7 +91,7 @@ curl.exe -i "http://localhost:8000/api/v1/planning/monitoring/timeseries?metrics
 7. Compare current WB shipment/replenishment proposal against canonical production-order/from-WB behavior:
 
 ```powershell
-curl.exe -i -X POST http://localhost:8000/api/v1/wb/manager/shipment/from-proposal/comparison -H "Content-Type: application/json" --data-binary "@shipment_comparison_request.json"
+curl.exe -i -X POST http://localhost:8000/api/v1/wb/manager/shipment/from-proposal/comparison -H "Content-Type: application/json" --data-binary "@examples/mvp_first_analytics/shipment_comparison_request.json"
 ```
 
 ## First analytics outputs to inspect

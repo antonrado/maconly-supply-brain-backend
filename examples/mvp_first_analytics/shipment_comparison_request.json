@@ -1,0 +1,11 @@
+{
+  "target_date": "2030-01-31",
+  "wb_arrival_date": "2030-01-31",
+  "target_coverage_days": 30,
+  "min_coverage_days": 7,
+  "replenishment_strategy": "normal",
+  "zero_sales_policy": "ignore",
+  "max_coverage_days_after": 60,
+  "article_ids": [1],
+  "explanation": true
+}

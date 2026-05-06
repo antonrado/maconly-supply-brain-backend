@@ -1,0 +1,6 @@
+{
+  "article_id": 1,
+  "limit": 100,
+  "freshness_sales_stale_after_days": 3,
+  "freshness_stock_stale_after_days": 3
+}
