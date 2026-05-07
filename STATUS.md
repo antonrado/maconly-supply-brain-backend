@@ -295,12 +295,12 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-07 03:30 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness follow-up commit)
-- Last commit (`git log -1 --oneline`): `3674912 Add MVP analytics next-action hints`
+- Date: `2026-05-07 21:17 +07:00`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness request-metadata follow-up commit)
+- Last commit (`git log -1 --oneline`): `85d8b2f Add targeted MVP live readiness parameters`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus actionable `summary.json` / `summary.md` written under `artifacts/mvp_first_analytics/20260507_032147/`
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness` → `OK`, report plus `summary.json` / `summary.md` written under `artifacts/mvp_live_readiness/20260507_033000/` against a temporary host backend
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, `summary.json`, and `summary.md` written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
   - `python -m pytest -q` → `475 passed`
 
@@ -332,7 +332,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-475 passed in 8.05s
+475 passed in 8.49s
 ```
 
 ```text
@@ -341,7 +341,7 @@ $ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics
 ```
 
 ```text
-$ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness
+$ powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6
 [mvp-live-readiness] OK
 ```
 

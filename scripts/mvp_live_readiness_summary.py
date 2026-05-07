@@ -37,7 +37,7 @@ def _first_items(items: list[Any], limit: int = 10) -> list[dict[str, Any]]:
     return rows
 
 
-def build_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
+def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     items = readiness_payload.get("items")
     if not isinstance(items, list):
         items = []
@@ -60,6 +60,7 @@ def build_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     return {
+        "request": request_payload or {},
         "total_articles_considered": readiness_payload.get("total_articles_considered"),
         "ready_articles": readiness_payload.get("ready_articles"),
         "not_ready_articles": readiness_payload.get("not_ready_articles"),
@@ -71,8 +72,18 @@ def build_summary(readiness_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def render_markdown_summary(summary: dict[str, Any]) -> str:
+    request = summary.get("request") or {}
     lines = [
         "# MVP Live Readiness Summary",
+        "",
+        "## Request",
+        "",
+        f"- **Article ID**: `{request.get('article_id')}`",
+        f"- **Limit**: `{request.get('limit')}`",
+        f"- **Sales stale after days**: `{request.get('freshness_sales_stale_after_days')}`",
+        f"- **Stock stale after days**: `{request.get('freshness_stock_stale_after_days')}`",
+        "",
+        "## Result",
         "",
         f"- **Total articles considered**: `{summary.get('total_articles_considered')}`",
         f"- **Ready articles**: `{summary.get('ready_articles')}`",
@@ -110,8 +121,10 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
 
 def write_summary(report_dir: Path) -> tuple[Path, Path]:
     readiness_path = report_dir / "readiness.json"
+    request_path = report_dir / "request.json"
     readiness_payload = _read_json(readiness_path)
-    summary = build_summary(readiness_payload)
+    request_payload = _read_json(request_path) if request_path.exists() else {}
+    summary = build_summary(readiness_payload, request_payload=request_payload)
 
     summary_json_path = report_dir / "summary.json"
     with summary_json_path.open("w", encoding="utf-8") as file_obj:

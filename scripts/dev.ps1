@@ -1160,6 +1160,7 @@ function Invoke-MvpLiveReadinessReport {
     }
 
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+    Set-Content -Path (Join-Path $OutputDir "request.json") -Value $Payload -Encoding UTF8
 
     Invoke-ApiAndSaveResponseOrThrow -Name "from-wb-readiness" -Method "POST" -Url $ReadinessUrl -ExpectedStatus 200 -JsonBody $Payload -OutputPath (Join-Path $OutputDir "readiness.json") -LogPrefix "mvp-live-readiness"
 

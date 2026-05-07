@@ -30,7 +30,7 @@ Use helper commands from `scripts/dev.ps1`:
 
 `mvp-first-analytics` starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, saves JSON responses under `artifacts/mvp_first_analytics/<timestamp>/`, and writes compact `summary.json` / `summary.md` files with the main first-analytics signals and derived next actions.
 
-`mvp-live-readiness` requires an already running backend at `http://localhost:8000`, calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint, and writes readiness `summary.json` / `summary.md` under `artifacts/mvp_live_readiness/<timestamp>/`. It does not call WB external sync endpoints.
+`mvp-live-readiness` requires an already running backend at `http://localhost:8000`, calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint, and writes `request.json`, `readiness.json`, `summary.json`, and `summary.md` under `artifacts/mvp_live_readiness/<timestamp>/`. It does not call WB external sync endpoints.
 
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell

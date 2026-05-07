@@ -38,8 +38,16 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
         ],
     }
 
-    summary = build_summary(payload)
+    request = {
+        "article_id": 2,
+        "limit": 20,
+        "freshness_sales_stale_after_days": 3,
+        "freshness_stock_stale_after_days": 4,
+    }
 
+    summary = build_summary(payload, request_payload=request)
+
+    assert summary["request"] == request
     assert summary["total_articles_considered"] == 3
     assert summary["ready_articles"] == 1
     assert summary["not_ready_articles"] == 2
@@ -57,6 +65,8 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
 
     markdown = render_markdown_summary(summary)
     assert "# MVP Live Readiness Summary" in markdown
+    assert "- **Article ID**: `2`" in markdown
+    assert "- **Limit**: `20`" in markdown
     assert "- **Blockers**: `no_wb_sales_data=1, no_wb_stock_data=1`" in markdown
     assert "| 2 | NO-SALES | False | no_wb_sales_data | missing_sales_data | run_wb_sales_daily_sync_live |" in markdown
 
@@ -73,10 +83,23 @@ def test_write_summary_writes_json_and_markdown(tmp_path):
         ),
         encoding="utf-8",
     )
+    (tmp_path / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     summary_json, summary_md = write_summary(tmp_path)
 
     assert summary_json == tmp_path / "summary.json"
     assert summary_md == tmp_path / "summary.md"
-    assert json.loads(summary_json.read_text(encoding="utf-8"))["blockers"] == {}
+    payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert payload["request"]["article_id"] == 10
+    assert payload["blockers"] == {}
     assert "Sample readiness items" in summary_md.read_text(encoding="utf-8")
