@@ -1086,6 +1086,20 @@ function Invoke-HostMvpFirstAnalyticsReport {
         $DirectHappyPayload = $SeedData.direct_payload | ConvertTo-Json -Depth 8 -Compress
         $FromWbHappyPayload = $SeedData.from_wb_payload | ConvertTo-Json -Depth 8 -Compress
         $ShipmentComparisonPayload = $SeedData.shipment_comparison_payload | ConvertTo-Json -Depth 8 -Compress
+        $RequestMetadata = [ordered]@{
+            generated_at = (Get-Date).ToString("o")
+            base_url = $BaseUrl
+            requests = @(
+                [ordered]@{ name = "planning-core-health"; method = "GET"; url = $HealthUrl; body = $null },
+                [ordered]@{ name = "production-order-direct"; method = "POST"; url = $DirectUrl; body = $SeedData.direct_payload },
+                [ordered]@{ name = "production-order-from-wb"; method = "POST"; url = $FromWbUrl; body = $SeedData.from_wb_payload },
+                [ordered]@{ name = "shipment-comparison"; method = "POST"; url = $ShipmentComparisonUrl; body = $SeedData.shipment_comparison_payload },
+                [ordered]@{ name = "monitoring-dashboard"; method = "GET"; url = $MonitoringDashboardUrl; body = $null },
+                [ordered]@{ name = "monitoring-risk-focus"; method = "GET"; url = $MonitoringRiskFocusUrl; body = $null },
+                [ordered]@{ name = "monitoring-timeseries"; method = "GET"; url = $MonitoringTimeseriesUrl; body = $null }
+            )
+        }
+        ($RequestMetadata | ConvertTo-Json -Depth 100) | Set-Content -Encoding utf8 -NoNewline (Join-Path $OutputDir "requests.json")
 
         Invoke-ApiAndSaveResponseOrThrow -Name "planning-core-health" -Method "GET" -Url $HealthUrl -ExpectedStatus 200 -OutputPath (Join-Path $OutputDir "planning_core_health.json")
         Invoke-ApiAndSaveResponseOrThrow -Name "production-order-direct" -Method "POST" -Url $DirectUrl -ExpectedStatus 200 -JsonBody $DirectHappyPayload -OutputPath (Join-Path $OutputDir "production_order_direct.json")

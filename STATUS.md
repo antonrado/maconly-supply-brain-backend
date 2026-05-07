@@ -295,13 +295,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-07 21:17 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness request-metadata follow-up commit)
-- Last commit (`git log -1 --oneline`): `85d8b2f Add targeted MVP live readiness parameters`
+- Date: `2026-05-07 21:21 +07:00`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the first-analytics request-metadata follow-up commit)
+- Last commit (`git log -1 --oneline`): `95d22ad Add request metadata to MVP live readiness reports`
 - Gates:
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus actionable `summary.json` / `summary.md` written under `artifacts/mvp_first_analytics/20260507_032147/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, actionable `summary.json`, and `summary.md` written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, `summary.json`, and `summary.md` written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
   - `python -m pytest -q` → `475 passed`
 
 ### Minimal raw outputs
@@ -332,7 +332,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-475 passed in 8.49s
+475 passed in 8.07s
 ```
 
 ```text

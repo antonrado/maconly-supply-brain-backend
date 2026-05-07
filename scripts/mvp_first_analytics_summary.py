@@ -16,6 +16,28 @@ REPORT_FILES = {
 }
 
 
+def _request_metadata_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    requests = payload.get("requests")
+    if not isinstance(requests, list):
+        requests = []
+
+    return {
+        "generated_at": payload.get("generated_at"),
+        "base_url": payload.get("base_url"),
+        "request_count": len(requests),
+        "requests": [
+            {
+                "name": item.get("name"),
+                "method": item.get("method"),
+                "url": item.get("url"),
+                "has_body": isinstance(item.get("body"), dict),
+            }
+            for item in requests
+            if isinstance(item, dict)
+        ],
+    }
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -142,8 +164,10 @@ def _derive_next_actions(summary: dict[str, Any]) -> list[str]:
 
 def build_summary(report_dir: Path) -> dict[str, Any]:
     payloads = {name: _read_json(report_dir / filename) for name, filename in REPORT_FILES.items()}
+    request_metadata = _read_json(report_dir / "requests.json")
     summary = {
         "report_dir": str(report_dir),
+        "request_metadata": _request_metadata_summary(request_metadata),
         "production_order_direct": _recommendation_summary(payloads["production_order_direct"]),
         "production_order_from_wb": _recommendation_summary(payloads["production_order_from_wb"]),
         "shipment_comparison": _shipment_comparison_summary(payloads["shipment_comparison"]),
@@ -176,6 +200,7 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
     from_wb = summary.get("production_order_from_wb") or {}
     shipment = summary.get("shipment_comparison") or {}
     monitoring = summary.get("monitoring") or {}
+    request_metadata = summary.get("request_metadata") or {}
     next_actions = summary.get("next_actions") or []
     top_risks = monitoring.get("top_risks") or []
     if not isinstance(top_risks, list):
@@ -187,10 +212,37 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "# MVP First Analytics Summary",
         "",
         f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
+        f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",
+        f"- **Base URL**: `{_value(request_metadata.get('base_url'))}`",
+        "",
+        "## Requests",
+        "",
+    ]
+
+    requests = request_metadata.get("requests") or []
+    if requests:
+        lines.extend(
+            [
+                "| Name | Method | Has body |",
+                "|---|---|---|",
+            ]
+        )
+        for item in requests:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {_value(item.get('name'))} | {_value(item.get('method'))} | {_value(item.get('has_body'))} |"
+            )
+    else:
+        lines.append("- **Requests**: none")
+
+    lines.extend(
+        [
         "",
         "## Next actions",
         "",
-    ]
+        ]
+    )
 
     if next_actions:
         for action in next_actions:

@@ -11,6 +11,22 @@ def _write_json(path, payload):
 
 def test_build_summary_extracts_first_analytics_signals(tmp_path):
     _write_json(
+        tmp_path / "requests.json",
+        {
+            "generated_at": "2030-01-01T00:00:00+00:00",
+            "base_url": "http://127.0.0.1:8010",
+            "requests": [
+                {"name": "planning-core-health", "method": "GET", "url": "http://127.0.0.1:8010/health", "body": None},
+                {
+                    "name": "production-order-direct",
+                    "method": "POST",
+                    "url": "http://127.0.0.1:8010/proposal",
+                    "body": {"article_id": 1},
+                },
+            ],
+        },
+    )
+    _write_json(
         tmp_path / "production_order_direct.json",
         {
             "status": "ok",
@@ -73,6 +89,25 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
 
     summary = build_summary(report_dir=tmp_path)
 
+    assert summary["request_metadata"] == {
+        "generated_at": "2030-01-01T00:00:00+00:00",
+        "base_url": "http://127.0.0.1:8010",
+        "request_count": 2,
+        "requests": [
+            {
+                "name": "planning-core-health",
+                "method": "GET",
+                "url": "http://127.0.0.1:8010/health",
+                "has_body": False,
+            },
+            {
+                "name": "production-order-direct",
+                "method": "POST",
+                "url": "http://127.0.0.1:8010/proposal",
+                "has_body": True,
+            },
+        ],
+    }
     assert summary["production_order_direct"] == {
         "status": "ok",
         "article_id": 1,
@@ -97,6 +132,8 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
 
     markdown = render_markdown_summary(summary)
     assert "# MVP First Analytics Summary" in markdown
+    assert "- **Request count**: `2`" in markdown
+    assert "| production-order-direct | POST | true |" in markdown
     assert "## Next actions" in markdown
     assert "- **Action**: Review production-order recommendations" in markdown
     assert "| Direct | ok | 1 | critical | order_minimum_only | 100 | 2 | shortage_before_arrival | 25 |" in markdown
@@ -109,6 +146,7 @@ def test_write_summary_creates_summary_json(tmp_path):
 
     assert path == tmp_path / "summary.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["request_metadata"]["request_count"] == 0
     assert payload["production_order_direct"]["status"] is None
     assert payload["shipment_comparison"]["categories"] == {}
     assert payload["next_actions"] == ["No immediate MVP analytics blockers detected in the deterministic smoke dataset."]
