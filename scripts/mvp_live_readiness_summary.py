@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 
+REPORT_TYPE = "mvp_live_readiness"
+SUMMARY_SCHEMA_VERSION = "1.0"
+
 INPUT_FILES = {
     "request": "request.json",
     "readiness": "readiness.json",
@@ -77,6 +80,8 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
     )
 
     return {
+        "report_type": REPORT_TYPE,
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "request": request_payload or {},
         "input_files": [],
         "total_articles_considered": readiness_payload.get("total_articles_considered"),
@@ -94,6 +99,9 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
     input_files = summary.get("input_files") or []
     lines = [
         "# MVP Live Readiness Summary",
+        "",
+        f"- **Report type**: `{summary.get('report_type')}`",
+        f"- **Summary schema version**: `{summary.get('summary_schema_version')}`",
         "",
         "## Request",
         "",

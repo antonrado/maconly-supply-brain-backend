@@ -32,6 +32,8 @@ Use helper commands from `scripts/dev.ps1`:
 
 `mvp-live-readiness` requires an already running backend at `http://localhost:8000`, calls only the local `POST /api/v1/wb/from-wb/readiness` endpoint, and writes `request.json`, `readiness.json`, `summary.json`, and `summary.md` under `artifacts/mvp_live_readiness/<timestamp>/`; summaries include input-file completeness. It does not call WB external sync endpoints.
 
+Both MVP report summaries include `report_type` and `summary_schema_version` fields for downstream automation.
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3

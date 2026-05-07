@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 
+REPORT_TYPE = "mvp_first_analytics"
+SUMMARY_SCHEMA_VERSION = "1.0"
+
 REPORT_FILES = {
     "production_order_direct": "production_order_direct.json",
     "production_order_from_wb": "production_order_from_wb.json",
@@ -184,6 +187,8 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
     payloads = {name: _read_json(report_dir / filename) for name, filename in REPORT_FILES.items()}
     request_metadata = _read_json(report_dir / "requests.json")
     summary = {
+        "report_type": REPORT_TYPE,
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "report_dir": str(report_dir),
         "input_files": _input_files_summary(report_dir, INPUT_FILES),
         "request_metadata": _request_metadata_summary(request_metadata),
@@ -231,6 +236,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
     lines = [
         "# MVP First Analytics Summary",
         "",
+        f"- **Report type**: `{_value(summary.get('report_type'))}`",
+        f"- **Summary schema version**: `{_value(summary.get('summary_schema_version'))}`",
         f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
         f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",
         f"- **Base URL**: `{_value(request_metadata.get('base_url'))}`",
