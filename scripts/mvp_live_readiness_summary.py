@@ -57,6 +57,14 @@ def _input_files_summary(report_dir: Path, files: dict[str, str]) -> list[dict[s
     ]
 
 
+def _missing_input_files(input_files: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(item.get("filename"))
+        for item in input_files
+        if isinstance(item, dict) and not item.get("present")
+    ]
+
+
 def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     items = readiness_payload.get("items")
     if not isinstance(items, list):
@@ -82,6 +90,8 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
     return {
         "report_type": REPORT_TYPE,
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+        "artifact_status": "unknown",
+        "missing_input_files": [],
         "request": request_payload or {},
         "input_files": [],
         "total_articles_considered": readiness_payload.get("total_articles_considered"),
@@ -102,6 +112,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "",
         f"- **Report type**: `{summary.get('report_type')}`",
         f"- **Summary schema version**: `{summary.get('summary_schema_version')}`",
+        f"- **Artifact status**: `{summary.get('artifact_status')}`",
+        f"- **Missing input files**: `{', '.join(summary.get('missing_input_files') or []) or 'none'}`",
         "",
         "## Request",
         "",
@@ -176,7 +188,11 @@ def write_summary(report_dir: Path) -> tuple[Path, Path]:
     readiness_payload = _read_json(readiness_path)
     request_payload = _read_json(request_path) if request_path.exists() else {}
     summary = build_summary(readiness_payload, request_payload=request_payload)
-    summary["input_files"] = _input_files_summary(report_dir, INPUT_FILES)
+    input_files = _input_files_summary(report_dir, INPUT_FILES)
+    missing_input_files = _missing_input_files(input_files)
+    summary["input_files"] = input_files
+    summary["missing_input_files"] = missing_input_files
+    summary["artifact_status"] = "complete" if not missing_input_files else "incomplete"
 
     summary_json_path = report_dir / "summary.json"
     with summary_json_path.open("w", encoding="utf-8") as file_obj:

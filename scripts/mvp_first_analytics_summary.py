@@ -59,6 +59,14 @@ def _input_files_summary(report_dir: Path, files: dict[str, str]) -> list[dict[s
     ]
 
 
+def _missing_input_files(input_files: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(item.get("filename"))
+        for item in input_files
+        if isinstance(item, dict) and not item.get("present")
+    ]
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -186,11 +194,15 @@ def _derive_next_actions(summary: dict[str, Any]) -> list[str]:
 def build_summary(report_dir: Path) -> dict[str, Any]:
     payloads = {name: _read_json(report_dir / filename) for name, filename in REPORT_FILES.items()}
     request_metadata = _read_json(report_dir / "requests.json")
+    input_files = _input_files_summary(report_dir, INPUT_FILES)
+    missing_input_files = _missing_input_files(input_files)
     summary = {
         "report_type": REPORT_TYPE,
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+        "artifact_status": "complete" if not missing_input_files else "incomplete",
+        "missing_input_files": missing_input_files,
         "report_dir": str(report_dir),
-        "input_files": _input_files_summary(report_dir, INPUT_FILES),
+        "input_files": input_files,
         "request_metadata": _request_metadata_summary(request_metadata),
         "production_order_direct": _recommendation_summary(payloads["production_order_direct"]),
         "production_order_from_wb": _recommendation_summary(payloads["production_order_from_wb"]),
@@ -238,6 +250,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "",
         f"- **Report type**: `{_value(summary.get('report_type'))}`",
         f"- **Summary schema version**: `{_value(summary.get('summary_schema_version'))}`",
+        f"- **Artifact status**: `{_value(summary.get('artifact_status'))}`",
+        f"- **Missing input files**: `{', '.join(summary.get('missing_input_files') or []) or 'none'}`",
         f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
         f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",
         f"- **Base URL**: `{_value(request_metadata.get('base_url'))}`",

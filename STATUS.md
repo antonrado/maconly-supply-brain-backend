@@ -296,11 +296,11 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the first-analytics request-metadata follow-up commit)
-- Last commit (`git log -1 --oneline`): `95d22ad Add request metadata to MVP live readiness reports`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the artifact-status follow-up commit)
+- Last commit (`git log -1 --oneline`): `a91b01d Add schema version to MVP report summaries`
 - Gates:
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with input-file completeness written under `artifacts/mvp_first_analytics/20260507_212156/`
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with input-file completeness written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `artifact_status=complete` written under `artifacts/mvp_first_analytics/20260507_212156/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `artifact_status=complete` written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
   - `python -m pytest -q` → `475 passed`
 
@@ -332,7 +332,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-475 passed in 7.84s
+475 passed in 7.82s
 ```
 
 ```text

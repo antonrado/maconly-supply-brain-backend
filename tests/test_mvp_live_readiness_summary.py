@@ -47,7 +47,12 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
 
     summary = build_summary(payload, request_payload=request)
 
+    assert summary["report_type"] == "mvp_live_readiness"
+    assert summary["summary_schema_version"] == "1.0"
+    assert summary["artifact_status"] == "unknown"
+    assert summary["missing_input_files"] == []
     assert summary["request"] == request
+    assert summary["input_files"] == []
     assert summary["total_articles_considered"] == 3
     assert summary["ready_articles"] == 1
     assert summary["not_ready_articles"] == 2
@@ -65,6 +70,9 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
 
     markdown = render_markdown_summary(summary)
     assert "# MVP Live Readiness Summary" in markdown
+    assert "- **Report type**: `mvp_live_readiness`" in markdown
+    assert "- **Summary schema version**: `1.0`" in markdown
+    assert "- **Artifact status**: `unknown`" in markdown
     assert "- **Article ID**: `2`" in markdown
     assert "- **Limit**: `20`" in markdown
     assert "- **Blockers**: `no_wb_sales_data=1, no_wb_stock_data=1`" in markdown
@@ -100,6 +108,19 @@ def test_write_summary_writes_json_and_markdown(tmp_path):
     assert summary_json == tmp_path / "summary.json"
     assert summary_md == tmp_path / "summary.md"
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
+    assert payload["report_type"] == "mvp_live_readiness"
+    assert payload["summary_schema_version"] == "1.0"
+    assert payload["artifact_status"] == "complete"
+    assert payload["missing_input_files"] == []
+    assert payload["input_files"] == [
+        {"name": "request", "filename": "request.json", "present": True},
+        {"name": "readiness", "filename": "readiness.json", "present": True},
+    ]
     assert payload["request"]["article_id"] == 10
     assert payload["blockers"] == {}
-    assert "Sample readiness items" in summary_md.read_text(encoding="utf-8")
+    markdown = summary_md.read_text(encoding="utf-8")
+    assert "- **Artifact status**: `complete`" in markdown
+    assert "- **Missing input files**: `none`" in markdown
+    assert "## Input files" in markdown
+    assert "| request | `request.json` | True |" in markdown
+    assert "Sample readiness items" in markdown
