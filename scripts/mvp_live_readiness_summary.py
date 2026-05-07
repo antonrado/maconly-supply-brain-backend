@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 
+INPUT_FILES = {
+    "request": "request.json",
+    "readiness": "readiness.json",
+}
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8-sig") as file_obj:
         payload = json.load(file_obj)
@@ -37,6 +43,17 @@ def _first_items(items: list[Any], limit: int = 10) -> list[dict[str, Any]]:
     return rows
 
 
+def _input_files_summary(report_dir: Path, files: dict[str, str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": name,
+            "filename": filename,
+            "present": (report_dir / filename).exists(),
+        }
+        for name, filename in files.items()
+    ]
+
+
 def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     items = readiness_payload.get("items")
     if not isinstance(items, list):
@@ -61,6 +78,7 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
 
     return {
         "request": request_payload or {},
+        "input_files": [],
         "total_articles_considered": readiness_payload.get("total_articles_considered"),
         "ready_articles": readiness_payload.get("ready_articles"),
         "not_ready_articles": readiness_payload.get("not_ready_articles"),
@@ -73,6 +91,7 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
 
 def render_markdown_summary(summary: dict[str, Any]) -> str:
     request = summary.get("request") or {}
+    input_files = summary.get("input_files") or []
     lines = [
         "# MVP Live Readiness Summary",
         "",
@@ -82,6 +101,29 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Limit**: `{request.get('limit')}`",
         f"- **Sales stale after days**: `{request.get('freshness_sales_stale_after_days')}`",
         f"- **Stock stale after days**: `{request.get('freshness_stock_stale_after_days')}`",
+        "",
+        "## Input files",
+        "",
+    ]
+
+    if input_files:
+        lines.extend(
+            [
+                "| Name | Filename | Present |",
+                "|---|---|---|",
+            ]
+        )
+        for item in input_files:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {item.get('name')} | `{item.get('filename')}` | {item.get('present')} |"
+            )
+    else:
+        lines.append("- **Input files**: none")
+
+    lines.extend(
+        [
         "",
         "## Result",
         "",
@@ -94,7 +136,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "",
         "## Sample readiness items",
         "",
-    ]
+        ]
+    )
 
     sample_items = summary.get("sample_items") or []
     if sample_items:
@@ -125,6 +168,7 @@ def write_summary(report_dir: Path) -> tuple[Path, Path]:
     readiness_payload = _read_json(readiness_path)
     request_payload = _read_json(request_path) if request_path.exists() else {}
     summary = build_summary(readiness_payload, request_payload=request_payload)
+    summary["input_files"] = _input_files_summary(report_dir, INPUT_FILES)
 
     summary_json_path = report_dir / "summary.json"
     with summary_json_path.open("w", encoding="utf-8") as file_obj:

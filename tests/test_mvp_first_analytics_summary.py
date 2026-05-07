@@ -89,6 +89,10 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
 
     summary = build_summary(report_dir=tmp_path)
 
+    input_files = {item["name"]: item for item in summary["input_files"]}
+    assert input_files["requests"] == {"name": "requests", "filename": "requests.json", "present": True}
+    assert input_files["seed_payloads"] == {"name": "seed_payloads", "filename": "seed_payloads.json", "present": False}
+    assert input_files["production_order_direct"]["present"] is True
     assert summary["request_metadata"] == {
         "generated_at": "2030-01-01T00:00:00+00:00",
         "base_url": "http://127.0.0.1:8010",
@@ -132,6 +136,8 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
 
     markdown = render_markdown_summary(summary)
     assert "# MVP First Analytics Summary" in markdown
+    assert "## Input files" in markdown
+    assert "| requests | `requests.json` | true |" in markdown
     assert "- **Request count**: `2`" in markdown
     assert "| production-order-direct | POST | true |" in markdown
     assert "## Next actions" in markdown
@@ -146,6 +152,7 @@ def test_write_summary_creates_summary_json(tmp_path):
 
     assert path == tmp_path / "summary.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["input_files"][0] == {"name": "seed_payloads", "filename": "seed_payloads.json", "present": False}
     assert payload["request_metadata"]["request_count"] == 0
     assert payload["production_order_direct"]["status"] is None
     assert payload["shipment_comparison"]["categories"] == {}

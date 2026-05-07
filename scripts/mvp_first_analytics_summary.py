@@ -15,6 +15,13 @@ REPORT_FILES = {
     "monitoring_timeseries": "monitoring_timeseries.json",
 }
 
+INPUT_FILES = {
+    "seed_payloads": "seed_payloads.json",
+    "requests": "requests.json",
+    "planning_core_health": "planning_core_health.json",
+    **REPORT_FILES,
+}
+
 
 def _request_metadata_summary(payload: dict[str, Any]) -> dict[str, Any]:
     requests = payload.get("requests")
@@ -36,6 +43,17 @@ def _request_metadata_summary(payload: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict)
         ],
     }
+
+
+def _input_files_summary(report_dir: Path, files: dict[str, str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": name,
+            "filename": filename,
+            "present": (report_dir / filename).exists(),
+        }
+        for name, filename in files.items()
+    ]
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -167,6 +185,7 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
     request_metadata = _read_json(report_dir / "requests.json")
     summary = {
         "report_dir": str(report_dir),
+        "input_files": _input_files_summary(report_dir, INPUT_FILES),
         "request_metadata": _request_metadata_summary(request_metadata),
         "production_order_direct": _recommendation_summary(payloads["production_order_direct"]),
         "production_order_from_wb": _recommendation_summary(payloads["production_order_from_wb"]),
@@ -201,6 +220,7 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
     shipment = summary.get("shipment_comparison") or {}
     monitoring = summary.get("monitoring") or {}
     request_metadata = summary.get("request_metadata") or {}
+    input_files = summary.get("input_files") or []
     next_actions = summary.get("next_actions") or []
     top_risks = monitoring.get("top_risks") or []
     if not isinstance(top_risks, list):
@@ -215,9 +235,33 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",
         f"- **Base URL**: `{_value(request_metadata.get('base_url'))}`",
         "",
-        "## Requests",
+        "## Input files",
         "",
     ]
+
+    if input_files:
+        lines.extend(
+            [
+                "| Name | Filename | Present |",
+                "|---|---|---|",
+            ]
+        )
+        for item in input_files:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {_value(item.get('name'))} | `{_value(item.get('filename'))}` | {_value(item.get('present'))} |"
+            )
+    else:
+        lines.append("- **Input files**: none")
+
+    lines.extend(
+        [
+        "",
+        "## Requests",
+        "",
+        ]
+    )
 
     requests = request_metadata.get("requests") or []
     if requests:
