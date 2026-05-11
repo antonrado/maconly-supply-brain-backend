@@ -127,6 +127,20 @@ def test_validate_report_path_rejects_missing_required_top_level_key(tmp_path: P
         raise AssertionError("expected validate_report_path to reject a missing required top-level key")
 
 
+def test_validate_report_path_rejects_first_analytics_missing_required_request_field(tmp_path: Path) -> None:
+    summary_path = write_first_analytics_summary(report_dir=tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    del payload["production_order_direct"]["status"]
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "missing required key 'status'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject first-analytics nested data missing status")
+
+
 def test_validate_report_path_rejects_live_readiness_unexpected_top_level_key(tmp_path: Path) -> None:
     (tmp_path / "readiness.json").write_text(
         json.dumps(
