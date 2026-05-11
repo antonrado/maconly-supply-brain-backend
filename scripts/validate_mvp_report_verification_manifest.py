@@ -74,6 +74,12 @@ def assert_valid_schema(value: Any, schema: dict[str, Any], path: str = "$") -> 
                 assert_valid_schema(item, item_schema, f"{path}[{index}]")
 
 
+def resolve_manifest_path(path: Path) -> Path:
+    if path.is_dir():
+        return path / "verification.json"
+    return path
+
+
 def validate_manifest_file(manifest_path: Path) -> Path:
     with manifest_path.open("r", encoding="utf-8-sig") as file_obj:
         payload = json.load(file_obj)
@@ -83,17 +89,25 @@ def validate_manifest_file(manifest_path: Path) -> Path:
     return SCHEMA_PATH
 
 
+def validate_manifest_path(path: Path) -> tuple[Path, Path]:
+    manifest_path = resolve_manifest_path(path)
+    if not manifest_path.exists() or not manifest_path.is_file():
+        raise ValueError(f"verification.json does not exist: {manifest_path}")
+    schema_path = validate_manifest_file(manifest_path)
+    return manifest_path, schema_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a verification.json file against its static JSON Schema contract.")
-    parser.add_argument("manifest_path", help="Path to verification.json.")
+    parser.add_argument("manifest_path", help="Path to a verification artifact directory or verification.json file.")
     args = parser.parse_args()
 
     try:
-        schema_path = validate_manifest_file(Path(args.manifest_path))
+        manifest_path, schema_path = validate_manifest_path(Path(args.manifest_path))
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    print(Path(args.manifest_path))
+    print(manifest_path)
     print(schema_path)
     return 0
 
