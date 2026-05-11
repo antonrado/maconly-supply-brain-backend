@@ -216,3 +216,48 @@ def test_validate_manifest_file_rejects_unexpected_nested_report_key(tmp_path: P
         assert "unexpected key 'unexpected'" in str(exc)
     else:
         raise AssertionError("expected validate_manifest_file to reject an unexpected nested report key")
+
+
+def test_validate_manifest_file_rejects_missing_required_nested_report_key(tmp_path: Path) -> None:
+    first_dir = tmp_path / "first"
+    live_dir = tmp_path / "live"
+    first_dir.mkdir()
+    live_dir.mkdir()
+
+    write_first_analytics_summary(report_dir=first_dir)
+    (live_dir / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 0,
+                "ready_articles": 0,
+                "not_ready_articles": 0,
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (live_dir / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_live_readiness_summary(live_dir)
+
+    manifest_path = tmp_path / "verification.json"
+    write_manifest(manifest_path, first_dir, live_dir)
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del payload["reports"]["first_analytics"]["summary_path"]
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_manifest_file(manifest_path)
+    except ValueError as exc:
+        assert "missing required key 'summary_path'" in str(exc)
+    else:
+        raise AssertionError("expected validate_manifest_file to reject a missing required nested report key")
