@@ -83,21 +83,6 @@ function Invoke-MvpVerificationManifestValidation {
     }
 }
 
-function Get-LatestArtifactDirectory {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath
-    )
-
-    $Directory = Get-ChildItem -Path $RootPath -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending |
-        Select-Object -First 1
-    if ($null -eq $Directory) {
-        throw "latest artifact directory not found under: $RootPath"
-    }
-    return $Directory.FullName
-}
-
 function Get-DockerAvailabilityMode {
     $DockerCommand = Get-Command docker -ErrorAction SilentlyContinue
     if ($null -eq $DockerCommand) {
@@ -1178,6 +1163,7 @@ function Invoke-HostMvpFirstAnalyticsReport {
         Write-Host "[mvp-first-analytics] OK"
         Write-Host "[mvp-first-analytics] report directory: $OutputDir"
         Write-Host "[mvp-first-analytics] summary: $SummaryPath"
+        return $OutputDir
     }
     catch {
         $Message = $_.Exception.Message
@@ -1340,6 +1326,7 @@ function Invoke-HostMvpLiveReadinessReport {
         if ($SummaryOutput) {
             $SummaryOutput | ForEach-Object { Write-Host "[mvp-live-readiness-host] summary: $_" }
         }
+        return $OutputDir
     }
     catch {
         $Message = $_.Exception.Message
@@ -1558,12 +1545,10 @@ switch ($Command) {
         Invoke-CompileCheck
 
         Write-Host "[verify-mvp-reports] generating first analytics report..."
-        Invoke-HostMvpFirstAnalyticsReport
-        $FirstAnalyticsReportDir = Get-LatestArtifactDirectory -RootPath (Join-Path (Get-Location).Path "artifacts\mvp_first_analytics")
+        $FirstAnalyticsReportDir = Invoke-HostMvpFirstAnalyticsReport
 
         Write-Host "[verify-mvp-reports] generating live readiness report..."
-        Invoke-HostMvpLiveReadinessReport
-        $LiveReadinessReportDir = Get-LatestArtifactDirectory -RootPath (Join-Path (Get-Location).Path "artifacts\mvp_live_readiness")
+        $LiveReadinessReportDir = Invoke-HostMvpLiveReadinessReport
 
         $VerificationTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         $VerificationDir = Join-Path (Get-Location).Path "artifacts\mvp_report_verification\$VerificationTimestamp"
