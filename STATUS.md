@@ -31,6 +31,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - MVP first-analytics runbook is documented in `MVP_FIRST_ANALYTICS_RUNBOOK.md`, including startup, WB sync, readiness, production-order/from-WB, monitoring analytics, and shipment-comparison calls.
 - MVP first-analytics helper command is available via `.\scripts\dev.ps1 mvp-first-analytics`; it starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, writes `seed_payloads.json`, `requests.json`, raw JSON responses under ignored `artifacts/mvp_first_analytics/<timestamp>/`, and generates compact versioned `summary.json` / `summary.md` outputs with `summary_schema_version=1.1`, `artifact_status`, input-file counts, `missing_input_files`, `validation_messages`, input-file completeness, request metadata, and derived next actions.
 - MVP live-readiness helper command is available via `.\scripts\dev.ps1 mvp-live-readiness`; it requires an already running backend, calls only local from-WB readiness, and writes blocker/next-step summaries under ignored `artifacts/mvp_live_readiness/<timestamp>/`, including `summary_schema_version=1.1`, `artifact_status`, input-file counts, `missing_input_files`, `validation_messages`, and input-file completeness.
+- Static JSON Schema contracts now live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`, with self-contained regression coverage in `tests/test_mvp_report_summary_json_schema.py`.
 - FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
 - Monitoring scheduler uses PostgreSQL advisory lock (`pg_try_advisory_lock` / `pg_advisory_unlock`) via a dedicated connection (`engine.raw_connection`) to keep one writer in multi-instance runtime.
 - Test bootstrap is now deterministic on host Python too: `tests/conftest.py` inserts the repo root before importing `app`, so plain `python -m pytest -q` no longer depends on ad hoc `PYTHONPATH` setup.
@@ -296,13 +297,13 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the schema-version-1.1 follow-up commit)
-- Last commit (`git log -1 --oneline`): `a647718 Add input file counts to MVP report summaries`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the summary-schema-contract follow-up commit)
+- Last commit (`git log -1 --oneline`): `0d19c44 Bump MVP report summary schema to 1.1`
 - Gates:
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, and validation messages written under `artifacts/mvp_first_analytics/20260507_212156/`
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, and validation messages written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
-  - `python -m pytest -q` → `475 passed`
+  - `python -m pytest -q` → `477 passed`
 
 ### Minimal raw outputs
 ```text
@@ -332,7 +333,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-475 passed in 7.14s
+477 passed in 7.22s
 ```
 
 ```text

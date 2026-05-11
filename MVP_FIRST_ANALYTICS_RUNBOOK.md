@@ -119,6 +119,8 @@ Start with `summary.md` for a readable first-analytics report or `summary.json` 
 
 Current MVP summary schema version: `1.1`.
 
+Static JSON Schema files live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.

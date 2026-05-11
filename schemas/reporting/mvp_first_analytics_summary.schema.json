@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MVP First Analytics Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_type",
+    "summary_schema_version",
+    "artifact_status",
+    "expected_input_file_count",
+    "present_input_file_count",
+    "missing_input_file_count",
+    "missing_input_files",
+    "validation_messages",
+    "report_dir",
+    "input_files",
+    "request_metadata",
+    "production_order_direct",
+    "production_order_from_wb",
+    "shipment_comparison",
+    "monitoring",
+    "next_actions"
+  ],
+  "properties": {
+    "report_type": {
+      "const": "mvp_first_analytics"
+    },
+    "summary_schema_version": {
+      "const": "1.1"
+    },
+    "artifact_status": {
+      "enum": ["complete", "incomplete"]
+    },
+    "expected_input_file_count": {
+      "type": "integer"
+    },
+    "present_input_file_count": {
+      "type": "integer"
+    },
+    "missing_input_file_count": {
+      "type": "integer"
+    },
+    "missing_input_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation_messages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "report_dir": {
+      "type": "string"
+    },
+    "input_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "filename", "present"],
+        "properties": {
+          "name": {"type": "string"},
+          "filename": {"type": "string"},
+          "present": {"type": "boolean"}
+        }
+      }
+    },
+    "request_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_at", "base_url", "request_count", "requests"],
+      "properties": {
+        "generated_at": {"type": ["string", "null"]},
+        "base_url": {"type": ["string", "null"]},
+        "request_count": {"type": "integer"},
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "method", "url", "has_body"],
+            "properties": {
+              "name": {"type": ["string", "null"]},
+              "method": {"type": ["string", "null"]},
+              "url": {"type": ["string", "null"]},
+              "has_body": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "production_order_direct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "article_id",
+        "risk_level",
+        "days_of_cover_estimate",
+        "action",
+        "total_units",
+        "line_count",
+        "arrival_projection_status",
+        "projected_shortage_before_arrival"
+      ],
+      "properties": {
+        "status": {"type": ["string", "null"]},
+        "article_id": {"type": ["integer", "null"]},
+        "risk_level": {"type": ["string", "null"]},
+        "days_of_cover_estimate": {"type": ["number", "null"]},
+        "action": {"type": ["string", "null"]},
+        "total_units": {"type": ["integer", "null"]},
+        "line_count": {"type": "integer"},
+        "arrival_projection_status": {"type": ["string", "null"]},
+        "projected_shortage_before_arrival": {"type": ["integer", "null"]}
+      }
+    },
+    "production_order_from_wb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "article_id",
+        "risk_level",
+        "days_of_cover_estimate",
+        "action",
+        "total_units",
+        "line_count",
+        "arrival_projection_status",
+        "projected_shortage_before_arrival"
+      ],
+      "properties": {
+        "status": {"type": ["string", "null"]},
+        "article_id": {"type": ["integer", "null"]},
+        "risk_level": {"type": ["string", "null"]},
+        "days_of_cover_estimate": {"type": ["number", "null"]},
+        "action": {"type": ["string", "null"]},
+        "total_units": {"type": ["integer", "null"]},
+        "line_count": {"type": "integer"},
+        "arrival_projection_status": {"type": ["string", "null"]},
+        "projected_shortage_before_arrival": {"type": ["integer", "null"]}
+      }
+    },
+    "shipment_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_date",
+        "wb_arrival_date",
+        "has_divergence",
+        "article_count",
+        "divergent_article_count",
+        "categories",
+        "normalization_strategy",
+        "canonical_planning_horizon_days"
+      ],
+      "properties": {
+        "target_date": {"type": ["string", "null"]},
+        "wb_arrival_date": {"type": ["string", "null"]},
+        "has_divergence": {"type": ["boolean", "null"]},
+        "article_count": {"type": ["integer", "null"]},
+        "divergent_article_count": {"type": ["integer", "null"]},
+        "categories": {
+          "type": "object",
+          "additionalProperties": {"type": "integer"}
+        },
+        "normalization_strategy": {"type": ["string", "null"]},
+        "canonical_planning_horizon_days": {"type": ["integer", "null"]}
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overall_status",
+        "critical_alerts",
+        "warning_alerts",
+        "risks",
+        "orders",
+        "top_risk_count",
+        "top_risks",
+        "timeseries_metrics"
+      ],
+      "properties": {
+        "overall_status": {"type": ["string", "null"]},
+        "critical_alerts": {"type": ["integer", "null"]},
+        "warning_alerts": {"type": ["integer", "null"]},
+        "risks": {
+          "type": "object",
+          "additionalProperties": {"type": "integer"}
+        },
+        "orders": {
+          "type": "object",
+          "additionalProperties": {"type": "integer"}
+        },
+        "top_risk_count": {"type": "integer"},
+        "top_risks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "timeseries_metrics": {
+          "type": "array",
+          "items": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
