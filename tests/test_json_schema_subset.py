@@ -104,3 +104,12 @@ def test_assert_valid_schema_rejects_boolean_for_number_type() -> None:
         assert "expected type ['number']" in str(exc)
     else:
         raise AssertionError("expected boolean to be rejected for number type")
+
+
+def test_assert_valid_schema_rejects_unsupported_schema_type() -> None:
+    try:
+        assert_valid_schema("alpha", {"type": "uuid"})
+    except ValueError as exc:
+        assert "unsupported schema type: uuid" in str(exc)
+    else:
+        raise AssertionError("expected unsupported schema type to be rejected")
