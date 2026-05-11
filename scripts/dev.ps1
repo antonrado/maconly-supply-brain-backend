@@ -527,18 +527,42 @@ function Invoke-ApiAndSaveResponseOrThrow {
     $ResponseFile = [System.IO.Path]::GetTempFileName()
     $PayloadFile = $null
     $ResponseBody = ""
+    $TransientCurlExitCodes = @(7, 18, 28, 52, 55, 56)
+    $MaxAttempts = 2
+    $Attempt = 0
+    $CurlExitCode = 0
+    $StatusCode = ""
     try {
         if ($JsonBody) {
             $PayloadFile = [System.IO.Path]::GetTempFileName()
             $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
-            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
-        }
-        else {
-            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
         }
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
+        while ($Attempt -lt $MaxAttempts) {
+            $Attempt += 1
+            if ($JsonBody) {
+                $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+            }
+            else {
+                $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
+            }
+
+            $CurlExitCode = $LASTEXITCODE
+            if ($CurlExitCode -eq 0) {
+                break
+            }
+
+            if (($TransientCurlExitCodes -contains $CurlExitCode) -and $Attempt -lt $MaxAttempts) {
+                Write-Host "[$LogPrefix] WARN ${Name}: curl exited with transient code $CurlExitCode; retrying once..." -ForegroundColor Yellow
+                Start-Sleep -Milliseconds 750
+                continue
+            }
+
+            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
+        }
+
+        if ($CurlExitCode -ne 0) {
+            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
         }
 
         if (Test-Path $ResponseFile) {
