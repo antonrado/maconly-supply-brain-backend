@@ -22,7 +22,8 @@
       "const": "1.0"
     },
     "generated_at": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time"
     },
     "verification_status": {
       "type": "string",

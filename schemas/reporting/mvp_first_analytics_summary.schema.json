@@ -73,7 +73,7 @@
       "additionalProperties": false,
       "required": ["generated_at", "base_url", "request_count", "requests"],
       "properties": {
-        "generated_at": {"type": ["string", "null"]},
+        "generated_at": {"type": ["string", "null"], "format": "date-time"},
         "base_url": {"type": ["string", "null"]},
         "request_count": {"type": "integer"},
         "requests": {

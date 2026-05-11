@@ -120,3 +120,54 @@ def test_validate_manifest_path_rejects_directory_without_verification_json(tmp_
         assert "verification.json does not exist" in str(exc)
     else:
         raise AssertionError("expected validate_manifest_path to reject a directory without verification.json")
+
+
+def test_validate_manifest_file_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "verification.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "verification_type": "mvp_report_artifact_verification",
+                "verification_schema_version": "1.0",
+                "generated_at": "not-a-datetime",
+                "verification_status": "ok",
+                "overall_artifact_status": "complete",
+                "reports": {
+                    "first_analytics": {
+                        "report_dir": "x",
+                        "summary_path": "x",
+                        "schema_path": "x",
+                        "report_type": "mvp_first_analytics",
+                        "summary_schema_version": "1.1",
+                        "artifact_status": "complete",
+                        "expected_input_file_count": 1,
+                        "present_input_file_count": 1,
+                        "missing_input_file_count": 0,
+                        "missing_input_files": [],
+                        "validation_messages": []
+                    },
+                    "live_readiness": {
+                        "report_dir": "x",
+                        "summary_path": "x",
+                        "schema_path": "x",
+                        "report_type": "mvp_live_readiness",
+                        "summary_schema_version": "1.1",
+                        "artifact_status": "complete",
+                        "expected_input_file_count": 1,
+                        "present_input_file_count": 1,
+                        "missing_input_file_count": 0,
+                        "missing_input_files": [],
+                        "validation_messages": []
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        validate_manifest_file(manifest_path)
+    except ValueError as exc:
+        assert "expected format 'date-time'" in str(exc)
+    else:
+        raise AssertionError("expected validate_manifest_file to reject an invalid generated_at date-time")

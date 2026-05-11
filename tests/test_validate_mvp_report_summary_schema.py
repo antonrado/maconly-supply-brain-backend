@@ -69,3 +69,17 @@ def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> Non
         assert "unsupported report_type" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject an unknown report_type")
+
+
+def test_validate_report_path_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
+    summary_path = write_first_analytics_summary(report_dir=tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["request_metadata"]["generated_at"] = "not-a-datetime"
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "expected format 'date-time'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject an invalid generated_at date-time")

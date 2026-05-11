@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,20 @@ def _matches_type(value: Any, expected_type: str) -> bool:
     raise ValueError(f"unsupported schema type: {expected_type}")
 
 
+def _matches_format(value: Any, expected_format: str) -> bool:
+    if value is None:
+        return True
+    if expected_format == "date-time":
+        if not isinstance(value, str):
+            return False
+        try:
+            dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+        return True
+    raise ValueError(f"unsupported schema format: {expected_format}")
+
+
 def assert_valid_schema(value: Any, schema: dict[str, Any], path: str = "$") -> None:
     if "const" in schema and value != schema["const"]:
         raise ValueError(f"{path}: expected const {schema['const']!r}, got {value!r}")
@@ -48,6 +63,10 @@ def assert_valid_schema(value: Any, schema: dict[str, Any], path: str = "$") -> 
         allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
         if not any(_matches_type(value, item) for item in allowed_types):
             raise ValueError(f"{path}: expected type {allowed_types!r}, got {type(value).__name__}")
+
+    expected_format = schema.get("format")
+    if expected_format is not None and not _matches_format(value, expected_format):
+        raise ValueError(f"{path}: expected format {expected_format!r}, got {value!r}")
 
     if isinstance(value, dict):
         required = schema.get("required") or []
