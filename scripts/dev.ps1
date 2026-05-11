@@ -41,6 +41,60 @@ function Invoke-CompileCheck {
     }
 }
 
+function Invoke-CurlWithTransientRetry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [Parameter(Mandatory = $true)]
+        [string]$ResponseFile,
+        [string]$PayloadFile = "",
+        [string]$HeaderFile = "",
+        [string]$LogPrefix = "curl"
+    )
+
+    $TransientCurlExitCodes = @(7, 18, 28, 52, 55, 56)
+    $MaxAttempts = 2
+    $Attempt = 0
+    $CurlExitCode = 0
+    $StatusCode = ""
+
+    while ($Attempt -lt $MaxAttempts) {
+        $Attempt += 1
+
+        if ($PayloadFile -and $HeaderFile) {
+            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        elseif ($PayloadFile) {
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
+        }
+        elseif ($HeaderFile) {
+            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url
+        }
+        else {
+            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
+        }
+
+        $CurlExitCode = $LASTEXITCODE
+        if ($CurlExitCode -eq 0) {
+            return $StatusCode
+        }
+
+        if (($TransientCurlExitCodes -contains $CurlExitCode) -and $Attempt -lt $MaxAttempts) {
+            Write-Host "[$LogPrefix] WARN ${Name}: curl exited with transient code $CurlExitCode; retrying once..." -ForegroundColor Yellow
+            Start-Sleep -Milliseconds 750
+            continue
+        }
+
+        throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
+    }
+
+    throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
+}
+
 function Invoke-MvpSummarySchemaValidation {
     param(
         [Parameter(Mandatory = $true)]
@@ -376,21 +430,9 @@ function Invoke-ApiExpectedStatusOrThrow {
         if ($JsonBody) {
             $PayloadFile = [System.IO.Path]::GetTempFileName()
             $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
-            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
-        }
-        else {
-            $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
         }
 
-        if ($LASTEXITCODE -ne 0) {
-            if (Test-Path $ResponseFile) {
-                $ResponseBody = Get-Content -Raw $ResponseFile
-                if ($ResponseBody) {
-                    $ResponseBody | Write-Host
-                }
-            }
-            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
-        }
+        $StatusCode = Invoke-CurlWithTransientRetry -Name $Name -Method $Method -Url $Url -ResponseFile $ResponseFile -PayloadFile $PayloadFile -LogPrefix $LogPrefix
 
         if (Test-Path $ResponseFile) {
             $ResponseBody = Get-Content -Raw $ResponseFile
@@ -445,21 +487,9 @@ function Invoke-ApiAndWriteResponseOrThrow {
         if ($JsonBody) {
             $PayloadFile = [System.IO.Path]::GetTempFileName()
             $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
-            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
-        }
-        else {
-            $StatusCode = curl.exe -sS -o $ResponseFile -D $HeaderFile -w "%{http_code}" -X $Method $Url
         }
 
-        if ($LASTEXITCODE -ne 0) {
-            if (Test-Path $ResponseFile) {
-                $ResponseBody = Get-Content -Raw $ResponseFile
-                if ($ResponseBody) {
-                    $ResponseBody | Write-Host
-                }
-            }
-            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $LASTEXITCODE"
-        }
+        $StatusCode = Invoke-CurlWithTransientRetry -Name $Name -Method $Method -Url $Url -ResponseFile $ResponseFile -PayloadFile $PayloadFile -HeaderFile $HeaderFile -LogPrefix $LogPrefix
 
         if (Test-Path $HeaderFile) {
             $ResponseHeaders = Get-Content -Raw $HeaderFile
@@ -527,43 +557,13 @@ function Invoke-ApiAndSaveResponseOrThrow {
     $ResponseFile = [System.IO.Path]::GetTempFileName()
     $PayloadFile = $null
     $ResponseBody = ""
-    $TransientCurlExitCodes = @(7, 18, 28, 52, 55, 56)
-    $MaxAttempts = 2
-    $Attempt = 0
-    $CurlExitCode = 0
-    $StatusCode = ""
     try {
         if ($JsonBody) {
             $PayloadFile = [System.IO.Path]::GetTempFileName()
             $JsonBody | Set-Content -Encoding utf8 -NoNewline $PayloadFile
         }
 
-        while ($Attempt -lt $MaxAttempts) {
-            $Attempt += 1
-            if ($JsonBody) {
-                $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url -H "Content-Type: application/json" --data-binary "@$PayloadFile"
-            }
-            else {
-                $StatusCode = curl.exe -sS -o $ResponseFile -w "%{http_code}" -X $Method $Url
-            }
-
-            $CurlExitCode = $LASTEXITCODE
-            if ($CurlExitCode -eq 0) {
-                break
-            }
-
-            if (($TransientCurlExitCodes -contains $CurlExitCode) -and $Attempt -lt $MaxAttempts) {
-                Write-Host "[$LogPrefix] WARN ${Name}: curl exited with transient code $CurlExitCode; retrying once..." -ForegroundColor Yellow
-                Start-Sleep -Milliseconds 750
-                continue
-            }
-
-            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
-        }
-
-        if ($CurlExitCode -ne 0) {
-            throw "[$LogPrefix] FAIL ${Name}: curl exited with code $CurlExitCode"
-        }
+        $StatusCode = Invoke-CurlWithTransientRetry -Name $Name -Method $Method -Url $Url -ResponseFile $ResponseFile -PayloadFile $PayloadFile -LogPrefix $LogPrefix
 
         if (Test-Path $ResponseFile) {
             $ResponseBody = Get-Content -Raw $ResponseFile
