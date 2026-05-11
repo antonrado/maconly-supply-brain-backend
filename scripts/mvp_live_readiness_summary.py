@@ -77,6 +77,16 @@ def _validation_messages(artifact_status: str, missing_input_files: list[str]) -
     return ["MVP live readiness artifact completeness has not been evaluated for this in-memory summary."]
 
 
+def _input_file_counts(input_files: list[dict[str, Any]], missing_input_files: list[str]) -> dict[str, int]:
+    expected_input_file_count = len(input_files)
+    missing_input_file_count = len(missing_input_files)
+    return {
+        "expected_input_file_count": expected_input_file_count,
+        "present_input_file_count": expected_input_file_count - missing_input_file_count,
+        "missing_input_file_count": missing_input_file_count,
+    }
+
+
 def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     items = readiness_payload.get("items")
     if not isinstance(items, list):
@@ -104,6 +114,9 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "artifact_status": "unknown",
         "missing_input_files": [],
+        "expected_input_file_count": 0,
+        "present_input_file_count": 0,
+        "missing_input_file_count": 0,
         "validation_messages": _validation_messages("unknown", []),
         "request": request_payload or {},
         "input_files": [],
@@ -126,6 +139,9 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Report type**: `{summary.get('report_type')}`",
         f"- **Summary schema version**: `{summary.get('summary_schema_version')}`",
         f"- **Artifact status**: `{summary.get('artifact_status')}`",
+        f"- **Expected input files**: `{summary.get('expected_input_file_count')}`",
+        f"- **Present input files**: `{summary.get('present_input_file_count')}`",
+        f"- **Missing input files count**: `{summary.get('missing_input_file_count')}`",
         f"- **Missing input files**: `{', '.join(summary.get('missing_input_files') or []) or 'none'}`",
         "",
         "## Validation",
@@ -219,8 +235,10 @@ def write_summary(report_dir: Path) -> tuple[Path, Path]:
     input_files = _input_files_summary(report_dir, INPUT_FILES)
     missing_input_files = _missing_input_files(input_files)
     artifact_status = "complete" if not missing_input_files else "incomplete"
+    input_file_counts = _input_file_counts(input_files, missing_input_files)
     summary["input_files"] = input_files
     summary["missing_input_files"] = missing_input_files
+    summary.update(input_file_counts)
     summary["artifact_status"] = artifact_status
     summary["validation_messages"] = _validation_messages(artifact_status, missing_input_files)
 

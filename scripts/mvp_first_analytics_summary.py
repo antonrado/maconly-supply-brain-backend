@@ -79,6 +79,16 @@ def _validation_messages(artifact_status: str, missing_input_files: list[str]) -
     return ["MVP first analytics artifact completeness could not be determined."]
 
 
+def _input_file_counts(input_files: list[dict[str, Any]], missing_input_files: list[str]) -> dict[str, int]:
+    expected_input_file_count = len(input_files)
+    missing_input_file_count = len(missing_input_files)
+    return {
+        "expected_input_file_count": expected_input_file_count,
+        "present_input_file_count": expected_input_file_count - missing_input_file_count,
+        "missing_input_file_count": missing_input_file_count,
+    }
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -209,11 +219,13 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
     input_files = _input_files_summary(report_dir, INPUT_FILES)
     missing_input_files = _missing_input_files(input_files)
     artifact_status = "complete" if not missing_input_files else "incomplete"
+    input_file_counts = _input_file_counts(input_files, missing_input_files)
     summary = {
         "report_type": REPORT_TYPE,
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "artifact_status": artifact_status,
         "missing_input_files": missing_input_files,
+        **input_file_counts,
         "validation_messages": _validation_messages(artifact_status, missing_input_files),
         "report_dir": str(report_dir),
         "input_files": input_files,
@@ -265,6 +277,9 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Report type**: `{_value(summary.get('report_type'))}`",
         f"- **Summary schema version**: `{_value(summary.get('summary_schema_version'))}`",
         f"- **Artifact status**: `{_value(summary.get('artifact_status'))}`",
+        f"- **Expected input files**: `{_value(summary.get('expected_input_file_count'))}`",
+        f"- **Present input files**: `{_value(summary.get('present_input_file_count'))}`",
+        f"- **Missing input files count**: `{_value(summary.get('missing_input_file_count'))}`",
         f"- **Missing input files**: `{', '.join(summary.get('missing_input_files') or []) or 'none'}`",
         f"- **Report directory**: `{_value(summary.get('report_dir'))}`",
         f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",

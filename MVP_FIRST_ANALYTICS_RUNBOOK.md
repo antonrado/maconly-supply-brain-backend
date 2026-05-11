@@ -115,12 +115,18 @@ curl.exe -i -X POST http://localhost:8000/api/v1/wb/manager/shipment/from-propos
 
 ## First analytics outputs to inspect
 
+Start with `summary.md` for a readable first-analytics report or `summary.json` for automation. The summaries include `report_type`, `summary_schema_version`, `artifact_status`, `expected_input_file_count`, `present_input_file_count`, `missing_input_file_count`, `missing_input_files`, `validation_messages`, input-file completeness, request metadata, and a derived `Next actions` section, then you can inspect `requests.json`, `seed_payloads.json`, and the raw endpoint responses next to them when needed.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.
 - Arrival projection status: `safe_cover_until_arrival`, `shortage_before_arrival`, or `no_demand`.
 - Layer 1-5 explanation meta and warnings.
 - Shipment comparison divergence categories between current replenishment and canonical production-order behavior.
+
+## First analytics compact summary fields
+
+- `summary.md` / `summary.json` compact fields: report type/schema version, artifact status, input-file counts, missing input files, validation messages, input-file completeness, request metadata, production-order action/units/risk, from-WB action/units/risk, shipment divergence summary, monitoring status, top risks, available timeseries metrics, and derived next actions.
 
 ## MVP is not blocked by
 

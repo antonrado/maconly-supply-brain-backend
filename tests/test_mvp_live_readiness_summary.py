@@ -51,6 +51,12 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
     assert summary["summary_schema_version"] == "1.0"
     assert summary["artifact_status"] == "unknown"
     assert summary["missing_input_files"] == []
+    assert summary["expected_input_file_count"] == 0
+    assert summary["present_input_file_count"] == 0
+    assert summary["missing_input_file_count"] == 0
+    assert summary["validation_messages"] == [
+        "MVP live readiness artifact completeness has not been evaluated for this in-memory summary."
+    ]
     assert summary["request"] == request
     assert summary["input_files"] == []
     assert summary["total_articles_considered"] == 3
@@ -73,6 +79,11 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
     assert "- **Report type**: `mvp_live_readiness`" in markdown
     assert "- **Summary schema version**: `1.0`" in markdown
     assert "- **Artifact status**: `unknown`" in markdown
+    assert "- **Expected input files**: `0`" in markdown
+    assert "- **Present input files**: `0`" in markdown
+    assert "- **Missing input files count**: `0`" in markdown
+    assert "## Validation" in markdown
+    assert "- **Validation**: MVP live readiness artifact completeness has not been evaluated" in markdown
     assert "- **Article ID**: `2`" in markdown
     assert "- **Limit**: `20`" in markdown
     assert "- **Blockers**: `no_wb_sales_data=1, no_wb_stock_data=1`" in markdown
@@ -112,6 +123,10 @@ def test_write_summary_writes_json_and_markdown(tmp_path):
     assert payload["summary_schema_version"] == "1.0"
     assert payload["artifact_status"] == "complete"
     assert payload["missing_input_files"] == []
+    assert payload["expected_input_file_count"] == 2
+    assert payload["present_input_file_count"] == 2
+    assert payload["missing_input_file_count"] == 0
+    assert payload["validation_messages"] == ["All expected MVP live readiness input files are present."]
     assert payload["input_files"] == [
         {"name": "request", "filename": "request.json", "present": True},
         {"name": "readiness", "filename": "readiness.json", "present": True},
@@ -120,7 +135,10 @@ def test_write_summary_writes_json_and_markdown(tmp_path):
     assert payload["blockers"] == {}
     markdown = summary_md.read_text(encoding="utf-8")
     assert "- **Artifact status**: `complete`" in markdown
+    assert "- **Expected input files**: `2`" in markdown
+    assert "- **Present input files**: `2`" in markdown
+    assert "- **Missing input files count**: `0`" in markdown
     assert "- **Missing input files**: `none`" in markdown
-    assert "## Input files" in markdown
+    assert "- **Validation**: All expected MVP live readiness input files are present." in markdown
     assert "| request | `request.json` | True |" in markdown
     assert "Sample readiness items" in markdown
