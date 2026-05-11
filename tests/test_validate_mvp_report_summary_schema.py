@@ -197,3 +197,48 @@ def test_validate_report_path_rejects_live_readiness_missing_required_top_level_
         assert "missing required key 'sample_items'" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject a live-readiness summary missing sample_items")
+
+
+def test_validate_report_path_rejects_live_readiness_missing_required_sample_item_field(tmp_path: Path) -> None:
+    (tmp_path / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 1,
+                "ready_articles": 1,
+                "not_ready_articles": 0,
+                "items": [
+                    {
+                        "article_id": 10,
+                        "article_code": "READY",
+                        "ready_for_from_wb": True,
+                        "blocker": None,
+                        "freshness_status": "fresh",
+                        "next_steps": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary_path, _ = write_live_readiness_summary(tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    del payload["sample_items"][0]["freshness_status"]
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "missing required key 'freshness_status'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a live-readiness sample item missing freshness_status")

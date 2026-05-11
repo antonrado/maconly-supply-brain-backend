@@ -332,3 +332,38 @@ def test_mvp_live_readiness_summary_schema_rejects_missing_required_top_level_ke
         assert "missing required key 'sample_items'" in str(exc)
     else:
         raise AssertionError("expected live-readiness summary schema to reject a missing required top-level key")
+
+
+def test_mvp_live_readiness_summary_schema_rejects_missing_required_sample_item_field() -> None:
+    payload = {
+        "total_articles_considered": 1,
+        "ready_articles": 1,
+        "not_ready_articles": 0,
+        "items": [
+            {
+                "article_id": 1,
+                "article_code": "READY",
+                "ready_for_from_wb": True,
+                "blocker": None,
+                "freshness_status": "fresh",
+                "next_steps": [],
+            }
+        ],
+    }
+    request = {
+        "article_id": 1,
+        "limit": 20,
+        "freshness_sales_stale_after_days": 3,
+        "freshness_stock_stale_after_days": 4,
+    }
+
+    summary = build_live_readiness_summary(payload, request_payload=request)
+    del summary["sample_items"][0]["freshness_status"]
+    schema = _load_schema("mvp_live_readiness_summary.schema.json")
+
+    try:
+        assert_valid_schema(summary, schema)
+    except ValueError as exc:
+        assert "missing required key 'freshness_status'" in str(exc)
+    else:
+        raise AssertionError("expected live-readiness summary schema to reject a sample item missing freshness_status")

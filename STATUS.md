@@ -35,6 +35,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Schema-regression coverage now also explicitly proves the first-analytics summary and verification manifest contracts reject unexpected extra fields when the schema declares `additionalProperties: false`, via `tests/test_mvp_report_summary_json_schema.py` and `tests/test_mvp_report_verification_manifest_json_schema.py`.
 - Generated-artifact contract coverage now also explicitly proves required-key enforcement by rejecting missing required fields in both summary and verification-manifest schema-regression tests, and in summary validator tests, including missing `next_actions` and missing nested `summary_path` cases.
 - Live-readiness summary contract coverage now also includes explicit negative cases at both validator and schema-regression layers, proving rejection of unexpected top-level fields and missing required `sample_items` in `tests/test_validate_mvp_report_summary_schema.py` and `tests/test_mvp_report_summary_json_schema.py`.
+- Live-readiness summary coverage now also explicitly proves nested `sample_items` contract enforcement by rejecting entries missing required `freshness_status` at both validator and schema-regression layers.
 - MVP summary schema contracts are now directly actionable via `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`, with CLI-level regression coverage in `tests/test_validate_mvp_report_summary_schema.py`, including negative coverage for invalid `date-time` timestamp strings and invalid shipment-comparison `date` strings.
 - Validator-level regression coverage now also explicitly proves both summary and verification-manifest contract checks reject unexpected extra fields when schemas declare `additionalProperties: false`, via `tests/test_validate_mvp_report_summary_schema.py` and `tests/test_validate_mvp_report_verification_manifest.py`.
 - Verification-manifest validator coverage now also explicitly proves nested required-key enforcement inside report entries, including rejection of a missing `reports.first_analytics.summary_path` field in `tests/test_validate_mvp_report_verification_manifest.py`.
@@ -311,14 +312,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness negative-coverage follow-up commit)
-- Last commit (`git log -1 --oneline`): `b519cde Test nested required keys in manifest validator`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the nested live-readiness coverage follow-up commit)
+- Last commit (`git log -1 --oneline`): `97fa021 Test live readiness report contract negatives`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `507 passed in 7.95s`
+  - `python -m pytest -q` → `509 passed in 8.03s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -349,7 +350,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-507 passed in 7.95s
+509 passed in 8.03s
 ```
 
 ```text
