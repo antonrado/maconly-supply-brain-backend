@@ -158,8 +158,8 @@
         "canonical_planning_horizon_days"
       ],
       "properties": {
-        "target_date": {"type": ["string", "null"]},
-        "wb_arrival_date": {"type": ["string", "null"]},
+        "target_date": {"type": ["string", "null"], "format": "date"},
+        "wb_arrival_date": {"type": ["string", "null"], "format": "date"},
         "has_divergence": {"type": ["boolean", "null"]},
         "article_count": {"type": ["integer", "null"]},
         "divergent_article_count": {"type": ["integer", "null"]},

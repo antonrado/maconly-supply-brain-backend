@@ -83,3 +83,17 @@ def test_validate_report_path_rejects_invalid_generated_at_datetime(tmp_path: Pa
         assert "expected format 'date-time'" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject an invalid generated_at date-time")
+
+
+def test_validate_report_path_rejects_invalid_shipment_comparison_date(tmp_path: Path) -> None:
+    summary_path = write_first_analytics_summary(report_dir=tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["shipment_comparison"]["target_date"] = "2026-99-99"
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "expected format 'date'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject an invalid shipment comparison date")

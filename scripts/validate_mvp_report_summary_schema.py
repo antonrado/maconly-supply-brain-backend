@@ -52,6 +52,14 @@ def _matches_format(value: Any, expected_format: str) -> bool:
         except ValueError:
             return False
         return True
+    if expected_format == "date":
+        if not isinstance(value, str):
+            return False
+        try:
+            dt.date.fromisoformat(value)
+        except ValueError:
+            return False
+        return True
     raise ValueError(f"unsupported schema format: {expected_format}")
 
 

@@ -31,8 +31,8 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - MVP first-analytics runbook is documented in `MVP_FIRST_ANALYTICS_RUNBOOK.md`, including startup, WB sync, readiness, production-order/from-WB, monitoring analytics, and shipment-comparison calls.
 - MVP first-analytics helper command is available via `.\scripts\dev.ps1 mvp-first-analytics`; it starts a temporary host API on SQLite, seeds deterministic smoke data, calls the MVP analytics endpoints over HTTP, writes `seed_payloads.json`, `requests.json`, raw JSON responses under ignored `artifacts/mvp_first_analytics/<timestamp>/`, and generates compact versioned `summary.json` / `summary.md` outputs with `summary_schema_version=1.1`, `artifact_status`, input-file counts, `missing_input_files`, `validation_messages`, input-file completeness, request metadata, and derived next actions.
 - MVP live-readiness helper command is available via `.\scripts\dev.ps1 mvp-live-readiness`; it requires an already running backend, calls only local from-WB readiness, and writes blocker/next-step summaries under ignored `artifacts/mvp_live_readiness/<timestamp>/`, including `summary_schema_version=1.1`, `artifact_status`, input-file counts, `missing_input_files`, `validation_messages`, and input-file completeness.
-- Static JSON Schema contracts now live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`, with self-contained regression coverage in `tests/test_mvp_report_summary_json_schema.py`; the lightweight schema subset now also enforces `format: date-time` for timestamp fields such as first-analytics `request_metadata.generated_at`.
-- MVP summary schema contracts are now directly actionable via `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`, with CLI-level regression coverage in `tests/test_validate_mvp_report_summary_schema.py`, including negative coverage for invalid `date-time` timestamp strings.
+- Static JSON Schema contracts now live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`, with self-contained regression coverage in `tests/test_mvp_report_summary_json_schema.py`; the lightweight schema subset now also enforces `format: date-time` for timestamp fields such as first-analytics `request_metadata.generated_at` and `format: date` for shipment comparison calendar dates.
+- MVP summary schema contracts are now directly actionable via `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`, with CLI-level regression coverage in `tests/test_validate_mvp_report_summary_schema.py`, including negative coverage for invalid `date-time` timestamp strings and invalid shipment-comparison `date` strings.
 - `scripts/dev.ps1` now exposes `validate-mvp-summary -ReportPath <report_dir-or-summary.json>` and automatically runs schema validation after both `mvp-first-analytics` and `mvp-live-readiness` write `summary.json`.
 - `scripts/dev.ps1` now also exposes `verify-mvp-reports`, which generates both MVP report artifact sets on a temporary host backend and validates both summaries against the static schema contracts in one reproducible gate.
 - `verify-mvp-reports` now uses the exact output directories returned by the host report generators instead of scanning for the latest artifact directory after each report step, reducing ambiguity during repeated local runs.
@@ -305,14 +305,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the timestamp-format contract follow-up commit)
-- Last commit (`git log -1 --oneline`): `77bcd08 Share transient curl retry across HTTP helpers`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the date-format contract follow-up commit)
+- Last commit (`git log -1 --oneline`): `e1d56cd Validate timestamp formats in MVP report contracts`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `489 passed in 7.33s`
+  - `python -m pytest -q` → `490 passed in 7.40s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -343,7 +343,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-489 passed in 7.33s
+490 passed in 7.40s
 ```
 
 ```text
