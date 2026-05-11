@@ -48,7 +48,7 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
     summary = build_summary(payload, request_payload=request)
 
     assert summary["report_type"] == "mvp_live_readiness"
-    assert summary["summary_schema_version"] == "1.0"
+    assert summary["summary_schema_version"] == "1.1"
     assert summary["artifact_status"] == "unknown"
     assert summary["missing_input_files"] == []
     assert summary["expected_input_file_count"] == 0
@@ -77,7 +77,7 @@ def test_build_summary_counts_blockers_next_steps_and_freshness():
     markdown = render_markdown_summary(summary)
     assert "# MVP Live Readiness Summary" in markdown
     assert "- **Report type**: `mvp_live_readiness`" in markdown
-    assert "- **Summary schema version**: `1.0`" in markdown
+    assert "- **Summary schema version**: `1.1`" in markdown
     assert "- **Artifact status**: `unknown`" in markdown
     assert "- **Expected input files**: `0`" in markdown
     assert "- **Present input files**: `0`" in markdown
@@ -120,7 +120,7 @@ def test_write_summary_writes_json_and_markdown(tmp_path):
     assert summary_md == tmp_path / "summary.md"
     payload = json.loads(summary_json.read_text(encoding="utf-8"))
     assert payload["report_type"] == "mvp_live_readiness"
-    assert payload["summary_schema_version"] == "1.0"
+    assert payload["summary_schema_version"] == "1.1"
     assert payload["artifact_status"] == "complete"
     assert payload["missing_input_files"] == []
     assert payload["expected_input_file_count"] == 2

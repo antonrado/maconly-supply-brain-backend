@@ -117,6 +117,8 @@ curl.exe -i -X POST http://localhost:8000/api/v1/wb/manager/shipment/from-propos
 
 Start with `summary.md` for a readable first-analytics report or `summary.json` for automation. The summaries include `report_type`, `summary_schema_version`, `artifact_status`, `expected_input_file_count`, `present_input_file_count`, `missing_input_file_count`, `missing_input_files`, `validation_messages`, input-file completeness, request metadata, and a derived `Next actions` section, then you can inspect `requests.json`, `seed_payloads.json`, and the raw endpoint responses next to them when needed.
 
+Current MVP summary schema version: `1.1`.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.

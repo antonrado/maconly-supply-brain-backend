@@ -8,7 +8,7 @@ from typing import Any
 
 
 REPORT_TYPE = "mvp_live_readiness"
-SUMMARY_SCHEMA_VERSION = "1.0"
+SUMMARY_SCHEMA_VERSION = "1.1"
 
 INPUT_FILES = {
     "request": "request.json",

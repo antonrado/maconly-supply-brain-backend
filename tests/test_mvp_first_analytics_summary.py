@@ -90,7 +90,7 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
     summary = build_summary(report_dir=tmp_path)
 
     assert summary["report_type"] == "mvp_first_analytics"
-    assert summary["summary_schema_version"] == "1.0"
+    assert summary["summary_schema_version"] == "1.1"
     assert summary["artifact_status"] == "incomplete"
     assert "seed_payloads.json" in summary["missing_input_files"]
     assert summary["expected_input_file_count"] == 9
@@ -147,7 +147,7 @@ def test_build_summary_extracts_first_analytics_signals(tmp_path):
     markdown = render_markdown_summary(summary)
     assert "# MVP First Analytics Summary" in markdown
     assert "- **Report type**: `mvp_first_analytics`" in markdown
-    assert "- **Summary schema version**: `1.0`" in markdown
+    assert "- **Summary schema version**: `1.1`" in markdown
     assert "- **Artifact status**: `incomplete`" in markdown
     assert "- **Expected input files**: `9`" in markdown
     assert "- **Present input files**: `7`" in markdown
@@ -172,7 +172,7 @@ def test_write_summary_creates_summary_json(tmp_path):
     assert path == tmp_path / "summary.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["report_type"] == "mvp_first_analytics"
-    assert payload["summary_schema_version"] == "1.0"
+    assert payload["summary_schema_version"] == "1.1"
     assert payload["artifact_status"] == "incomplete"
     assert "seed_payloads.json" in payload["missing_input_files"]
     assert payload["expected_input_file_count"] == 9

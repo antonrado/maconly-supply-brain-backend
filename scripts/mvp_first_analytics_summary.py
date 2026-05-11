@@ -7,7 +7,7 @@ from typing import Any
 
 
 REPORT_TYPE = "mvp_first_analytics"
-SUMMARY_SCHEMA_VERSION = "1.0"
+SUMMARY_SCHEMA_VERSION = "1.1"
 
 REPORT_FILES = {
     "production_order_direct": "production_order_direct.json",

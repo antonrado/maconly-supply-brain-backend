@@ -34,6 +34,8 @@ Use helper commands from `scripts/dev.ps1`:
 
 Both MVP report summaries include `report_type`, `summary_schema_version`, `artifact_status`, `expected_input_file_count`, `present_input_file_count`, `missing_input_file_count`, `missing_input_files`, and `validation_messages` fields for downstream automation.
 
+Current MVP summary schema version: `1.1`.
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3
