@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "validate-mvp-summary", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "validate-mvp-summary", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp", "verify-mvp-reports")]
     [string]$Command,
     [ValidateRange(0, 2147483647)]
     [int]$ArticleId = 0,
@@ -1216,6 +1216,139 @@ function Invoke-MvpLiveReadinessReport {
     }
 }
 
+function Invoke-HostMvpLiveReadinessReport {
+    $BaseUrl = "http://127.0.0.1:8010"
+    $HealthUrl = "$BaseUrl/api/v1/planning/core/health"
+    $ReadinessUrl = "$BaseUrl/api/v1/wb/from-wb/readiness"
+    $PreviousDatabaseUrl = $env:DATABASE_URL
+    $PreviousSchedulerEnabled = $env:MONITORING_SCHEDULER_ENABLED
+    $StdOutFile = [System.IO.Path]::GetTempFileName()
+    $StdErrFile = [System.IO.Path]::GetTempFileName()
+    $ServerProcess = $null
+    $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $OutputDir = Join-Path (Get-Location).Path "artifacts\mvp_live_readiness\$Timestamp"
+
+    try {
+        $env:DATABASE_URL = "sqlite:///./ci.db"
+        $env:MONITORING_SCHEDULER_ENABLED = "false"
+
+        Write-Host "[mvp-live-readiness-host] bootstrapping SQLite schema..."
+        python -c "from app.models.base import Base; import app.models.models; from app.core.db import engine; Base.metadata.create_all(bind=engine)"
+        if ($LASTEXITCODE -ne 0) {
+            throw "[mvp-live-readiness-host] FAIL schema bootstrap step."
+        }
+
+        Write-Host "[mvp-live-readiness-host] starting host uvicorn..."
+        $ServerProcess = Start-Process -FilePath "python" -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8010") -WorkingDirectory (Get-Location).Path -PassThru -RedirectStandardOutput $StdOutFile -RedirectStandardError $StdErrFile -ErrorAction Stop
+
+        if (-not (Wait-ApiHealthy -Url $HealthUrl -TimeoutSeconds 45)) {
+            Write-Host "[mvp-live-readiness-host] health endpoint did not become ready in time." -ForegroundColor Yellow
+            if (Test-Path $StdOutFile) {
+                Get-Content -Raw $StdOutFile | Write-Host
+            }
+            if (Test-Path $StdErrFile) {
+                Get-Content -Raw $StdErrFile | Write-Host
+            }
+            throw "[mvp-live-readiness-host] FAIL host health readiness."
+        }
+
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+        $SeedOutput = python -m scripts.po_api_smoke_seed
+        if ($LASTEXITCODE -ne 0) {
+            if ($SeedOutput) {
+                $SeedOutput | Write-Host
+            }
+            throw "[mvp-live-readiness-host] FAIL seed step: unable to prepare smoke dataset."
+        }
+
+        try {
+            $SeedData = $SeedOutput | ConvertFrom-Json
+        }
+        catch {
+            Write-Host $SeedOutput
+            throw "[mvp-live-readiness-host] FAIL seed step: invalid seed JSON output."
+        }
+
+        $PayloadObject = [ordered]@{
+            limit = $ReadinessLimit
+            freshness_sales_stale_after_days = $FreshnessSalesStaleAfterDays
+            freshness_stock_stale_after_days = $FreshnessStockStaleAfterDays
+        }
+        $SeedArticleId = $null
+        if ($SeedData -and $SeedData.direct_payload) {
+            $SeedArticleId = $SeedData.direct_payload.article_id
+        }
+        if ($ArticleId -gt 0) {
+            $PayloadObject.article_id = $ArticleId
+        }
+        elseif ($null -ne $SeedArticleId) {
+            $PayloadObject.article_id = [int]($SeedArticleId)
+        }
+        $Payload = $PayloadObject | ConvertTo-Json -Compress
+
+        Set-Content -Path (Join-Path $OutputDir "request.json") -Value $Payload -Encoding UTF8
+
+        Invoke-ApiAndSaveResponseOrThrow -Name "from-wb-readiness" -Method "POST" -Url $ReadinessUrl -ExpectedStatus 200 -JsonBody $Payload -OutputPath (Join-Path $OutputDir "readiness.json") -LogPrefix "mvp-live-readiness-host"
+
+        $SummaryOutput = python -m scripts.mvp_live_readiness_summary $OutputDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "[mvp-live-readiness-host] FAIL summary step."
+        }
+
+        Invoke-MvpSummarySchemaValidation -ReportPath $OutputDir -LogPrefix "mvp-live-readiness-host"
+
+        Write-Host "[mvp-live-readiness-host] OK"
+        Write-Host "[mvp-live-readiness-host] report directory: $OutputDir"
+        if ($SummaryOutput) {
+            $SummaryOutput | ForEach-Object { Write-Host "[mvp-live-readiness-host] summary: $_" }
+        }
+    }
+    catch {
+        $Message = $_.Exception.Message
+        if (-not $Message) {
+            $Message = $_
+        }
+        if (Test-Path $StdOutFile) {
+            $StdOut = Get-Content -Raw $StdOutFile
+            if ($StdOut) {
+                $StdOut | Write-Host
+            }
+        }
+        if (Test-Path $StdErrFile) {
+            $StdErr = Get-Content -Raw $StdErrFile
+            if ($StdErr) {
+                $StdErr | Write-Host
+            }
+        }
+        Write-Host $Message -ForegroundColor Red
+        exit 1
+    }
+    finally {
+        if ($null -ne $ServerProcess) {
+            Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdOutFile) {
+            Remove-Item $StdOutFile -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $StdErrFile) {
+            Remove-Item $StdErrFile -ErrorAction SilentlyContinue
+        }
+        if ($null -eq $PreviousDatabaseUrl) {
+            Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:DATABASE_URL = $PreviousDatabaseUrl
+        }
+        if ($null -eq $PreviousSchedulerEnabled) {
+            Remove-Item Env:MONITORING_SCHEDULER_ENABLED -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:MONITORING_SCHEDULER_ENABLED = $PreviousSchedulerEnabled
+        }
+    }
+}
+
 switch ($Command) {
     "up" {
         Assert-DockerAvailable -CommandName "up"
@@ -1376,5 +1509,20 @@ switch ($Command) {
         Invoke-HostProductionOrderApiSmokePositive | Out-Null
 
         Write-Host "[verify-mvp] OK (host)"
+    }
+    "verify-mvp-reports" {
+        Write-Host "[verify-mvp-reports] context guard..."
+        Invoke-ContextGuard
+
+        Write-Host "[verify-mvp-reports] compile check..."
+        Invoke-CompileCheck
+
+        Write-Host "[verify-mvp-reports] generating first analytics report..."
+        Invoke-HostMvpFirstAnalyticsReport
+
+        Write-Host "[verify-mvp-reports] generating live readiness report..."
+        Invoke-HostMvpLiveReadinessReport
+
+        Write-Host "[verify-mvp-reports] OK"
     }
 }

@@ -24,6 +24,7 @@ Use helper commands from `scripts/dev.ps1`:
 .\scripts\dev.ps1 verify
 .\scripts\dev.ps1 verify-live
 .\scripts\dev.ps1 verify-mvp
+.\scripts\dev.ps1 verify-mvp-reports
 ```
 
 `proposal` now seeds deterministic smoke data inside the running backend container and calls the canonical `POST /api/v1/planning/core/production-order/proposal` happy path.
@@ -43,6 +44,8 @@ Validate an existing MVP report summary against its schema contract with `python
 PowerShell shortcut: `.\scripts\dev.ps1 validate-mvp-summary -ReportPath <report_dir-or-summary.json>`.
 
 Both `.\scripts\dev.ps1 mvp-first-analytics` and `.\scripts\dev.ps1 mvp-live-readiness` now run this schema validation automatically after writing `summary.json`.
+
+Use `.\scripts\dev.ps1 verify-mvp-reports` to run a reproducible host-side artifact gate that generates both MVP reports and validates their summaries against the static schema contracts.
 
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell

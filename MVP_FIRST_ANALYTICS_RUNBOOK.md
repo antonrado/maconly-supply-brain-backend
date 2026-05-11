@@ -127,6 +127,8 @@ PowerShell shortcut: `.\scripts\dev.ps1 validate-mvp-summary -ReportPath <report
 
 Both `.\scripts\dev.ps1 mvp-first-analytics` and `.\scripts\dev.ps1 mvp-live-readiness` now run this schema validation automatically after writing `summary.json`.
 
+Use `.\scripts\dev.ps1 verify-mvp-reports` to generate both MVP reports on a temporary host backend and validate their summaries against the static schema contracts in one reproducible artifact gate.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.
