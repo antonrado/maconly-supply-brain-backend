@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from scripts.mvp_first_analytics_summary import write_summary as write_first_analytics_summary
+from scripts.mvp_live_readiness_summary import write_summary as write_live_readiness_summary
+from scripts.validate_mvp_report_summary_schema import validate_report_path
+
+
+SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schemas" / "reporting"
+
+
+def test_validate_report_path_accepts_first_analytics_directory(tmp_path: Path) -> None:
+    summary_path = write_first_analytics_summary(report_dir=tmp_path)
+
+    resolved_summary_path, schema_path = validate_report_path(tmp_path)
+
+    assert resolved_summary_path == summary_path
+    assert schema_path == SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
+
+
+def test_validate_report_path_accepts_live_readiness_summary_file(tmp_path: Path) -> None:
+    (tmp_path / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 0,
+                "ready_articles": 0,
+                "not_ready_articles": 0,
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary_path, _ = write_live_readiness_summary(tmp_path)
+
+    resolved_summary_path, schema_path = validate_report_path(summary_path)
+
+    assert resolved_summary_path == summary_path
+    assert schema_path == SCHEMA_DIR / "mvp_live_readiness_summary.schema.json"
+
+
+def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "report_type": "unexpected_report",
+                "summary_schema_version": "1.1",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "unsupported report_type" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject an unknown report_type")

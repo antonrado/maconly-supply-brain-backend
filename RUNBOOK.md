@@ -38,6 +38,8 @@ Current MVP summary schema version: `1.1`.
 
 Static JSON Schema files for these payloads live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`.
 
+Validate an existing MVP report summary against its schema contract with `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`.
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3

@@ -121,6 +121,8 @@ Current MVP summary schema version: `1.1`.
 
 Static JSON Schema files live at `schemas/reporting/mvp_first_analytics_summary.schema.json` and `schemas/reporting/mvp_live_readiness_summary.schema.json`.
 
+Validate an existing MVP report summary against its schema contract with `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.
