@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "validate-mvp-summary", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp")]
     [string]$Command,
     [ValidateRange(0, 2147483647)]
     [int]$ArticleId = 0,
@@ -9,7 +9,8 @@ param(
     [ValidateRange(0, 3650)]
     [int]$FreshnessSalesStaleAfterDays = 3,
     [ValidateRange(0, 3650)]
-    [int]$FreshnessStockStaleAfterDays = 3
+    [int]$FreshnessStockStaleAfterDays = 3,
+    [string]$ReportPath = ""
 )
 
 $ComposeFile = ".\\docker-compose.yml"
@@ -36,6 +37,27 @@ function Invoke-CompileCheck {
     python -m compileall app tests scripts alembic
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
+    }
+}
+
+function Invoke-MvpSummarySchemaValidation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ReportPath,
+        [string]$LogPrefix = "validate-mvp-summary"
+    )
+
+    if (-not $ReportPath) {
+        throw "[$LogPrefix] FAIL summary schema validation: report path is required."
+    }
+
+    $ValidationOutput = python -m scripts.validate_mvp_report_summary_schema $ReportPath 2>&1
+    $ValidationExitCode = $LASTEXITCODE
+    if ($ValidationOutput) {
+        $ValidationOutput | ForEach-Object { Write-Host "[$LogPrefix] $_" }
+    }
+    if ($ValidationExitCode -ne 0) {
+        throw "[$LogPrefix] FAIL summary schema validation."
     }
 }
 
@@ -1114,6 +1136,8 @@ function Invoke-HostMvpFirstAnalyticsReport {
             throw "[mvp-first-analytics] FAIL summary step."
         }
 
+        Invoke-MvpSummarySchemaValidation -ReportPath $OutputDir -LogPrefix "mvp-first-analytics"
+
         Write-Host "[mvp-first-analytics] OK"
         Write-Host "[mvp-first-analytics] report directory: $OutputDir"
         Write-Host "[mvp-first-analytics] summary: $SummaryPath"
@@ -1182,6 +1206,8 @@ function Invoke-MvpLiveReadinessReport {
     if ($LASTEXITCODE -ne 0) {
         throw "[mvp-live-readiness] FAIL summary step."
     }
+
+    Invoke-MvpSummarySchemaValidation -ReportPath $OutputDir -LogPrefix "mvp-live-readiness"
 
     Write-Host "[mvp-live-readiness] OK"
     Write-Host "[mvp-live-readiness] report directory: $OutputDir"
@@ -1263,6 +1289,9 @@ switch ($Command) {
     }
     "mvp-live-readiness" {
         Invoke-MvpLiveReadinessReport
+    }
+    "validate-mvp-summary" {
+        Invoke-MvpSummarySchemaValidation -ReportPath $ReportPath
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke

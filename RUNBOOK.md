@@ -40,6 +40,10 @@ Static JSON Schema files for these payloads live at `schemas/reporting/mvp_first
 
 Validate an existing MVP report summary against its schema contract with `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`.
 
+PowerShell shortcut: `.\scripts\dev.ps1 validate-mvp-summary -ReportPath <report_dir-or-summary.json>`.
+
+Both `.\scripts\dev.ps1 mvp-first-analytics` and `.\scripts\dev.ps1 mvp-live-readiness` now run this schema validation automatically after writing `summary.json`.
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3
