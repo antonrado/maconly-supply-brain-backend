@@ -113,3 +113,38 @@ def test_assert_valid_schema_rejects_unsupported_schema_type() -> None:
         assert "unsupported schema type: uuid" in str(exc)
     else:
         raise AssertionError("expected unsupported schema type to be rejected")
+
+
+def test_assert_valid_schema_rejects_const_mismatch() -> None:
+    try:
+        assert_valid_schema("beta", {"const": "alpha"})
+    except ValueError as exc:
+        assert "expected const 'alpha'" in str(exc)
+    else:
+        raise AssertionError("expected const mismatch to be rejected")
+
+
+def test_assert_valid_schema_rejects_enum_mismatch() -> None:
+    try:
+        assert_valid_schema("gamma", {"enum": ["alpha", "beta"]})
+    except ValueError as exc:
+        assert "expected one of ['alpha', 'beta']" in str(exc)
+    else:
+        raise AssertionError("expected enum mismatch to be rejected")
+
+
+def test_assert_valid_schema_rejects_typed_additional_property_value() -> None:
+    try:
+        assert_valid_schema(
+            {"name": "alpha", "meta": 1},
+            {
+                "type": "object",
+                "required": ["name"],
+                "properties": {"name": {"type": "string"}},
+                "additionalProperties": {"type": "string"},
+            },
+        )
+    except ValueError as exc:
+        assert "$.meta: expected type ['string']" in str(exc)
+    else:
+        raise AssertionError("expected typed additionalProperties mismatch to be rejected")
