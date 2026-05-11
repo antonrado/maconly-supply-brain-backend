@@ -67,6 +67,18 @@ def _missing_input_files(input_files: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def _validation_messages(artifact_status: str, missing_input_files: list[str]) -> list[str]:
+    if artifact_status == "complete":
+        return ["All expected MVP first analytics input files are present."]
+    if missing_input_files:
+        return [
+            "MVP first analytics report is incomplete; restore missing input files: "
+            + ", ".join(missing_input_files)
+            + "."
+        ]
+    return ["MVP first analytics artifact completeness could not be determined."]
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -196,11 +208,13 @@ def build_summary(report_dir: Path) -> dict[str, Any]:
     request_metadata = _read_json(report_dir / "requests.json")
     input_files = _input_files_summary(report_dir, INPUT_FILES)
     missing_input_files = _missing_input_files(input_files)
+    artifact_status = "complete" if not missing_input_files else "incomplete"
     summary = {
         "report_type": REPORT_TYPE,
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
-        "artifact_status": "complete" if not missing_input_files else "incomplete",
+        "artifact_status": artifact_status,
         "missing_input_files": missing_input_files,
+        "validation_messages": _validation_messages(artifact_status, missing_input_files),
         "report_dir": str(report_dir),
         "input_files": input_files,
         "request_metadata": _request_metadata_summary(request_metadata),
@@ -256,9 +270,26 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Request count**: `{_value(request_metadata.get('request_count'))}`",
         f"- **Base URL**: `{_value(request_metadata.get('base_url'))}`",
         "",
+    ]
+
+    validation_messages = summary.get("validation_messages") or []
+    if validation_messages:
+        lines.extend(
+            [
+                "## Validation",
+                "",
+            ]
+        )
+        for message in validation_messages:
+            lines.append(f"- **Validation**: {message}")
+        lines.append("")
+
+    lines.extend(
+        [
         "## Input files",
         "",
-    ]
+        ]
+    )
 
     if input_files:
         lines.extend(

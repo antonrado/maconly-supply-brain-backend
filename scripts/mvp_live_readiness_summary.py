@@ -65,6 +65,18 @@ def _missing_input_files(input_files: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def _validation_messages(artifact_status: str, missing_input_files: list[str]) -> list[str]:
+    if artifact_status == "complete":
+        return ["All expected MVP live readiness input files are present."]
+    if missing_input_files:
+        return [
+            "MVP live readiness report is incomplete; restore missing input files: "
+            + ", ".join(missing_input_files)
+            + "."
+        ]
+    return ["MVP live readiness artifact completeness has not been evaluated for this in-memory summary."]
+
+
 def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     items = readiness_payload.get("items")
     if not isinstance(items, list):
@@ -92,6 +104,7 @@ def build_summary(readiness_payload: dict[str, Any], request_payload: dict[str, 
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "artifact_status": "unknown",
         "missing_input_files": [],
+        "validation_messages": _validation_messages("unknown", []),
         "request": request_payload or {},
         "input_files": [],
         "total_articles_considered": readiness_payload.get("total_articles_considered"),
@@ -115,6 +128,20 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         f"- **Artifact status**: `{summary.get('artifact_status')}`",
         f"- **Missing input files**: `{', '.join(summary.get('missing_input_files') or []) or 'none'}`",
         "",
+        "## Validation",
+        "",
+    ]
+
+    validation_messages = summary.get("validation_messages") or []
+    if validation_messages:
+        for message in validation_messages:
+            lines.append(f"- **Validation**: {message}")
+    else:
+        lines.append("- **Validation**: none")
+
+    lines.extend(
+        [
+        "",
         "## Request",
         "",
         f"- **Article ID**: `{request.get('article_id')}`",
@@ -124,7 +151,8 @@ def render_markdown_summary(summary: dict[str, Any]) -> str:
         "",
         "## Input files",
         "",
-    ]
+        ]
+    )
 
     if input_files:
         lines.extend(
@@ -190,9 +218,11 @@ def write_summary(report_dir: Path) -> tuple[Path, Path]:
     summary = build_summary(readiness_payload, request_payload=request_payload)
     input_files = _input_files_summary(report_dir, INPUT_FILES)
     missing_input_files = _missing_input_files(input_files)
+    artifact_status = "complete" if not missing_input_files else "incomplete"
     summary["input_files"] = input_files
     summary["missing_input_files"] = missing_input_files
-    summary["artifact_status"] = "complete" if not missing_input_files else "incomplete"
+    summary["artifact_status"] = artifact_status
+    summary["validation_messages"] = _validation_messages(artifact_status, missing_input_files)
 
     summary_json_path = report_dir / "summary.json"
     with summary_json_path.open("w", encoding="utf-8") as file_obj:
