@@ -131,6 +131,8 @@ Use `.\scripts\dev.ps1 verify-mvp-reports` to generate both MVP reports on a tem
 
 This gate also writes a machine-readable `verification.json` manifest under `artifacts/mvp_report_verification/<timestamp>/` with the generated report directories, summary paths, schema paths, and top-level artifact status for both reports.
 
+The verification manifest contract lives at `schemas/reporting/mvp_report_verification_manifest.schema.json` and can be validated with `python -m scripts.validate_mvp_report_verification_manifest <verification.json>`.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.

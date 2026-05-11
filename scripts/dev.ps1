@@ -1538,8 +1538,8 @@ switch ($Command) {
 
         Write-Host "[verify-mvp-reports] generating live readiness report..."
         Invoke-HostMvpLiveReadinessReport
-
         $LiveReadinessReportDir = Get-LatestArtifactDirectory -RootPath (Join-Path (Get-Location).Path "artifacts\mvp_live_readiness")
+
         $VerificationTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
         $VerificationDir = Join-Path (Get-Location).Path "artifacts\mvp_report_verification\$VerificationTimestamp"
         New-Item -ItemType Directory -Force -Path $VerificationDir | Out-Null
@@ -1553,8 +1553,16 @@ switch ($Command) {
             $ManifestOutput | ForEach-Object { Write-Host "[verify-mvp-reports] manifest: $_" }
         }
 
-        Write-Host "[verify-mvp-reports] verification directory: $VerificationDir"
+        Write-Host "[verify-mvp-reports] validating verification manifest..."
+        $ManifestValidationOutput = python -m scripts.validate_mvp_report_verification_manifest (Join-Path $VerificationDir "verification.json")
+        if ($LASTEXITCODE -ne 0) {
+            throw "[verify-mvp-reports] FAIL verification manifest validation step."
+        }
+        if ($ManifestValidationOutput) {
+            $ManifestValidationOutput | ForEach-Object { Write-Host "[verify-mvp-reports] manifest validation: $_" }
+        }
 
+        Write-Host "[verify-mvp-reports] verification directory: $VerificationDir"
         Write-Host "[verify-mvp-reports] OK"
     }
 }

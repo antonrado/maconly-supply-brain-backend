@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://maconly-supply-brain-backend/schemas/reporting/mvp_report_verification_manifest.schema.json",
+  "title": "MVP Report Verification Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "verification_type",
+    "verification_schema_version",
+    "generated_at",
+    "verification_status",
+    "overall_artifact_status",
+    "reports"
+  ],
+  "properties": {
+    "verification_type": {
+      "type": "string",
+      "const": "mvp_report_artifact_verification"
+    },
+    "verification_schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": [
+        "ok"
+      ]
+    },
+    "overall_artifact_status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "incomplete"
+      ]
+    },
+    "reports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first_analytics",
+        "live_readiness"
+      ],
+      "properties": {
+        "first_analytics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "report_dir",
+            "summary_path",
+            "schema_path",
+            "report_type",
+            "summary_schema_version",
+            "artifact_status",
+            "expected_input_file_count",
+            "present_input_file_count",
+            "missing_input_file_count",
+            "missing_input_files",
+            "validation_messages"
+          ],
+          "properties": {
+            "report_dir": {
+              "type": "string"
+            },
+            "summary_path": {
+              "type": "string"
+            },
+            "schema_path": {
+              "type": "string"
+            },
+            "report_type": {
+              "type": "string",
+              "const": "mvp_first_analytics"
+            },
+            "summary_schema_version": {
+              "type": "string"
+            },
+            "artifact_status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "incomplete",
+                "unknown"
+              ]
+            },
+            "expected_input_file_count": {
+              "type": "integer"
+            },
+            "present_input_file_count": {
+              "type": "integer"
+            },
+            "missing_input_file_count": {
+              "type": "integer"
+            },
+            "missing_input_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "validation_messages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "live_readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "report_dir",
+            "summary_path",
+            "schema_path",
+            "report_type",
+            "summary_schema_version",
+            "artifact_status",
+            "expected_input_file_count",
+            "present_input_file_count",
+            "missing_input_file_count",
+            "missing_input_files",
+            "validation_messages"
+          ],
+          "properties": {
+            "report_dir": {
+              "type": "string"
+            },
+            "summary_path": {
+              "type": "string"
+            },
+            "schema_path": {
+              "type": "string"
+            },
+            "report_type": {
+              "type": "string",
+              "const": "mvp_live_readiness"
+            },
+            "summary_schema_version": {
+              "type": "string"
+            },
+            "artifact_status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "incomplete",
+                "unknown"
+              ]
+            },
+            "expected_input_file_count": {
+              "type": "integer"
+            },
+            "present_input_file_count": {
+              "type": "integer"
+            },
+            "missing_input_file_count": {
+              "type": "integer"
+            },
+            "missing_input_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "validation_messages": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
