@@ -47,6 +47,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - `verify-mvp-reports` now uses the exact output directories returned by the host report generators instead of scanning for the latest artifact directory after each report step, reducing ambiguity during repeated local runs.
 - Host-side curl wrappers in `scripts/dev.ps1` now share a narrow one-retry policy for transient `curl` transport exit codes via `Invoke-CurlWithTransientRetry`, covering expected-status checks, proposal response printing, and MVP artifact capture.
 - `verify-mvp-reports` now also writes `artifacts/mvp_report_verification/<timestamp>/verification.json` via `scripts/build_mvp_report_verification_manifest.py`, with regression coverage in `tests/test_build_mvp_report_verification_manifest.py`.
+- Manifest builder coverage now also explicitly proves the `overall_artifact_status` complete branch when both report summaries are complete, via `tests/test_build_mvp_report_verification_manifest.py`.
 - The verification manifest itself now has a static schema contract at `schemas/reporting/mvp_report_verification_manifest.schema.json`, a validator CLI at `scripts/validate_mvp_report_verification_manifest.py`, contract coverage in `tests/test_mvp_report_verification_manifest_json_schema.py`, and CLI coverage in `tests/test_validate_mvp_report_verification_manifest.py`; the validator subset now also enforces `format: date-time` for manifest `generated_at`.
 - `scripts/dev.ps1` now also exposes `validate-mvp-verification-manifest -ManifestPath <verification_dir-or-verification.json>` as a PowerShell shortcut for manual verification-manifest contract checks; the underlying Python validator now accepts either a verification artifact directory or a direct `verification.json` file, with focused directory-resolution coverage in `tests/test_validate_mvp_report_verification_manifest.py`.
 - FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
@@ -314,14 +315,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the first-analytics nested-field follow-up commit)
-- Last commit (`git log -1 --oneline`): `3dbfdb1 Test bool type edges in schema helper`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the manifest complete-branch follow-up commit)
+- Last commit (`git log -1 --oneline`): `0bb1a1b Test nested first analytics contract fields`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `513 passed in 8.00s`
+  - `python -m pytest -q` → `514 passed in 8.04s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -352,7 +353,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-513 passed in 8.00s
+514 passed in 8.04s
 ```
 
 ```text
