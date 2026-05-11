@@ -61,6 +61,21 @@ function Invoke-MvpSummarySchemaValidation {
     }
 }
 
+function Get-LatestArtifactDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RootPath
+    )
+
+    $Directory = Get-ChildItem -Path $RootPath -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
+    if ($null -eq $Directory) {
+        throw "latest artifact directory not found under: $RootPath"
+    }
+    return $Directory.FullName
+}
+
 function Get-DockerAvailabilityMode {
     $DockerCommand = Get-Command docker -ErrorAction SilentlyContinue
     if ($null -eq $DockerCommand) {
@@ -1519,9 +1534,26 @@ switch ($Command) {
 
         Write-Host "[verify-mvp-reports] generating first analytics report..."
         Invoke-HostMvpFirstAnalyticsReport
+        $FirstAnalyticsReportDir = Get-LatestArtifactDirectory -RootPath (Join-Path (Get-Location).Path "artifacts\mvp_first_analytics")
 
         Write-Host "[verify-mvp-reports] generating live readiness report..."
         Invoke-HostMvpLiveReadinessReport
+
+        $LiveReadinessReportDir = Get-LatestArtifactDirectory -RootPath (Join-Path (Get-Location).Path "artifacts\mvp_live_readiness")
+        $VerificationTimestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+        $VerificationDir = Join-Path (Get-Location).Path "artifacts\mvp_report_verification\$VerificationTimestamp"
+        New-Item -ItemType Directory -Force -Path $VerificationDir | Out-Null
+
+        Write-Host "[verify-mvp-reports] writing verification manifest..."
+        $ManifestOutput = python -m scripts.build_mvp_report_verification_manifest $FirstAnalyticsReportDir $LiveReadinessReportDir (Join-Path $VerificationDir "verification.json")
+        if ($LASTEXITCODE -ne 0) {
+            throw "[verify-mvp-reports] FAIL verification manifest step."
+        }
+        if ($ManifestOutput) {
+            $ManifestOutput | ForEach-Object { Write-Host "[verify-mvp-reports] manifest: $_" }
+        }
+
+        Write-Host "[verify-mvp-reports] verification directory: $VerificationDir"
 
         Write-Host "[verify-mvp-reports] OK"
     }

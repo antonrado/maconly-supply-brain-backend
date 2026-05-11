@@ -47,6 +47,8 @@ Both `.\scripts\dev.ps1 mvp-first-analytics` and `.\scripts\dev.ps1 mvp-live-rea
 
 Use `.\scripts\dev.ps1 verify-mvp-reports` to run a reproducible host-side artifact gate that generates both MVP reports and validates their summaries against the static schema contracts.
 
+This command also writes a machine-readable `verification.json` manifest under `artifacts/mvp_report_verification/<timestamp>/` with the generated report directories, summary paths, schema paths, and top-level artifact status for both reports.
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3

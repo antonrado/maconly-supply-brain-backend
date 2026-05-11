@@ -35,6 +35,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - MVP summary schema contracts are now directly actionable via `python -m scripts.validate_mvp_report_summary_schema <report_dir-or-summary.json>`, with CLI-level regression coverage in `tests/test_validate_mvp_report_summary_schema.py`.
 - `scripts/dev.ps1` now exposes `validate-mvp-summary -ReportPath <report_dir-or-summary.json>` and automatically runs schema validation after both `mvp-first-analytics` and `mvp-live-readiness` write `summary.json`.
 - `scripts/dev.ps1` now also exposes `verify-mvp-reports`, which generates both MVP report artifact sets on a temporary host backend and validates both summaries against the static schema contracts in one reproducible gate.
+- `verify-mvp-reports` now also writes `artifacts/mvp_report_verification/<timestamp>/verification.json` via `scripts/build_mvp_report_verification_manifest.py`, with regression coverage in `tests/test_build_mvp_report_verification_manifest.py`.
 - FastAPI lifecycle migrated from deprecated `@app.on_event` hooks to lifespan context manager; scheduler start/stop now runs via `lifespan`.
 - Monitoring scheduler uses PostgreSQL advisory lock (`pg_try_advisory_lock` / `pg_advisory_unlock`) via a dedicated connection (`engine.raw_connection`) to keep one writer in multi-instance runtime.
 - Test bootstrap is now deterministic on host Python too: `tests/conftest.py` inserts the repo root before importing `app`, so plain `python -m pytest -q` no longer depends on ad hoc `PYTHONPATH` setup.
@@ -300,14 +301,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the verify-mvp-reports follow-up commit)
-- Last commit (`git log -1 --oneline`): `9381bf1 Wire MVP summary validation into dev workflow`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the verification-manifest follow-up commit)
+- Last commit (`git log -1 --oneline`): `d6caac6 Add MVP report artifact verification gate`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
-  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries
+  - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries and wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
-  - `python -m pytest -q` → `480 passed`
+  - `python -m pytest -q` → `482 passed`
 
 ### Minimal raw outputs
 ```text
@@ -337,7 +338,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-480 passed in 8.08s
+482 passed in 8.47s
 ```
 
 ```text

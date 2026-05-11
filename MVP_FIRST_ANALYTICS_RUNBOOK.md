@@ -129,6 +129,8 @@ Both `.\scripts\dev.ps1 mvp-first-analytics` and `.\scripts\dev.ps1 mvp-live-rea
 
 Use `.\scripts\dev.ps1 verify-mvp-reports` to generate both MVP reports on a temporary host backend and validate their summaries against the static schema contracts in one reproducible artifact gate.
 
+This gate also writes a machine-readable `verification.json` manifest under `artifacts/mvp_report_verification/<timestamp>/` with the generated report directories, summary paths, schema paths, and top-level artifact status for both reports.
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.
