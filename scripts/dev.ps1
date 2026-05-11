@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "validate-mvp-summary", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp", "verify-mvp-reports")]
+    [ValidateSet("up", "ps", "logs", "test", "health", "proposal", "proposal-from-wb", "mvp-first-analytics", "mvp-live-readiness", "validate-mvp-summary", "validate-mvp-verification-manifest", "po-api-smoke", "po-api-smoke-positive", "po-api-smoke-host-positive", "context", "verify", "verify-host", "verify-live", "verify-mvp", "verify-mvp-reports")]
     [string]$Command,
     [ValidateRange(0, 2147483647)]
     [int]$ArticleId = 0,
@@ -10,7 +10,8 @@ param(
     [int]$FreshnessSalesStaleAfterDays = 3,
     [ValidateRange(0, 3650)]
     [int]$FreshnessStockStaleAfterDays = 3,
-    [string]$ReportPath = ""
+    [string]$ReportPath = "",
+    [string]$ManifestPath = ""
 )
 
 $ComposeFile = ".\\docker-compose.yml"
@@ -58,6 +59,27 @@ function Invoke-MvpSummarySchemaValidation {
     }
     if ($ValidationExitCode -ne 0) {
         throw "[$LogPrefix] FAIL summary schema validation."
+    }
+}
+
+function Invoke-MvpVerificationManifestValidation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ManifestPath,
+        [string]$LogPrefix = "validate-mvp-verification-manifest"
+    )
+
+    if (-not $ManifestPath) {
+        throw "[$LogPrefix] FAIL verification manifest validation: manifest path is required."
+    }
+
+    $ValidationOutput = python -m scripts.validate_mvp_report_verification_manifest $ManifestPath 2>&1
+    $ValidationExitCode = $LASTEXITCODE
+    if ($ValidationOutput) {
+        $ValidationOutput | ForEach-Object { Write-Host "[$LogPrefix] $_" }
+    }
+    if ($ValidationExitCode -ne 0) {
+        throw "[$LogPrefix] FAIL verification manifest validation."
     }
 }
 
@@ -1440,6 +1462,9 @@ switch ($Command) {
     }
     "validate-mvp-summary" {
         Invoke-MvpSummarySchemaValidation -ReportPath $ReportPath
+    }
+    "validate-mvp-verification-manifest" {
+        Invoke-MvpVerificationManifestValidation -ManifestPath $ManifestPath
     }
     "po-api-smoke" {
         Invoke-ProductionOrderApiSmoke

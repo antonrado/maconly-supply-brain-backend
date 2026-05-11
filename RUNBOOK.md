@@ -51,6 +51,11 @@ This command also writes a machine-readable `verification.json` manifest under `
 
 The verification manifest contract lives at `schemas/reporting/mvp_report_verification_manifest.schema.json` and can be validated with `python -m scripts.validate_mvp_report_verification_manifest <verification.json>`.
 
+PowerShell shortcut:
+```powershell
+.\scripts\dev.ps1 validate-mvp-verification-manifest -ManifestPath <verification.json>
+```
+
 Optional targeting parameters for `mvp-live-readiness`:
 ```powershell
 .\scripts\dev.ps1 mvp-live-readiness -ArticleId 123 -ReadinessLimit 20 -FreshnessSalesStaleAfterDays 3 -FreshnessStockStaleAfterDays 3

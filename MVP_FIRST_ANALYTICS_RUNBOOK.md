@@ -133,6 +133,11 @@ This gate also writes a machine-readable `verification.json` manifest under `art
 
 The verification manifest contract lives at `schemas/reporting/mvp_report_verification_manifest.schema.json` and can be validated with `python -m scripts.validate_mvp_report_verification_manifest <verification.json>`.
 
+PowerShell shortcut:
+```powershell
+.\scripts\dev.ps1 validate-mvp-verification-manifest -ManifestPath <verification.json>
+```
+
 - Articles or bundles with `critical` / `warning` risk.
 - WB data readiness blockers and freshness status.
 - Production-order recommendation action and total units.
