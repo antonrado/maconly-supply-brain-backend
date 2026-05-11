@@ -44,6 +44,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Direct helper coverage now also explicitly locks in Python/JSON Schema type-edge behavior by proving booleans are rejected for JSON Schema `integer` and `number` types in `tests/test_json_schema_subset.py`.
 - Direct helper coverage now also explicitly proves unsupported schema types are rejected with a clear error in `tests/test_json_schema_subset.py`, covering the remaining helper type-dispatch error branch.
 - Direct helper coverage now also explicitly proves `const` mismatches, `enum` mismatches, and typed `additionalProperties` value mismatches are rejected in `tests/test_json_schema_subset.py`.
+- Direct helper coverage now also explicitly proves array item schema mismatches are rejected with indexed error paths in `tests/test_json_schema_subset.py`.
 - `scripts/dev.ps1` now exposes `validate-mvp-summary -ReportPath <report_dir-or-summary.json>` and automatically runs schema validation after both `mvp-first-analytics` and `mvp-live-readiness` write `summary.json`.
 - `scripts/dev.ps1` now also exposes `verify-mvp-reports`, which generates both MVP report artifact sets on a temporary host backend and validates both summaries against the static schema contracts in one reproducible gate.
 - `verify-mvp-reports` now uses the exact output directories returned by the host report generators instead of scanning for the latest artifact directory after each report step, reducing ambiguity during repeated local runs.
@@ -317,14 +318,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the helper mismatch follow-up commit)
-- Last commit (`git log -1 --oneline`): `1efc2be Test unsupported schema helper type`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the array-item helper follow-up commit)
+- Last commit (`git log -1 --oneline`): `2fd85c9 Test schema helper mismatch cases`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `518 passed in 8.04s`
+  - `python -m pytest -q` → `519 passed in 8.13s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -355,7 +356,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-518 passed in 8.04s
+519 passed in 8.13s
 ```
 
 ```text

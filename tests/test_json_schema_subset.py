@@ -148,3 +148,12 @@ def test_assert_valid_schema_rejects_typed_additional_property_value() -> None:
         assert "$.meta: expected type ['string']" in str(exc)
     else:
         raise AssertionError("expected typed additionalProperties mismatch to be rejected")
+
+
+def test_assert_valid_schema_rejects_array_item_type_mismatch() -> None:
+    try:
+        assert_valid_schema([1, "bad"], {"type": "array", "items": {"type": "integer"}})
+    except ValueError as exc:
+        assert "$[1]: expected type ['integer']" in str(exc)
+    else:
+        raise AssertionError("expected array item type mismatch to be rejected")
