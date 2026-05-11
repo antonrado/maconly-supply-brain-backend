@@ -157,3 +157,11 @@ def test_assert_valid_schema_rejects_array_item_type_mismatch() -> None:
         assert "$[1]: expected type ['integer']" in str(exc)
     else:
         raise AssertionError("expected array item type mismatch to be rejected")
+
+
+def test_assert_valid_schema_accepts_boolean_type() -> None:
+    assert_valid_schema(True, {"type": "boolean"})
+
+
+def test_assert_valid_schema_accepts_null_type() -> None:
+    assert_valid_schema(None, {"type": "null"})
