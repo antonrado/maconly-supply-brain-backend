@@ -111,3 +111,17 @@ def test_validate_report_path_rejects_unexpected_top_level_key(tmp_path: Path) -
         assert "unexpected key 'unexpected'" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject an unexpected top-level key")
+
+
+def test_validate_report_path_rejects_missing_required_top_level_key(tmp_path: Path) -> None:
+    summary_path = write_first_analytics_summary(report_dir=tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    del payload["next_actions"]
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "missing required key 'next_actions'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a missing required top-level key")
