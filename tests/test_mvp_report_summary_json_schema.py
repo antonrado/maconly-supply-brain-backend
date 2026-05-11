@@ -262,3 +262,73 @@ def test_mvp_first_analytics_summary_schema_rejects_missing_required_top_level_k
         assert "missing required key 'next_actions'" in str(exc)
     else:
         raise AssertionError("expected first analytics summary schema to reject a missing required top-level key")
+
+
+def test_mvp_live_readiness_summary_schema_rejects_unexpected_top_level_key() -> None:
+    payload = {
+        "total_articles_considered": 3,
+        "ready_articles": 1,
+        "not_ready_articles": 2,
+        "items": [
+            {
+                "article_id": 1,
+                "article_code": "READY",
+                "ready_for_from_wb": True,
+                "blocker": None,
+                "freshness_status": "fresh",
+                "next_steps": [],
+            }
+        ],
+    }
+    request = {
+        "article_id": 2,
+        "limit": 20,
+        "freshness_sales_stale_after_days": 3,
+        "freshness_stock_stale_after_days": 4,
+    }
+
+    summary = build_live_readiness_summary(payload, request_payload=request)
+    summary["unexpected"] = True
+    schema = _load_schema("mvp_live_readiness_summary.schema.json")
+
+    try:
+        assert_valid_schema(summary, schema)
+    except ValueError as exc:
+        assert "unexpected key 'unexpected'" in str(exc)
+    else:
+        raise AssertionError("expected live-readiness summary schema to reject an unexpected top-level key")
+
+
+def test_mvp_live_readiness_summary_schema_rejects_missing_required_top_level_key() -> None:
+    payload = {
+        "total_articles_considered": 3,
+        "ready_articles": 1,
+        "not_ready_articles": 2,
+        "items": [
+            {
+                "article_id": 1,
+                "article_code": "READY",
+                "ready_for_from_wb": True,
+                "blocker": None,
+                "freshness_status": "fresh",
+                "next_steps": [],
+            }
+        ],
+    }
+    request = {
+        "article_id": 2,
+        "limit": 20,
+        "freshness_sales_stale_after_days": 3,
+        "freshness_stock_stale_after_days": 4,
+    }
+
+    summary = build_live_readiness_summary(payload, request_payload=request)
+    del summary["sample_items"]
+    schema = _load_schema("mvp_live_readiness_summary.schema.json")
+
+    try:
+        assert_valid_schema(summary, schema)
+    except ValueError as exc:
+        assert "missing required key 'sample_items'" in str(exc)
+    else:
+        raise AssertionError("expected live-readiness summary schema to reject a missing required top-level key")

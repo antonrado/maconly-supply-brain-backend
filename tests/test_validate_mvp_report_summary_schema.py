@@ -125,3 +125,75 @@ def test_validate_report_path_rejects_missing_required_top_level_key(tmp_path: P
         assert "missing required key 'next_actions'" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject a missing required top-level key")
+
+
+def test_validate_report_path_rejects_live_readiness_unexpected_top_level_key(tmp_path: Path) -> None:
+    (tmp_path / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 0,
+                "ready_articles": 0,
+                "not_ready_articles": 0,
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary_path, _ = write_live_readiness_summary(tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["unexpected"] = True
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "unexpected key 'unexpected'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject an unexpected live-readiness top-level key")
+
+
+def test_validate_report_path_rejects_live_readiness_missing_required_top_level_key(tmp_path: Path) -> None:
+    (tmp_path / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 0,
+                "ready_articles": 0,
+                "not_ready_articles": 0,
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary_path, _ = write_live_readiness_summary(tmp_path)
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    del payload["sample_items"]
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "missing required key 'sample_items'" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a live-readiness summary missing sample_items")
