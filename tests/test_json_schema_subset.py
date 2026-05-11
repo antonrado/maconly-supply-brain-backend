@@ -86,3 +86,21 @@ def test_assert_valid_schema_rejects_unsupported_format() -> None:
         assert "unsupported schema format: email" in str(exc)
     else:
         raise AssertionError("expected unsupported schema format to be rejected")
+
+
+def test_assert_valid_schema_rejects_boolean_for_integer_type() -> None:
+    try:
+        assert_valid_schema(True, {"type": "integer"})
+    except ValueError as exc:
+        assert "expected type ['integer']" in str(exc)
+    else:
+        raise AssertionError("expected boolean to be rejected for integer type")
+
+
+def test_assert_valid_schema_rejects_boolean_for_number_type() -> None:
+    try:
+        assert_valid_schema(False, {"type": "number"})
+    except ValueError as exc:
+        assert "expected type ['number']" in str(exc)
+    else:
+        raise AssertionError("expected boolean to be rejected for number type")
