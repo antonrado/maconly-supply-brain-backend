@@ -56,6 +56,10 @@ def test_assert_valid_schema_accepts_string_type() -> None:
     assert_valid_schema("alpha", {"type": "string"})
 
 
+def test_assert_valid_schema_accepts_integer_type() -> None:
+    assert_valid_schema(1, {"type": "integer"})
+
+
 def test_assert_valid_schema_rejects_invalid_datetime_format() -> None:
     try:
         assert_valid_schema("not-a-datetime", {"type": "string", "format": "date-time"})
