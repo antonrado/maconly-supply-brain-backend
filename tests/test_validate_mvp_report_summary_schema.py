@@ -51,6 +51,17 @@ def test_validate_report_path_accepts_live_readiness_summary_file(tmp_path: Path
     assert schema_path == SCHEMA_DIR / "mvp_live_readiness_summary.schema.json"
 
 
+def test_validate_report_path_rejects_missing_summary_file_path(tmp_path: Path) -> None:
+    missing_summary_path = tmp_path / "summary.json"
+
+    try:
+        validate_report_path(missing_summary_path)
+    except ValueError as exc:
+        assert "summary.json does not exist" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a missing summary.json file path")
+
+
 def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> None:
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(
