@@ -90,6 +90,17 @@ def test_validate_manifest_path_accepts_verification_directory(tmp_path: Path) -
     assert schema_path.name == "mvp_report_verification_manifest.schema.json"
 
 
+def test_validate_manifest_path_rejects_missing_verification_file_path(tmp_path: Path) -> None:
+    missing_manifest_path = tmp_path / "verification.json"
+
+    try:
+        validate_manifest_path(missing_manifest_path)
+    except ValueError as exc:
+        assert "verification.json does not exist" in str(exc)
+    else:
+        raise AssertionError("expected validate_manifest_path to reject a missing verification.json file path")
+
+
 def test_validate_manifest_file_rejects_missing_required_key(tmp_path: Path) -> None:
     manifest_path = tmp_path / "verification.json"
     manifest_path.write_text(
