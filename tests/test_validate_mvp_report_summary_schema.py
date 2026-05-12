@@ -62,6 +62,18 @@ def test_validate_report_path_rejects_missing_summary_file_path(tmp_path: Path) 
         raise AssertionError("expected validate_report_path to reject a missing summary.json file path")
 
 
+def test_validate_report_path_rejects_directory_without_summary_json(tmp_path: Path) -> None:
+    missing_summary_dir = tmp_path / "missing-summary"
+    missing_summary_dir.mkdir()
+
+    try:
+        validate_report_path(missing_summary_dir)
+    except ValueError as exc:
+        assert "summary.json does not exist" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a directory without summary.json")
+
+
 def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> None:
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(
