@@ -74,6 +74,18 @@ def test_validate_report_path_rejects_directory_without_summary_json(tmp_path: P
         raise AssertionError("expected validate_report_path to reject a directory without summary.json")
 
 
+def test_validate_report_path_rejects_non_object_json_payload(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    try:
+        validate_report_path(summary_path)
+    except ValueError as exc:
+        assert "summary must be a JSON object" in str(exc)
+    else:
+        raise AssertionError("expected validate_report_path to reject a non-object summary payload")
+
+
 def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> None:
     summary_path = tmp_path / "summary.json"
     summary_path.write_text(
