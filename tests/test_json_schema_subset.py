@@ -169,3 +169,7 @@ def test_assert_valid_schema_accepts_null_type() -> None:
 
 def test_assert_valid_schema_accepts_nullable_datetime_union_with_null_value() -> None:
     assert_valid_schema(None, {"type": ["string", "null"], "format": "date-time"})
+
+
+def test_assert_valid_schema_accepts_nullable_datetime_union_with_string_value() -> None:
+    assert_valid_schema("2030-01-01T00:00:00+00:00", {"type": ["string", "null"], "format": "date-time"})
