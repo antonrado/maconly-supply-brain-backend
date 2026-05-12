@@ -133,6 +133,18 @@ def test_validate_manifest_path_rejects_directory_without_verification_json(tmp_
         raise AssertionError("expected validate_manifest_path to reject a directory without verification.json")
 
 
+def test_validate_manifest_file_rejects_non_object_json_payload(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "verification.json"
+    manifest_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    try:
+        validate_manifest_file(manifest_path)
+    except ValueError as exc:
+        assert "verification manifest must be a JSON object" in str(exc)
+    else:
+        raise AssertionError("expected validate_manifest_file to reject a non-object manifest payload")
+
+
 def test_validate_manifest_file_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
     manifest_path = tmp_path / "verification.json"
     manifest_path.write_text(
