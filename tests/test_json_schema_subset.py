@@ -44,6 +44,10 @@ def test_assert_valid_schema_accepts_supported_nested_subset() -> None:
     assert_valid_schema(payload, schema)
 
 
+def test_assert_valid_schema_accepts_object_type() -> None:
+    assert_valid_schema({"name": "alpha"}, {"type": "object"})
+
+
 def test_assert_valid_schema_rejects_invalid_datetime_format() -> None:
     try:
         assert_valid_schema("not-a-datetime", {"type": "string", "format": "date-time"})
