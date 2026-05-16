@@ -129,6 +129,10 @@ def test_assert_valid_schema_rejects_unexpected_key_when_additional_properties_f
         raise AssertionError("expected unexpected key to be rejected")
 
 
+def test_assert_valid_schema_accepts_required_key() -> None:
+    assert_valid_schema({"name": "alpha"}, {"type": "object", "required": ["name"]})
+
+
 def test_assert_valid_schema_rejects_missing_required_key() -> None:
     try:
         assert_valid_schema({}, {"type": "object", "required": ["name"]})
