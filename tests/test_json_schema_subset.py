@@ -144,6 +144,10 @@ def test_assert_valid_schema_accepts_float_for_number_type() -> None:
     assert_valid_schema(1.5, {"type": "number"})
 
 
+def test_assert_valid_schema_accepts_integer_for_number_type() -> None:
+    assert_valid_schema(1, {"type": "number"})
+
+
 def test_assert_valid_schema_rejects_unsupported_schema_type() -> None:
     try:
         assert_valid_schema("alpha", {"type": "uuid"})
