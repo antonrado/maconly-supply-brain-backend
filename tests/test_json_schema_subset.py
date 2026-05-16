@@ -87,6 +87,15 @@ def test_assert_valid_schema_rejects_invalid_date_format() -> None:
         raise AssertionError("expected invalid date format to be rejected")
 
 
+def test_assert_valid_schema_rejects_non_string_date_format_value() -> None:
+    try:
+        assert_valid_schema(1, {"format": "date"})
+    except ValueError as exc:
+        assert "expected format 'date'" in str(exc)
+    else:
+        raise AssertionError("expected non-string date format value to be rejected")
+
+
 def test_assert_valid_schema_rejects_unexpected_key_when_additional_properties_false() -> None:
     try:
         assert_valid_schema(
