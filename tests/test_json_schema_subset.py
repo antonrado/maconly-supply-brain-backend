@@ -249,6 +249,10 @@ def test_assert_valid_schema_accepts_null_type() -> None:
     assert_valid_schema(None, {"type": "null"})
 
 
+def test_assert_valid_schema_accepts_nullable_date_union_with_null_value() -> None:
+    assert_valid_schema(None, {"type": ["string", "null"], "format": "date"})
+
+
 def test_assert_valid_schema_accepts_nullable_datetime_union_with_null_value() -> None:
     assert_valid_schema(None, {"type": ["string", "null"], "format": "date-time"})
 
