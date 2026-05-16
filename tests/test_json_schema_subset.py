@@ -212,6 +212,10 @@ def test_assert_valid_schema_rejects_typed_additional_property_value() -> None:
         raise AssertionError("expected typed additionalProperties mismatch to be rejected")
 
 
+def test_assert_valid_schema_accepts_array_item_type_match() -> None:
+    assert_valid_schema([1, 2], {"type": "array", "items": {"type": "integer"}})
+
+
 def test_assert_valid_schema_rejects_array_item_type_mismatch() -> None:
     try:
         assert_valid_schema([1, "bad"], {"type": "array", "items": {"type": "integer"}})
