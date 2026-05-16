@@ -90,6 +90,10 @@ def test_assert_valid_schema_accepts_valid_date_format() -> None:
     assert_valid_schema("2030-01-02", {"type": "string", "format": "date"})
 
 
+def test_assert_valid_schema_accepts_none_for_date_format() -> None:
+    assert_valid_schema(None, {"format": "date"})
+
+
 def test_assert_valid_schema_rejects_invalid_date_format() -> None:
     try:
         assert_valid_schema("2030-99-99", {"type": "string", "format": "date"})
