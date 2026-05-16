@@ -69,6 +69,15 @@ def test_assert_valid_schema_rejects_invalid_datetime_format() -> None:
         raise AssertionError("expected invalid date-time format to be rejected")
 
 
+def test_assert_valid_schema_rejects_non_string_datetime_format_value() -> None:
+    try:
+        assert_valid_schema(1, {"format": "date-time"})
+    except ValueError as exc:
+        assert "expected format 'date-time'" in str(exc)
+    else:
+        raise AssertionError("expected non-string date-time format value to be rejected")
+
+
 def test_assert_valid_schema_rejects_invalid_date_format() -> None:
     try:
         assert_valid_schema("2030-99-99", {"type": "string", "format": "date"})
