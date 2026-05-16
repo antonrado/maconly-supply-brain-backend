@@ -112,6 +112,17 @@ def test_assert_valid_schema_rejects_non_string_date_format_value() -> None:
         raise AssertionError("expected non-string date format value to be rejected")
 
 
+def test_assert_valid_schema_accepts_unexpected_key_when_additional_properties_omitted() -> None:
+    assert_valid_schema(
+        {"name": "alpha", "extra": True},
+        {
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+        },
+    )
+
+
 def test_assert_valid_schema_rejects_unexpected_key_when_additional_properties_false() -> None:
     try:
         assert_valid_schema(
