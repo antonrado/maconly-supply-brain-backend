@@ -5,7 +5,7 @@ from pathlib import Path
 
 from scripts.mvp_first_analytics_summary import write_summary as write_first_analytics_summary
 from scripts.mvp_live_readiness_summary import write_summary as write_live_readiness_summary
-from scripts.validate_mvp_report_summary_schema import validate_report_path
+from scripts.validate_mvp_report_summary_schema import validate_report_path, validate_summary_payload
 
 
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schemas" / "reporting"
@@ -104,6 +104,15 @@ def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> Non
         assert "unsupported report_type" in str(exc)
     else:
         raise AssertionError("expected validate_report_path to reject an unknown report_type")
+
+
+def test_validate_summary_payload_rejects_non_string_report_type() -> None:
+    try:
+        validate_summary_payload({"report_type": 1})
+    except ValueError as exc:
+        assert "summary report_type must be a string" in str(exc)
+    else:
+        raise AssertionError("expected validate_summary_payload to reject a non-string report_type")
 
 
 def test_validate_report_path_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
