@@ -153,6 +153,10 @@ def test_assert_valid_schema_rejects_unsupported_schema_type() -> None:
         raise AssertionError("expected unsupported schema type to be rejected")
 
 
+def test_assert_valid_schema_accepts_const_match() -> None:
+    assert_valid_schema("alpha", {"const": "alpha"})
+
+
 def test_assert_valid_schema_rejects_const_mismatch() -> None:
     try:
         assert_valid_schema("beta", {"const": "alpha"})
