@@ -42,6 +42,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Summary validator path-resolution coverage now also explicitly proves `validate_report_path()` rejects a directory without `summary.json` in `tests/test_validate_mvp_report_summary_schema.py`.
 - Summary validator payload-shape coverage now also explicitly proves `validate_report_path()` rejects non-object JSON payloads in `tests/test_validate_mvp_report_summary_schema.py`.
 - Summary validator payload-shape coverage now also explicitly proves `validate_summary_payload()` rejects a non-string `report_type` value in `tests/test_validate_mvp_report_summary_schema.py`.
+- Summary validator payload-shape coverage now also explicitly proves `validate_summary_payload()` rejects an unsupported string `report_type` value in `tests/test_validate_mvp_report_summary_schema.py`.
 - Validator-level regression coverage now also explicitly proves both summary and verification-manifest contract checks reject unexpected extra fields when schemas declare `additionalProperties: false`, via `tests/test_validate_mvp_report_summary_schema.py` and `tests/test_validate_mvp_report_verification_manifest.py`.
 - Verification-manifest validator path-resolution coverage now also explicitly proves `validate_manifest_path()` rejects a missing direct `verification.json` file path in `tests/test_validate_mvp_report_verification_manifest.py`.
 - Verification-manifest validator payload-shape coverage now also explicitly proves `validate_manifest_file()` rejects non-object JSON payloads in `tests/test_validate_mvp_report_verification_manifest.py`.
@@ -334,14 +335,14 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 ## Last verification
 
 - Date: `2026-05-07 21:21 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the non-string-date-format helper follow-up commit)
-- Last commit (`git log -1 --oneline`): `763d1dd Test non-string datetime format value`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the unsupported-summary-report-type follow-up commit)
+- Last commit (`git log -1 --oneline`): `1f05920 Test non-string date format value`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `536 passed in 9.09s`
+  - `python -m pytest -q` → `537 passed in 9.29s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -372,7 +373,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-536 passed in 9.09s
+537 passed in 9.29s
 ```
 
 ```text

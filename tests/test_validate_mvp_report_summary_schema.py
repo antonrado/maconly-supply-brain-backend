@@ -115,6 +115,15 @@ def test_validate_summary_payload_rejects_non_string_report_type() -> None:
         raise AssertionError("expected validate_summary_payload to reject a non-string report_type")
 
 
+def test_validate_summary_payload_rejects_unsupported_report_type() -> None:
+    try:
+        validate_summary_payload({"report_type": "unexpected_report"})
+    except ValueError as exc:
+        assert "unsupported report_type for summary schema validation" in str(exc)
+    else:
+        raise AssertionError("expected validate_summary_payload to reject an unsupported report_type")
+
+
 def test_validate_report_path_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
     summary_path = write_first_analytics_summary(report_dir=tmp_path)
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
