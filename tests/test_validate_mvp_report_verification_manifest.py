@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scripts.validate_mvp_report_verification_manifest as validate_manifest_module
 from scripts.build_mvp_report_verification_manifest import write_manifest
 from scripts.mvp_first_analytics_summary import write_summary as write_first_analytics_summary
 from scripts.mvp_live_readiness_summary import write_summary as write_live_readiness_summary
@@ -143,6 +144,19 @@ def test_validate_manifest_file_rejects_non_object_json_payload(tmp_path: Path) 
         assert "verification manifest must be a JSON object" in str(exc)
     else:
         raise AssertionError("expected validate_manifest_file to reject a non-object manifest payload")
+
+
+def test_load_schema_rejects_non_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
+    schema_path = tmp_path / "broken.schema.json"
+    schema_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+    monkeypatch.setattr(validate_manifest_module, "SCHEMA_PATH", schema_path)
+
+    try:
+        validate_manifest_module.load_schema()
+    except ValueError as exc:
+        assert "schema must be a JSON object" in str(exc)
+    else:
+        raise AssertionError("expected load_schema to reject a non-object schema payload")
 
 
 def test_validate_manifest_file_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
