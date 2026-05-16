@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scripts.validate_mvp_report_summary_schema as validate_summary_schema_module
 from scripts.mvp_first_analytics_summary import write_summary as write_first_analytics_summary
 from scripts.mvp_live_readiness_summary import write_summary as write_live_readiness_summary
 from scripts.validate_mvp_report_summary_schema import validate_report_path, validate_summary_payload
@@ -122,6 +123,21 @@ def test_validate_summary_payload_rejects_unsupported_report_type() -> None:
         assert "unsupported report_type for summary schema validation" in str(exc)
     else:
         raise AssertionError("expected validate_summary_payload to reject an unsupported report_type")
+
+
+def test_load_schema_rejects_non_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
+    schema_name = "broken.schema.json"
+    schema_dir = tmp_path / "schemas"
+    schema_dir.mkdir()
+    (schema_dir / schema_name).write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+    monkeypatch.setattr(validate_summary_schema_module, "SCHEMA_DIR", schema_dir)
+
+    try:
+        validate_summary_schema_module.load_schema(schema_name)
+    except ValueError as exc:
+        assert "schema must be a JSON object" in str(exc)
+    else:
+        raise AssertionError("expected load_schema to reject a non-object schema payload")
 
 
 def test_validate_report_path_rejects_invalid_generated_at_datetime(tmp_path: Path) -> None:
