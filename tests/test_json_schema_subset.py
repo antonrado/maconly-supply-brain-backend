@@ -166,6 +166,10 @@ def test_assert_valid_schema_rejects_const_mismatch() -> None:
         raise AssertionError("expected const mismatch to be rejected")
 
 
+def test_assert_valid_schema_accepts_enum_match() -> None:
+    assert_valid_schema("alpha", {"enum": ["alpha", "beta"]})
+
+
 def test_assert_valid_schema_rejects_enum_mismatch() -> None:
     try:
         assert_valid_schema("gamma", {"enum": ["alpha", "beta"]})
