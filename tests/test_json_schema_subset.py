@@ -183,6 +183,18 @@ def test_assert_valid_schema_rejects_enum_mismatch() -> None:
         raise AssertionError("expected enum mismatch to be rejected")
 
 
+def test_assert_valid_schema_accepts_typed_additional_property_value() -> None:
+    assert_valid_schema(
+        {"name": "alpha", "meta": "ok"},
+        {
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+            "additionalProperties": {"type": "string"},
+        },
+    )
+
+
 def test_assert_valid_schema_rejects_typed_additional_property_value() -> None:
     try:
         assert_valid_schema(
