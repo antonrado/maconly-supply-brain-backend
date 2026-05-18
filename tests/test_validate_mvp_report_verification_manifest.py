@@ -10,6 +10,12 @@ from scripts.mvp_live_readiness_summary import write_summary as write_live_readi
 from scripts.validate_mvp_report_verification_manifest import validate_manifest_file, validate_manifest_path
 
 
+def test_resolve_manifest_path_accepts_directory(tmp_path: Path) -> None:
+    resolved_manifest_path = validate_manifest_module.resolve_manifest_path(tmp_path)
+
+    assert resolved_manifest_path == tmp_path / "verification.json"
+
+
 def test_validate_manifest_file_accepts_verification_manifest(tmp_path: Path) -> None:
     first_dir = tmp_path / "first"
     live_dir = tmp_path / "live"
