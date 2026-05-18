@@ -200,6 +200,17 @@ def test_validate_manifest_file_rejects_non_object_json_payload(tmp_path: Path) 
         raise AssertionError("expected validate_manifest_file to reject a non-object manifest payload")
 
 
+def test_load_schema_accepts_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
+    schema_path = tmp_path / "valid.schema.json"
+    expected_schema = {"type": "object", "required": ["reports"]}
+    schema_path.write_text(json.dumps(expected_schema), encoding="utf-8")
+    monkeypatch.setattr(validate_manifest_module, "SCHEMA_PATH", schema_path)
+
+    schema = validate_manifest_module.load_schema()
+
+    assert schema == expected_schema
+
+
 def test_load_schema_rejects_non_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
     schema_path = tmp_path / "broken.schema.json"
     schema_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
