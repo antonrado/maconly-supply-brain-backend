@@ -299,6 +299,15 @@ def test_assert_valid_schema_accepts_null_type() -> None:
     assert_valid_schema(None, {"type": "null"})
 
 
+def test_assert_valid_schema_rejects_nullable_union_type_mismatch() -> None:
+    try:
+        assert_valid_schema(1, {"type": ["string", "null"]})
+    except ValueError as exc:
+        assert "expected type ['string', 'null']" in str(exc)
+    else:
+        raise AssertionError("expected nullable union type mismatch to be rejected")
+
+
 def test_assert_valid_schema_accepts_nullable_date_union_with_null_value() -> None:
     assert_valid_schema(None, {"type": ["string", "null"], "format": "date"})
 
