@@ -82,6 +82,7 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 - Direct validator coverage now also explicitly proves `validate_summary_file()` accepts an object payload and delegates successfully in `tests/test_validate_mvp_report_summary_schema.py`.
 - Direct validator coverage now also explicitly proves `schema_path_for_report_type()` accepts a supported report type and returns the expected schema path in `tests/test_validate_mvp_report_summary_schema.py`.
 - Direct validator coverage now also explicitly proves `schema_path_for_report_type()` accepts `mvp_live_readiness` and returns the expected schema path in `tests/test_validate_mvp_report_summary_schema.py`.
+- Direct helper coverage now also explicitly proves `resolve_summary_path()` resolves a directory input to `summary.json` in `tests/test_validate_mvp_report_summary_schema.py`.
 - Direct helper coverage now also explicitly proves unsupported schema types are rejected with a clear error in `tests/test_json_schema_subset.py`, covering the remaining helper type-dispatch error branch.
 - Direct helper coverage now also explicitly proves `const` mismatches, `enum` mismatches, and typed `additionalProperties` value mismatches are rejected in `tests/test_json_schema_subset.py`.
 - Direct helper coverage now also explicitly proves array item schema mismatches are rejected with indexed error paths in `tests/test_json_schema_subset.py`.
@@ -360,15 +361,15 @@ Planning Core v1 contract is active, monitoring APIs are active, scheduler singl
 
 ## Last verification
 
-- Date: `2026-05-18 16:45 +07:00`
-- Branch: `main` (dirty worktree, aligned with `origin/main` before the live-readiness schema-path mapping follow-up commit)
-- Last commit (`git log -1 --oneline`): `348663c Test summary schema path mapping`
+- Date: `2026-05-18 16:49 +07:00`
+- Branch: `main` (dirty worktree, aligned with `origin/main` before the resolve-summary-path helper follow-up commit)
+- Last commit (`git log -1 --oneline`): `4a82df0 Test live readiness schema path mapping`
 - Gates:
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-first-analytics` → `OK`, report plus `requests.json`, versioned actionable `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_first_analytics/20260507_212156/`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 mvp-live-readiness -ArticleId 1 -ReadinessLimit 1 -FreshnessSalesStaleAfterDays 5 -FreshnessStockStaleAfterDays 6` → `OK`, report plus `request.json`, versioned `summary.json`, and `summary.md` with `summary_schema_version=1.1`, `artifact_status=complete`, input-file counts, validation messages, automatic schema validation, and matching JSON Schema contract written under `artifacts/mvp_live_readiness/20260507_211703/` against a temporary host backend
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp-reports` → `OK`, regenerated both MVP artifact sets on a temporary host backend with automatic schema validation for both summaries, wrote `artifacts/mvp_report_verification/<timestamp>/verification.json`, and schema-validated that verification manifest
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 validate-mvp-verification-manifest -ManifestPath artifacts/mvp_report_verification/20260511_195459` → `OK`, resolved `verification.json` and matching schema path printed
-  - `python -m pytest -q` → `563 passed in 8.06s`
+  - `python -m pytest -q` → `564 passed in 8.25s`
   - `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 verify-mvp` → `OK (host)` with Docker daemon unavailable fallback after one transient host-readiness retry
 
 ### Minimal raw outputs
@@ -399,7 +400,7 @@ tests/test_wb_shipment_comparison_api.py
 
 ```text
 $ python -m pytest -q
-563 passed in 8.06s
+564 passed in 8.25s
 ```
 
 ```text
