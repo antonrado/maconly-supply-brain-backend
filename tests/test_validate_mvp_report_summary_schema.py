@@ -107,6 +107,21 @@ def test_validate_report_path_rejects_unknown_report_type(tmp_path: Path) -> Non
         raise AssertionError("expected validate_report_path to reject an unknown report_type")
 
 
+def test_validate_summary_file_accepts_object_payload(monkeypatch, tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps({"report_type": "mvp_first_analytics"}), encoding="utf-8")
+
+    def fake_validate_summary_payload(summary: dict[str, object]) -> Path:
+        assert summary == {"report_type": "mvp_first_analytics"}
+        return SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
+
+    monkeypatch.setattr(validate_summary_schema_module, "validate_summary_payload", fake_validate_summary_payload)
+
+    schema_path = validate_summary_schema_module.validate_summary_file(summary_path)
+
+    assert schema_path == SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
+
+
 def test_validate_summary_payload_rejects_non_string_report_type() -> None:
     try:
         validate_summary_payload({"report_type": 1})
