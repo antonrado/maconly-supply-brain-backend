@@ -185,6 +185,22 @@ def test_validate_summary_payload_accepts_supported_report_type(monkeypatch) -> 
     assert schema_path == SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
 
 
+def test_validate_summary_payload_accepts_live_readiness_report_type(monkeypatch) -> None:
+    def fake_load_schema(name: str) -> dict[str, object]:
+        assert name == "mvp_live_readiness_summary.schema.json"
+        return {
+            "type": "object",
+            "required": ["report_type"],
+            "properties": {"report_type": {"const": "mvp_live_readiness"}},
+        }
+
+    monkeypatch.setattr(validate_summary_schema_module, "load_schema", fake_load_schema)
+
+    schema_path = validate_summary_payload({"report_type": "mvp_live_readiness"})
+
+    assert schema_path == SCHEMA_DIR / "mvp_live_readiness_summary.schema.json"
+
+
 def test_validate_summary_payload_rejects_unsupported_report_type() -> None:
     try:
         validate_summary_payload({"report_type": "unexpected_report"})
