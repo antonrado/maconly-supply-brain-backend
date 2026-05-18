@@ -18,6 +18,14 @@ def test_resolve_summary_path_accepts_directory(tmp_path: Path) -> None:
     assert resolved_summary_path == tmp_path / "summary.json"
 
 
+def test_resolve_summary_path_accepts_summary_file(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+
+    resolved_summary_path = validate_summary_schema_module.resolve_summary_path(summary_path)
+
+    assert resolved_summary_path == summary_path
+
+
 def test_validate_report_path_accepts_first_analytics_directory(tmp_path: Path) -> None:
     summary_path = write_first_analytics_summary(report_dir=tmp_path)
 
