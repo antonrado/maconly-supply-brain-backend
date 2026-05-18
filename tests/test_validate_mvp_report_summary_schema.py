@@ -128,6 +128,12 @@ def test_schema_path_for_report_type_accepts_supported_report_type() -> None:
     assert schema_path == SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
 
 
+def test_schema_path_for_report_type_accepts_live_readiness_report_type() -> None:
+    schema_path = validate_summary_schema_module.schema_path_for_report_type("mvp_live_readiness")
+
+    assert schema_path == SCHEMA_DIR / "mvp_live_readiness_summary.schema.json"
+
+
 def test_validate_summary_payload_rejects_non_string_report_type() -> None:
     try:
         validate_summary_payload({"report_type": 1})
