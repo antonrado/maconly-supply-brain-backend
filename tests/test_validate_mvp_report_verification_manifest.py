@@ -16,6 +16,14 @@ def test_resolve_manifest_path_accepts_directory(tmp_path: Path) -> None:
     assert resolved_manifest_path == tmp_path / "verification.json"
 
 
+def test_resolve_manifest_path_accepts_verification_file(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "verification.json"
+
+    resolved_manifest_path = validate_manifest_module.resolve_manifest_path(manifest_path)
+
+    assert resolved_manifest_path == manifest_path
+
+
 def test_validate_manifest_file_accepts_verification_manifest(tmp_path: Path) -> None:
     first_dir = tmp_path / "first"
     live_dir = tmp_path / "live"
