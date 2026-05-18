@@ -194,6 +194,19 @@ def test_validate_summary_payload_rejects_unsupported_report_type() -> None:
         raise AssertionError("expected validate_summary_payload to reject an unsupported report_type")
 
 
+def test_load_schema_accepts_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
+    schema_name = "valid.schema.json"
+    schema_dir = tmp_path / "schemas"
+    schema_dir.mkdir()
+    expected_schema = {"type": "object", "required": ["report_type"]}
+    (schema_dir / schema_name).write_text(json.dumps(expected_schema), encoding="utf-8")
+    monkeypatch.setattr(validate_summary_schema_module, "SCHEMA_DIR", schema_dir)
+
+    schema = validate_summary_schema_module.load_schema(schema_name)
+
+    assert schema == expected_schema
+
+
 def test_load_schema_rejects_non_object_schema_payload(tmp_path: Path, monkeypatch) -> None:
     schema_name = "broken.schema.json"
     schema_dir = tmp_path / "schemas"
