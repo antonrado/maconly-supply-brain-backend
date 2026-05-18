@@ -49,6 +49,46 @@ def test_validate_manifest_file_accepts_verification_manifest(tmp_path: Path) ->
     assert schema_path.name == "mvp_report_verification_manifest.schema.json"
 
 
+def test_validate_manifest_path_accepts_verification_file(tmp_path: Path) -> None:
+    first_dir = tmp_path / "first"
+    live_dir = tmp_path / "live"
+    first_dir.mkdir()
+    live_dir.mkdir()
+
+    write_first_analytics_summary(report_dir=first_dir)
+    (live_dir / "readiness.json").write_text(
+        json.dumps(
+            {
+                "total_articles_considered": 0,
+                "ready_articles": 0,
+                "not_ready_articles": 0,
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (live_dir / "request.json").write_text(
+        json.dumps(
+            {
+                "article_id": 10,
+                "limit": 1,
+                "freshness_sales_stale_after_days": 5,
+                "freshness_stock_stale_after_days": 6,
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_live_readiness_summary(live_dir)
+
+    manifest_path = tmp_path / "verification.json"
+    write_manifest(manifest_path, first_dir, live_dir)
+
+    resolved_manifest_path, schema_path = validate_manifest_path(manifest_path)
+
+    assert resolved_manifest_path == manifest_path
+    assert schema_path.name == "mvp_report_verification_manifest.schema.json"
+
+
 def test_validate_manifest_path_accepts_verification_directory(tmp_path: Path) -> None:
     first_dir = tmp_path / "first"
     live_dir = tmp_path / "live"
