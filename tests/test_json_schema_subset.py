@@ -135,6 +135,18 @@ def test_assert_valid_schema_accepts_unexpected_key_when_additional_properties_t
     )
 
 
+def test_assert_valid_schema_accepts_declared_keys_when_additional_properties_false() -> None:
+    assert_valid_schema(
+        {"name": "alpha"},
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}},
+        },
+    )
+
+
 def test_assert_valid_schema_rejects_unexpected_key_when_additional_properties_false() -> None:
     try:
         assert_valid_schema(
