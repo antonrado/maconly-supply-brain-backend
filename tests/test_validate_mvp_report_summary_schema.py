@@ -136,6 +136,18 @@ def test_validate_summary_file_accepts_object_payload(monkeypatch, tmp_path: Pat
     assert schema_path == SCHEMA_DIR / "mvp_first_analytics_summary.schema.json"
 
 
+def test_validate_summary_file_rejects_non_object_json_payload(tmp_path: Path) -> None:
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(["not", "an", "object"]), encoding="utf-8")
+
+    try:
+        validate_summary_schema_module.validate_summary_file(summary_path)
+    except ValueError as exc:
+        assert "summary must be a JSON object" in str(exc)
+    else:
+        raise AssertionError("expected validate_summary_file to reject a non-object summary payload")
+
+
 def test_schema_path_for_report_type_accepts_supported_report_type() -> None:
     schema_path = validate_summary_schema_module.schema_path_for_report_type("mvp_first_analytics")
 
