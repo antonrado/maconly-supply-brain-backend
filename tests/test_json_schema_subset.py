@@ -325,6 +325,15 @@ def test_assert_valid_schema_accepts_nullable_date_union_with_string_value() -> 
     assert_valid_schema("2030-01-02", {"type": ["string", "null"], "format": "date"})
 
 
+def test_assert_valid_schema_rejects_nullable_datetime_union_invalid_string_value() -> None:
+    try:
+        assert_valid_schema("not-a-datetime", {"type": ["string", "null"], "format": "date-time"})
+    except ValueError as exc:
+        assert "expected format 'date-time'" in str(exc)
+    else:
+        raise AssertionError("expected nullable datetime union invalid string value to be rejected")
+
+
 def test_assert_valid_schema_accepts_nullable_datetime_union_with_null_value() -> None:
     assert_valid_schema(None, {"type": ["string", "null"], "format": "date-time"})
 
